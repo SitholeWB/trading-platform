@@ -1,0 +1,11 @@
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/bin/Debug/net10.0/TradingPlatform.Domain.deps.json
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/bin/Debug/net10.0/TradingPlatform.Domain.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/bin/Debug/net10.0/TradingPlatform.Domain.pdb
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/obj/Debug/net10.0/TradingPlatform.Domain.GeneratedMSBuildEditorConfig.editorconfig
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/obj/Debug/net10.0/TradingPlatform.Domain.AssemblyInfoInputs.cache
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/obj/Debug/net10.0/TradingPlatform.Domain.AssemblyInfo.cs
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/obj/Debug/net10.0/TradingPlatform.Domain.csproj.CoreCompileInputs.cache
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/obj/Debug/net10.0/TradingPlatform.Domain.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/obj/Debug/net10.0/refint/TradingPlatform.Domain.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/obj/Debug/net10.0/TradingPlatform.Domain.pdb
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Domain/obj/Debug/net10.0/ref/TradingPlatform.Domain.dll

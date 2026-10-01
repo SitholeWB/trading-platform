@@ -1,0 +1,23 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Core/">
+    <Project Path="src/Core/TradingPlatform.Application/TradingPlatform.Application.csproj" />
+    <Project Path="src/Core/TradingPlatform.Domain/TradingPlatform.Domain.csproj" />
+  </Folder>
+  <Folder Name="/src/Infrastructure/">
+    <Project Path="src/Infrastructure/TradingPlatform.AI.Abstractions/TradingPlatform.AI.Abstractions.csproj" />
+    <Project Path="src/Infrastructure/TradingPlatform.Broker.Abstractions/TradingPlatform.Broker.Abstractions.csproj" />
+    <Project Path="src/Infrastructure/TradingPlatform.Broker.Oanda/TradingPlatform.Broker.Oanda.csproj" />
+    <Project Path="src/Infrastructure/TradingPlatform.Broker.ZeroMQ/TradingPlatform.Broker.ZeroMQ.csproj" />
+    <Project Path="src/Infrastructure/TradingPlatform.Persistence/TradingPlatform.Persistence.csproj" />
+    <Project Path="src/Infrastructure/TradingPlatform.RulesEngine/TradingPlatform.RulesEngine.csproj" />
+  </Folder>
+  <Folder Name="/src/Presentation/">
+    <Project Path="src/Presentation/TradingPlatform.Api/TradingPlatform.Api.csproj" />
+    <Project Path="src/Presentation/TradingPlatform.Worker/TradingPlatform.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TradingPlatform.IntegrationTests/TradingPlatform.IntegrationTests.csproj" />
+    <Project Path="tests/TradingPlatform.UnitTests/TradingPlatform.UnitTests.csproj" />
+  </Folder>
+</Solution>

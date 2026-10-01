@@ -1,0 +1,4 @@
+{
+  "main": "../dist/parseJSONata.js",
+  "types": "../dist/types/utils/parseJSONata/index.d.ts"
+}

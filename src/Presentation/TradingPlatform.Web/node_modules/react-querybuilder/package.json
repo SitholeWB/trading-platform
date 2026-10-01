@@ -1,0 +1,146 @@
+{
+  "name": "react-querybuilder",
+  "version": "7.7.1",
+  "description": "The React <QueryBuilder /> component for constructing queries",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/react-querybuilder.legacy-esm.js",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/types-esm/index.d.mts",
+        "default": "./dist/react-querybuilder.mjs"
+      },
+      "require": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    },
+    "./dist/*": "./dist/*",
+    "./formatQuery": {
+      "types": "./dist/types/utils/formatQuery/index.d.ts",
+      "default": "./dist/formatQuery.js"
+    },
+    "./parseCEL": {
+      "types": "./dist/types/utils/parseCEL/index.d.ts",
+      "default": "./dist/parseCEL.js"
+    },
+    "./parseJSONata": {
+      "types": "./dist/types/utils/parseJSONata/index.d.ts",
+      "default": "./dist/parseJSONata.js"
+    },
+    "./parseJsonLogic": {
+      "types": "./dist/types/utils/parseJsonLogic/index.d.ts",
+      "default": "./dist/parseJsonLogic.js"
+    },
+    "./parseMongoDB": {
+      "types": "./dist/types/utils/parseMongoDB/index.d.ts",
+      "default": "./dist/parseMongoDB.js"
+    },
+    "./parseSpEL": {
+      "types": "./dist/types/utils/parseSpEL/index.d.ts",
+      "default": "./dist/parseSpEL.js"
+    },
+    "./parseSQL": {
+      "types": "./dist/types/utils/parseSQL/index.d.ts",
+      "default": "./dist/parseSQL.js"
+    },
+    "./transformQuery": {
+      "types": "./dist/types/utils/transformQuery.d.ts",
+      "default": "./dist/transformQuery.js"
+    }
+  },
+  "react-native": "dist/react-querybuilder.mjs",
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist",
+    "formatQuery",
+    "parseCEL",
+    "parseJSONata",
+    "parseJsonLogic",
+    "parseMongoDB",
+    "parseSpEL",
+    "parseSQL",
+    "transformQuery"
+  ],
+  "sideEffects": [
+    "*.css",
+    "*.scss"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/react-querybuilder/react-querybuilder.git",
+    "directory": "packages/react-querybuilder"
+  },
+  "keywords": [
+    "react",
+    "querybuilder",
+    "query",
+    "builder",
+    "operators",
+    "component",
+    "clause",
+    "expression",
+    "sql"
+  ],
+  "contributors": [
+    "Pavan Podila <pavan@pixelingene.com> (http://blog.pixelingene.com)",
+    "Jake Boone"
+  ],
+  "license": "MIT",
+  "homepage": "https://react-querybuilder.js.org/",
+  "devDependencies": {
+    "@babel/core": "^7.25.8",
+    "@babel/preset-env": "^7.25.8",
+    "@babel/preset-react": "^7.25.7",
+    "@babel/preset-typescript": "^7.25.7",
+    "@electric-sql/pglite": "^0.2.12",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.0.1",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/hoist-non-react-statics": "^3.3.5",
+    "@types/jscodeshift": "^0.12.0",
+    "@types/json-logic-js": "^2.0.7",
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react-swc": "^3.7.1",
+    "babel-plugin-istanbul": "^7.0.0",
+    "jscodeshift": "^17.0.0",
+    "json-logic-js": "^2.0.5",
+    "jsonata": "^2.0.5",
+    "query-string": "^9.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "regenerator-runtime": "^0.14.1",
+    "rollup-plugin-visualizer": "^5.12.0",
+    "sass": "^1.79.5",
+    "spel2js": "^0.2.8",
+    "type-fest": "^4.26.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.9"
+  },
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.3.0",
+    "immer": "^10.1.1",
+    "numeric-quantity": "^2.0.1",
+    "react-redux": "^9.1.2"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "browserslist": "> 0.25%, not dead",
+  "scripts": {
+    "start": "bun --bun vite",
+    "build": "bun run build:main && bun run build:css",
+    "build:main": "bun --bun tsup",
+    "build:css": "mkdir -p dist && cp ./src/*.scss dist && bunx sass --style=compressed ./dist/query-builder-layout.scss:./dist/query-builder-layout.css ./dist/query-builder.scss:./dist/query-builder.css",
+    "typecheck": "tsc --noEmit",
+    "typecheck:watch": "tsc --noEmit --watch",
+    "generate:parsers": "bun --bun run generate:sqlparser && bun --bun run generate:celparser && bun --bun run generate:parsers-codemod",
+    "generate:sqlparser": "bunx --bun jison src/utils/parseSQL/sql.jison --outfile src/utils/parseSQL/sqlParser.js --module-type commonjs",
+    "generate:celparser": "bunx --bun jison src/utils/parseCEL/cel.jison --outfile src/utils/parseCEL/celParser.js --module-type commonjs",
+    "generate:parsers-codemod": "bunx --bun jscodeshift -t src/internal/langParser.codemod.mjs src/utils/parse{CEL/cel,SQL/sql}Parser.js"
+  },
+  "gitHead": "946050b72a648f203a70c7edf89e30b78789c8f6"
+}

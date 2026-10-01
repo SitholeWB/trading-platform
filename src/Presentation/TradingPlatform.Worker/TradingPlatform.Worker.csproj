@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-TradingPlatform.Worker-TradingPlatform</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\TradingPlatform.Domain\TradingPlatform.Domain.csproj" />
+    <ProjectReference Include="..\..\Core\TradingPlatform.Application\TradingPlatform.Application.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\TradingPlatform.Persistence\TradingPlatform.Persistence.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\TradingPlatform.RulesEngine\TradingPlatform.RulesEngine.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\TradingPlatform.Broker.Abstractions\TradingPlatform.Broker.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\TradingPlatform.Broker.Oanda\TradingPlatform.Broker.Oanda.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\TradingPlatform.Broker.ZeroMQ\TradingPlatform.Broker.ZeroMQ.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\TradingPlatform.AI.Abstractions\TradingPlatform.AI.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.2" />
+  </ItemGroup>
+</Project>

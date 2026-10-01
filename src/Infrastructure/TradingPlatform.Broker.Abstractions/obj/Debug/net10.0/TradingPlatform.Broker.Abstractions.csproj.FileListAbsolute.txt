@@ -1,0 +1,15 @@
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/bin/Debug/net10.0/TradingPlatform.Broker.Abstractions.deps.json
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/bin/Debug/net10.0/TradingPlatform.Broker.Abstractions.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/bin/Debug/net10.0/TradingPlatform.Broker.Abstractions.pdb
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/bin/Debug/net10.0/TradingPlatform.Domain.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/bin/Debug/net10.0/TradingPlatform.Domain.pdb
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/TradingPlatform.Broker.Abstractions.csproj.AssemblyReference.cache
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/TradingPlatform.Broker.Abstractions.GeneratedMSBuildEditorConfig.editorconfig
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/TradingPlatform.Broker.Abstractions.AssemblyInfoInputs.cache
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/TradingPlatform.Broker.Abstractions.AssemblyInfo.cs
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/TradingPlatform.Broker.Abstractions.csproj.CoreCompileInputs.cache
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/TradingP.F11B1758.Up2Date
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/TradingPlatform.Broker.Abstractions.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/refint/TradingPlatform.Broker.Abstractions.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/TradingPlatform.Broker.Abstractions.pdb
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/ref/TradingPlatform.Broker.Abstractions.dll

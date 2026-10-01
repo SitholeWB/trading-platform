@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\TradingPlatform.Domain\TradingPlatform.Domain.csproj" />
+    <ProjectReference Include="..\TradingPlatform.Broker.Abstractions\TradingPlatform.Broker.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Core\TradingPlatform.Application\TradingPlatform.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NetMQ" Version="4.0.1.13" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2" />
+  </ItemGroup>
+
+</Project>

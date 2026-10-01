@@ -1,0 +1,13 @@
+import type { DefaultCombinatorNameExtended, DefaultOperatorName } from "../../types/index.noReact.mjs";
+import type { ComparisonOperator, MixedAndXorOrList, SQLAndExpression, SQLExpression, SQLIdentifier, SQLLiteralValue, SQLOrExpression, SQLSignedNumberValue, SQLWhereObjectAny, SQLXorExpression } from "./types.mjs";
+export declare const isSQLLiteralValue: (v?: SQLWhereObjectAny) => v is SQLLiteralValue;
+export declare const isSQLSignedNumber: (v?: SQLWhereObjectAny) => v is SQLSignedNumberValue;
+export declare const isSQLLiteralOrSignedNumberValue: (v?: SQLWhereObjectAny) => v is SQLLiteralValue | SQLSignedNumberValue;
+export declare const isSQLIdentifier: (v?: SQLWhereObjectAny) => v is SQLIdentifier;
+export declare const isWildcardsOnly: (sqlExpr: SQLExpression) => boolean;
+export declare const getParamString: (param: any) => string;
+export declare const getFieldName: (f: string | SQLIdentifier) => string;
+export declare const normalizeOperator: (op: ComparisonOperator, flip?: boolean) => DefaultOperatorName;
+export declare const evalSQLLiteralValue: (valueObj: SQLLiteralValue | SQLSignedNumberValue) => any;
+export declare const generateFlatAndOrList: (expr: SQLAndExpression | SQLOrExpression | SQLXorExpression) => (DefaultCombinatorNameExtended | SQLExpression)[];
+export declare const generateMixedAndXorOrList: (expr: SQLAndExpression | SQLOrExpression | SQLXorExpression) => MixedAndXorOrList;

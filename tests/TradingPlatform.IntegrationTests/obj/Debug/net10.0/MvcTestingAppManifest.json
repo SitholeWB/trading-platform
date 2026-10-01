@@ -1,0 +1,12 @@
+{
+  "TradingPlatform.AI.Abstractions, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/wb-sithole\/.gemini\/antigravity\/scratch\/TradingPlatform\/src\/Infrastructure\/TradingPlatform.AI.Abstractions",
+  "TradingPlatform.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/wb-sithole\/.gemini\/antigravity\/scratch\/TradingPlatform\/src\/Presentation\/TradingPlatform.Api",
+  "TradingPlatform.Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/wb-sithole\/.gemini\/antigravity\/scratch\/TradingPlatform\/src\/Core\/TradingPlatform.Application",
+  "TradingPlatform.Broker.Abstractions, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/wb-sithole\/.gemini\/antigravity\/scratch\/TradingPlatform\/src\/Infrastructure\/TradingPlatform.Broker.Abstractions",
+  "TradingPlatform.Broker.Oanda, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/wb-sithole\/.gemini\/antigravity\/scratch\/TradingPlatform\/src\/Infrastructure\/TradingPlatform.Broker.Oanda",
+  "TradingPlatform.Broker.ZeroMQ, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/wb-sithole\/.gemini\/antigravity\/scratch\/TradingPlatform\/src\/Infrastructure\/TradingPlatform.Broker.ZeroMQ",
+  "TradingPlatform.Domain, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/wb-sithole\/.gemini\/antigravity\/scratch\/TradingPlatform\/src\/Core\/TradingPlatform.Domain",
+  "TradingPlatform.Persistence, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/wb-sithole\/.gemini\/antigravity\/scratch\/TradingPlatform\/src\/Infrastructure\/TradingPlatform.Persistence",
+  "TradingPlatform.RulesEngine, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/wb-sithole\/.gemini\/antigravity\/scratch\/TradingPlatform\/src\/Infrastructure\/TradingPlatform.RulesEngine",
+  "TradingPlatform.Worker, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/wb-sithole\/.gemini\/antigravity\/scratch\/TradingPlatform\/src\/Presentation\/TradingPlatform.Worker"
+}

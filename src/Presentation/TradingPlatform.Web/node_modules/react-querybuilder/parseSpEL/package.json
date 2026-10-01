@@ -1,0 +1,4 @@
+{
+  "main": "../dist/parseSpEL.js",
+  "types": "../dist/types/utils/parseSpEL/index.d.ts"
+}
