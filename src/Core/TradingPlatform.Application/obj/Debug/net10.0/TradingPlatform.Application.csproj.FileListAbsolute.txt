@@ -17,3 +17,4 @@
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Application/obj/Debug/net10.0/refint/TradingPlatform.Application.dll
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Application/obj/Debug/net10.0/TradingPlatform.Application.pdb
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Application/obj/Debug/net10.0/ref/TradingPlatform.Application.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Core/TradingPlatform.Application/obj/Debug/net10.0/TradingPlatform.Application.sourcelink.json

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using TradingPlatform.Api.Hosting;
 using TradingPlatform.Application;
 using TradingPlatform.Application.Commands.IngestCandle;
 using TradingPlatform.Application.Common.CQRS;
@@ -20,6 +21,7 @@ builder.Services.AddApplicationServices();
 builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddRulesEngineServices();
 builder.Services.AddOandaBroker(builder.Configuration);
+builder.Services.AddHostedService<SpaHostedService>();
 
 var app = builder.Build();
 

@@ -13,3 +13,4 @@
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/refint/TradingPlatform.Broker.Abstractions.dll
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/TradingPlatform.Broker.Abstractions.pdb
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/ref/TradingPlatform.Broker.Abstractions.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.Abstractions/obj/Debug/net10.0/TradingPlatform.Broker.Abstractions.sourcelink.json

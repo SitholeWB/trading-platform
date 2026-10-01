@@ -505,3 +505,4 @@
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/tests/TradingPlatform.IntegrationTests/obj/Debug/net10.0/TradingPlatform.IntegrationTests.genruntimeconfig.cache
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/tests/TradingPlatform.IntegrationTests/obj/Debug/net10.0/ref/TradingPlatform.IntegrationTests.dll
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/tests/TradingPlatform.IntegrationTests/bin/Debug/net10.0/TradingPlatform.Api.staticwebassets.runtime.json
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/tests/TradingPlatform.IntegrationTests/obj/Debug/net10.0/TradingPlatform.IntegrationTests.sourcelink.json

@@ -14,6 +14,7 @@
   </Folder>
   <Folder Name="/src/Presentation/">
     <Project Path="src/Presentation/TradingPlatform.Api/TradingPlatform.Api.csproj" />
+    <Project Path="src/Presentation/TradingPlatform.Web/TradingPlatform.Web.csproj" />
     <Project Path="src/Presentation/TradingPlatform.Worker/TradingPlatform.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">

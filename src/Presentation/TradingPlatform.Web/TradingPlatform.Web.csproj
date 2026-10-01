@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefaultItemExcludes>$(DefaultItemExcludes);node_modules\**;dist\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="**\*" Exclude="node_modules\**;dist\**;bin\**;obj\**" />
+  </ItemGroup>
+
+  <Target Name="BuildWeb" BeforeTargets="Build" Condition="!Exists('..\TradingPlatform.Api\wwwroot\index.html') Or '$(Configuration)' == 'Release'">
+    <Exec Command="npm run build" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+</Project>

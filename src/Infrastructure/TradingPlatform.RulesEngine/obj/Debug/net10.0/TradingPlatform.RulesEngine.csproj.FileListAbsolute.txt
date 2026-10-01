@@ -19,3 +19,4 @@
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.RulesEngine/obj/Debug/net10.0/refint/TradingPlatform.RulesEngine.dll
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.RulesEngine/obj/Debug/net10.0/TradingPlatform.RulesEngine.pdb
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.RulesEngine/obj/Debug/net10.0/ref/TradingPlatform.RulesEngine.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.RulesEngine/obj/Debug/net10.0/TradingPlatform.RulesEngine.sourcelink.json

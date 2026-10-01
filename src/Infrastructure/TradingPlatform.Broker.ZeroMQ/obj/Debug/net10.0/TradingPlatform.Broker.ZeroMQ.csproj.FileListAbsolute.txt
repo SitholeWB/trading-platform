@@ -19,3 +19,4 @@
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.ZeroMQ/obj/Debug/net10.0/refint/TradingPlatform.Broker.ZeroMQ.dll
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.ZeroMQ/obj/Debug/net10.0/TradingPlatform.Broker.ZeroMQ.pdb
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.ZeroMQ/obj/Debug/net10.0/ref/TradingPlatform.Broker.ZeroMQ.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Infrastructure/TradingPlatform.Broker.ZeroMQ/obj/Debug/net10.0/TradingPlatform.Broker.ZeroMQ.sourcelink.json

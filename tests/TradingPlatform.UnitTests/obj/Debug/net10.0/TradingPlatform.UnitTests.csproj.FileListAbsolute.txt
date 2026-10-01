@@ -166,3 +166,4 @@
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/tests/TradingPlatform.UnitTests/obj/Debug/net10.0/TradingPlatform.UnitTests.pdb
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/tests/TradingPlatform.UnitTests/obj/Debug/net10.0/TradingPlatform.UnitTests.genruntimeconfig.cache
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/tests/TradingPlatform.UnitTests/obj/Debug/net10.0/ref/TradingPlatform.UnitTests.dll
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/tests/TradingPlatform.UnitTests/obj/Debug/net10.0/TradingPlatform.UnitTests.sourcelink.json

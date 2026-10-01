@@ -15,6 +15,7 @@
     <ProjectReference Include="..\..\Infrastructure\TradingPlatform.Broker.Oanda\TradingPlatform.Broker.Oanda.csproj" />
     <ProjectReference Include="..\..\Infrastructure\TradingPlatform.Broker.ZeroMQ\TradingPlatform.Broker.ZeroMQ.csproj" />
     <ProjectReference Include="..\..\Infrastructure\TradingPlatform.AI.Abstractions\TradingPlatform.AI.Abstractions.csproj" />
+    <ProjectReference Include="..\TradingPlatform.Web\TradingPlatform.Web.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

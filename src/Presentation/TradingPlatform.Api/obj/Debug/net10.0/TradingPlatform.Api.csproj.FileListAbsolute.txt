@@ -116,3 +116,4 @@
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Presentation/TradingPlatform.Api/obj/Debug/net10.0/compressed/e60060c2sa-{0}-yi8dkrkg9d-yi8dkrkg9d.gz
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Presentation/TradingPlatform.Api/obj/Debug/net10.0/compressed/il87rprl19-{0}-lvpkbaxi8x-lvpkbaxi8x.gz
 /home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Presentation/TradingPlatform.Api/obj/Debug/net10.0/compressed/6kqlqj8dhr-{0}-nuxu3qf1x3-nuxu3qf1x3.gz
+/home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Presentation/TradingPlatform.Api/obj/Debug/net10.0/TradingPlatform.Api.sourcelink.json
