@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { StrategyDefinition, Timeframe } from '../types/trading';
+import React, { useMemo, useState } from 'react';
+import { IndicatorConfig, StrategyDefinition, Timeframe } from '../types/trading';
 
 interface RuleStudioProps {
   strategies: StrategyDefinition[];
   onSaveStrategy: (strategy: any) => Promise<void>;
   onDeleteStrategy: (id: string) => Promise<void>;
+  onIndicatorConfigChange?: (config: IndicatorConfig) => void;
 }
 
 interface RuleItem {
@@ -15,18 +16,49 @@ interface RuleItem {
   valueSource: 'value' | 'field';
 }
 
-const AVAILABLE_FIELDS = [
-  { group: 'Price Action', items: ['Close', 'Open', 'High', 'Low', 'Volume'] },
-  { group: 'Moving Averages', items: ['Ema20', 'Ema50', 'Ema200'] },
-  { group: 'Momentum & Volatility', items: ['Rsi14', 'Atr14'] },
-  { group: 'Ichimoku Cloud', items: ['IchimokuSpanA', 'IchimokuSpanB', 'IchimokuTenkan', 'IchimokuKijun', 'IchimokuChikou'] },
-  { group: 'Candle Geometry', items: ['UpperWickRatio', 'LowerWickRatio', 'BodyRatio'] },
-];
+const DEFAULT_INDICATOR_CONFIG: IndicatorConfig = {
+  emas: [20, 50, 200],
+  smas: [20, 50, 200],
+  rsi: {
+    period: 14,
+    overbought: 70,
+    oversold: 30,
+  },
+  macd: {
+    fast: 12,
+    slow: 26,
+    signal: 9,
+  },
+  bollinger: {
+    period: 20,
+    stdDev: 2.0,
+  },
+  stoch: {
+    kPeriod: 14,
+    dPeriod: 3,
+    smooth: 3,
+  },
+  atr: {
+    period: 14,
+    slMultiplier: 1.5,
+    tpMultiplier: 3.0,
+  },
+  adx: {
+    period: 14,
+    threshold: 25,
+  },
+  ichimoku: {
+    tenkan: 9,
+    kijun: 26,
+    senkou: 52,
+  },
+};
 
 export const RuleStudio: React.FC<RuleStudioProps> = ({
   strategies,
   onSaveStrategy,
   onDeleteStrategy,
+  onIndicatorConfigChange,
 }) => {
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyDefinition | null>(
     strategies[0] || null
@@ -38,6 +70,108 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
   const [autoTrading, setAutoTrading] = useState(true);
   const [aiValidation, setAiValidation] = useState(false);
   const [combinator, setCombinator] = useState<'and' | 'or'>('and');
+
+  // Indicator Configuration State
+  const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG);
+  const [showIndicatorSettings, setShowIndicatorSettings] = useState(false);
+  const [newEmaInput, setNewEmaInput] = useState('');
+  const [newSmaInput, setNewSmaInput] = useState('');
+
+  // Dynamically compute available fields based on configured indicators
+  const availableFields = useMemo(() => [
+    { group: 'Price Action', items: ['Close', 'Open', 'High', 'Low', 'Volume'] },
+    {
+      group: 'Moving Averages (EMA)',
+      items: indicatorConfig.emas.map((p) => `Ema${p}`),
+    },
+    {
+      group: 'Moving Averages (SMA)',
+      items: (indicatorConfig.smas || [20, 50, 200]).map((p) => `Sma${p}`),
+    },
+    {
+      group: 'MACD (Trend / Momentum)',
+      items: ['MacdLine', 'MacdSignal', 'MacdHistogram'],
+    },
+    {
+      group: 'Bollinger Bands (Volatility)',
+      items: ['BollingerUpper', 'BollingerMiddle', 'BollingerLower'],
+    },
+    {
+      group: 'Oscillators (RSI & Stoch)',
+      items: [
+        `Rsi${indicatorConfig.rsi.period}`,
+        'StochK',
+        'StochD',
+      ],
+    },
+    {
+      group: 'Trend & Volatility (ATR & ADX)',
+      items: [
+        `Atr${indicatorConfig.atr.period}`,
+        'Adx',
+      ],
+    },
+    {
+      group: 'Ichimoku Cloud',
+      items: [
+        'IchimokuSpanA',
+        'IchimokuSpanB',
+        'IchimokuTenkan',
+        'IchimokuKijun',
+        'IchimokuChikou',
+      ],
+    },
+    { group: 'Candle Geometry', items: ['UpperWickRatio', 'LowerWickRatio', 'BodyRatio'] },
+  ], [indicatorConfig]);
+
+  const updateIndicatorConfig = (newConfig: IndicatorConfig) => {
+    setIndicatorConfig(newConfig);
+    onIndicatorConfigChange?.(newConfig);
+  };
+
+  const handleAddEma = () => {
+    const period = parseInt(newEmaInput.trim(), 10);
+    if (!isNaN(period) && period > 0 && !indicatorConfig.emas.includes(period)) {
+      const updatedEmas = [...indicatorConfig.emas, period].sort((a, b) => a - b);
+      const updated = { ...indicatorConfig, emas: updatedEmas };
+      updateIndicatorConfig(updated);
+      setNewEmaInput('');
+    }
+  };
+
+  const handleRemoveEma = (period: number) => {
+    const updatedEmas = indicatorConfig.emas.filter((p) => p !== period);
+    const updated = { ...indicatorConfig, emas: updatedEmas };
+    updateIndicatorConfig(updated);
+  };
+
+  const applyEmaPreset = (presetEmas: number[]) => {
+    const updated = { ...indicatorConfig, emas: presetEmas };
+    updateIndicatorConfig(updated);
+  };
+
+  const handleAddSma = () => {
+    const period = parseInt(newSmaInput.trim(), 10);
+    const currentSmas = indicatorConfig.smas || [20, 50, 200];
+    if (!isNaN(period) && period > 0 && !currentSmas.includes(period)) {
+      const updatedSmas = [...currentSmas, period].sort((a, b) => a - b);
+      const updated = { ...indicatorConfig, smas: updatedSmas };
+      updateIndicatorConfig(updated);
+      setNewSmaInput('');
+    }
+  };
+
+  const handleRemoveSma = (period: number) => {
+    const currentSmas = indicatorConfig.smas || [20, 50, 200];
+    const updatedSmas = currentSmas.filter((p) => p !== period);
+    const updated = { ...indicatorConfig, smas: updatedSmas };
+    updateIndicatorConfig(updated);
+  };
+
+  const applySmaPreset = (presetSmas: number[]) => {
+    const updated = { ...indicatorConfig, smas: presetSmas };
+    updateIndicatorConfig(updated);
+  };
 
   const [rules, setRules] = useState<RuleItem[]>([
     { id: '1', field: 'Close', operator: '>', value: 'Ema50', valueSource: 'field' },
@@ -107,6 +241,20 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowIndicatorSettings(!showIndicatorSettings)}
+            className={`px-3 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors border ${
+              showIndicatorSettings
+                ? 'bg-blue-600/30 text-blue-300 border-blue-500/50'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+            }`}
+          >
+            <span>⚙️ Indicators Config</span>
+            <span className="bg-blue-500/20 text-blue-300 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+              {indicatorConfig.emas.length} EMAs
+            </span>
+          </button>
+
           <div className="flex bg-slate-800 rounded p-0.5 text-xs">
             <button
               onClick={() => setActiveTab('visual')}
@@ -155,7 +303,7 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
               onChange={(e) => setTimeframe(e.target.value as Timeframe)}
               className="w-full mt-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-slate-200 font-medium focus:border-blue-500 focus:outline-none"
             >
-              {['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1'].map((tf) => (
+              {(['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN1'] as Timeframe[]).map((tf) => (
                 <option key={tf} value={tf}>{tf}</option>
               ))}
             </select>
@@ -181,6 +329,502 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
             </label>
           </div>
         </div>
+
+        {/* Expandable Indicator Configuration Panel */}
+        {showIndicatorSettings && (
+          <div className="bg-slate-950 p-4 rounded-xl border border-blue-500/30 shadow-lg shadow-blue-950/40 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-slate-100">Indicator Parameters & Quant Settings</span>
+                <span className="text-[11px] text-slate-400">Configure parameters for EMAs, Oscillators, and Volatility</span>
+              </div>
+              <button
+                onClick={() => setShowIndicatorSettings(false)}
+                className="text-xs text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded hover:bg-slate-800"
+              >
+                Close ✕
+              </button>
+            </div>
+
+            {/* EMA Periods Configuration */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-cyan-400 flex items-center gap-1.5">
+                  <span>Exponential Moving Averages (EMA)</span>
+                  <span className="text-[10px] text-slate-500 font-normal">Active in strategy rules & charts</span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400 font-mono">Presets:</span>
+                  <button
+                    onClick={() => applyEmaPreset([20, 50, 200])}
+                    className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700"
+                  >
+                    Classic (20/50/200)
+                  </button>
+                  <button
+                    onClick={() => applyEmaPreset([9, 21, 55])}
+                    className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700"
+                  >
+                    Scalping (9/21/55)
+                  </button>
+                  <button
+                    onClick={() => applyEmaPreset([50, 200])}
+                    className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700"
+                  >
+                    Golden Cross (50/200)
+                  </button>
+                  <button
+                    onClick={() => applyEmaPreset([8, 13, 21, 55, 89])}
+                    className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700"
+                  >
+                    Fibonacci
+                  </button>
+                </div>
+              </div>
+
+              {/* Active EMA Badges & Input */}
+              <div className="flex flex-wrap items-center gap-2 p-2.5 bg-slate-900/80 rounded-lg border border-slate-800">
+                {indicatorConfig.emas.map((period) => (
+                  <div
+                    key={period}
+                    className="flex items-center gap-1.5 bg-blue-600/20 text-cyan-300 border border-blue-500/40 px-2.5 py-1 rounded-md text-xs font-mono font-bold"
+                  >
+                    <span>EMA {period}</span>
+                    <button
+                      onClick={() => handleRemoveEma(period)}
+                      className="text-slate-400 hover:text-red-400 hover:bg-red-500/20 rounded p-0.5 transition-colors"
+                      title="Remove this EMA"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+
+                <div className="flex items-center gap-1 ml-2">
+                  <input
+                    type="number"
+                    min="2"
+                    max="500"
+                    placeholder="Period (e.g. 10)"
+                    value={newEmaInput}
+                    onChange={(e) => setNewEmaInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddEma();
+                      }
+                    }}
+                    className="w-24 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100 font-mono focus:border-blue-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleAddEma}
+                    className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-mono text-xs font-bold transition-colors"
+                  >
+                    + Add EMA
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* SMA Periods Configuration */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                  <span>Simple Moving Averages (SMA)</span>
+                  <span className="text-[10px] text-slate-500 font-normal">Active in strategy rules</span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400 font-mono">Presets:</span>
+                  <button
+                    onClick={() => applySmaPreset([20, 50, 200])}
+                    className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700"
+                  >
+                    Classic (20/50/200)
+                  </button>
+                  <button
+                    onClick={() => applySmaPreset([50, 100, 200])}
+                    className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700"
+                  >
+                    Institutional (50/100/200)
+                  </button>
+                  <button
+                    onClick={() => applySmaPreset([10, 20, 30])}
+                    className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700"
+                  >
+                    Short-Term (10/20/30)
+                  </button>
+                </div>
+              </div>
+
+              {/* Active SMA Badges & Input */}
+              <div className="flex flex-wrap items-center gap-2 p-2.5 bg-slate-900/80 rounded-lg border border-slate-800">
+                {(indicatorConfig.smas || [20, 50, 200]).map((period) => (
+                  <div
+                    key={`sma-${period}`}
+                    className="flex items-center gap-1.5 bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-md text-xs font-mono font-bold"
+                  >
+                    <span>SMA {period}</span>
+                    <button
+                      onClick={() => handleRemoveSma(period)}
+                      className="text-slate-400 hover:text-red-400 hover:bg-red-500/20 rounded p-0.5 transition-colors"
+                      title="Remove this SMA"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+
+                <div className="flex items-center gap-1 ml-2">
+                  <input
+                    type="number"
+                    min="2"
+                    max="500"
+                    placeholder="Period (e.g. 50)"
+                    value={newSmaInput}
+                    onChange={(e) => setNewSmaInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddSma();
+                      }
+                    }}
+                    className="w-24 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100 font-mono focus:border-emerald-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleAddSma}
+                    className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold transition-colors"
+                  >
+                    + Add SMA
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Other Indicators Grid (RSI, MACD, Bollinger, Stochastic, ATR, ADX, Ichimoku) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* RSI Configuration */}
+              <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                <div className="text-xs font-semibold text-amber-400 flex items-center justify-between">
+                  <span>Relative Strength Index (RSI)</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-400">Period</label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="100"
+                      value={indicatorConfig.rsi.period}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          rsi: { ...indicatorConfig.rsi, period: Number(e.target.value) || 14 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-amber-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">Overbought</label>
+                    <input
+                      type="number"
+                      min="50"
+                      max="95"
+                      value={indicatorConfig.rsi.overbought}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          rsi: { ...indicatorConfig.rsi, overbought: Number(e.target.value) || 70 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-red-400 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">Oversold</label>
+                    <input
+                      type="number"
+                      min="5"
+                      max="50"
+                      value={indicatorConfig.rsi.oversold}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          rsi: { ...indicatorConfig.rsi, oversold: Number(e.target.value) || 30 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-emerald-400 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* MACD Configuration */}
+              <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                <div className="text-xs font-semibold text-cyan-400 flex items-center justify-between">
+                  <span>MACD (Trend & Divergence)</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-400">Fast EMA</label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="100"
+                      value={indicatorConfig.macd?.fast ?? 12}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          macd: { ...(indicatorConfig.macd || { fast: 12, slow: 26, signal: 9 }), fast: Number(e.target.value) || 12 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-cyan-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">Slow EMA</label>
+                    <input
+                      type="number"
+                      min="5"
+                      max="200"
+                      value={indicatorConfig.macd?.slow ?? 26}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          macd: { ...(indicatorConfig.macd || { fast: 12, slow: 26, signal: 9 }), slow: Number(e.target.value) || 26 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-cyan-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">Signal</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={indicatorConfig.macd?.signal ?? 9}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          macd: { ...(indicatorConfig.macd || { fast: 12, slow: 26, signal: 9 }), signal: Number(e.target.value) || 9 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-cyan-300 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bollinger Bands Configuration */}
+              <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                <div className="text-xs font-semibold text-purple-400 flex items-center justify-between">
+                  <span>Bollinger Bands (Volatility)</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-400">Lookback Period</label>
+                    <input
+                      type="number"
+                      min="5"
+                      max="100"
+                      value={indicatorConfig.bollinger?.period ?? 20}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          bollinger: { ...(indicatorConfig.bollinger || { period: 20, stdDev: 2.0 }), period: Number(e.target.value) || 20 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-purple-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">Std Dev Multiplier</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.5"
+                      max="5.0"
+                      value={indicatorConfig.bollinger?.stdDev ?? 2.0}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          bollinger: { ...(indicatorConfig.bollinger || { period: 20, stdDev: 2.0 }), stdDev: Number(e.target.value) || 2.0 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-purple-300 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Stochastic Oscillator Configuration */}
+              <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                <div className="text-xs font-semibold text-rose-400 flex items-center justify-between">
+                  <span>Stochastic Oscillator (%K / %D)</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-400">%K Period</label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="100"
+                      value={indicatorConfig.stoch?.kPeriod ?? 14}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          stoch: { ...(indicatorConfig.stoch || { kPeriod: 14, dPeriod: 3, smooth: 3 }), kPeriod: Number(e.target.value) || 14 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-rose-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">%D Period</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={indicatorConfig.stoch?.dPeriod ?? 3}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          stoch: { ...(indicatorConfig.stoch || { kPeriod: 14, dPeriod: 3, smooth: 3 }), dPeriod: Number(e.target.value) || 3 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-rose-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">Smooth</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={indicatorConfig.stoch?.smooth ?? 3}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          stoch: { ...(indicatorConfig.stoch || { kPeriod: 14, dPeriod: 3, smooth: 3 }), smooth: Number(e.target.value) || 3 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-rose-300 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ATR & ADX Configuration */}
+              <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                <div className="text-xs font-semibold text-emerald-400 flex items-center justify-between">
+                  <span>ATR & ADX (Volatility / Trend)</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-400">ATR Period</label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="100"
+                      value={indicatorConfig.atr.period}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          atr: { ...indicatorConfig.atr, period: Number(e.target.value) || 14 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-emerald-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">ADX Period</label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="100"
+                      value={indicatorConfig.adx?.period ?? 14}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          adx: { ...(indicatorConfig.adx || { period: 14, threshold: 25 }), period: Number(e.target.value) || 14 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-emerald-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">ADX Trend Level</label>
+                    <input
+                      type="number"
+                      min="10"
+                      max="50"
+                      value={indicatorConfig.adx?.threshold ?? 25}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          adx: { ...(indicatorConfig.adx || { period: 14, threshold: 25 }), threshold: Number(e.target.value) || 25 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-emerald-300 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Ichimoku Cloud Configuration */}
+              <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2">
+                <div className="text-xs font-semibold text-indigo-400 flex items-center justify-between">
+                  <span>Ichimoku Cloud Periods</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-400">Tenkan (Conversion)</label>
+                    <input
+                      type="number"
+                      value={indicatorConfig.ichimoku.tenkan}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          ichimoku: { ...indicatorConfig.ichimoku, tenkan: Number(e.target.value) || 9 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-indigo-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">Kijun (Base)</label>
+                    <input
+                      type="number"
+                      value={indicatorConfig.ichimoku.kijun}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          ichimoku: { ...indicatorConfig.ichimoku, kijun: Number(e.target.value) || 26 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-indigo-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400">Senkou B (Leading)</label>
+                    <input
+                      type="number"
+                      value={indicatorConfig.ichimoku.senkou}
+                      onChange={(e) =>
+                        updateIndicatorConfig({
+                          ...indicatorConfig,
+                          ichimoku: { ...indicatorConfig.ichimoku, senkou: Number(e.target.value) || 52 },
+                        })
+                      }
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-indigo-300 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Visual Builder Tab */}
         {activeTab === 'visual' && (
@@ -231,7 +875,7 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
                     onChange={(e) => updateRule(rule.id, { field: e.target.value })}
                     className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 focus:border-blue-500 focus:outline-none"
                   >
-                    {AVAILABLE_FIELDS.map((grp) => (
+                    {availableFields.map((grp) => (
                       <optgroup key={grp.group} label={grp.group}>
                         {grp.items.map((item) => (
                           <option key={item} value={item}>{item}</option>
@@ -275,7 +919,7 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
                       onChange={(e) => updateRule(rule.id, { value: e.target.value })}
                       className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-cyan-400 font-semibold focus:border-blue-500 focus:outline-none"
                     >
-                      {AVAILABLE_FIELDS.map((grp) => (
+                      {availableFields.map((grp) => (
                         <optgroup key={grp.group} label={grp.group}>
                           {grp.items.map((item) => (
                             <option key={item} value={item}>{item}</option>

@@ -89,7 +89,7 @@ export const SimulatorConsole: React.FC<SimulatorConsoleProps> = ({ onSimulateCa
       </div>
 
       {/* Inputs Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 bg-slate-950 p-3 rounded-lg border border-slate-800">
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-2 bg-slate-950 p-3 rounded-lg border border-slate-800">
         <div>
           <label className="text-[10px] text-slate-500">Symbol</label>
           <input
@@ -98,6 +98,18 @@ export const SimulatorConsole: React.FC<SimulatorConsoleProps> = ({ onSimulateCa
             onChange={(e) => setSymbol(e.target.value)}
             className="w-full mt-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200"
           />
+        </div>
+        <div>
+          <label className="text-[10px] text-slate-500">Timeframe</label>
+          <select
+            value={timeframe}
+            onChange={(e) => setTimeframe(e.target.value as Timeframe)}
+            className="w-full mt-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200"
+          >
+            {(['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN1'] as Timeframe[]).map((tf) => (
+              <option key={tf} value={tf}>{tf}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="text-[10px] text-slate-500">Open</label>

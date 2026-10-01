@@ -11,6 +11,7 @@ import { tradingApi } from './api/tradingClient';
 import {
   AccountSummary,
   Candle,
+  IndicatorConfig,
   Position,
   RiskProfile,
   SignalAuditLog,
@@ -22,6 +23,18 @@ export function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('EURUSD');
   const [timeframe, setTimeframe] = useState<Timeframe>('M5');
   const [activeBottomTab, setActiveBottomTab] = useState<'rules' | 'nearmiss' | 'positions' | 'sim'>('rules');
+
+  const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>({
+    emas: [20, 50, 200],
+    smas: [20, 50, 200],
+    rsi: { period: 14, overbought: 70, oversold: 30 },
+    macd: { fast: 12, slow: 26, signal: 9 },
+    bollinger: { period: 20, stdDev: 2.0 },
+    stoch: { kPeriod: 14, dPeriod: 3, smooth: 3 },
+    atr: { period: 14, slMultiplier: 1.5, tpMultiplier: 3.0 },
+    adx: { period: 14, threshold: 25 },
+    ichimoku: { tenkan: 9, kijun: 26, senkou: 52 },
+  });
 
   const [strategies, setStrategies] = useState<StrategyDefinition[]>([]);
   const [auditLogs, setAuditLogs] = useState<SignalAuditLog[]>([]);
@@ -189,6 +202,7 @@ export function App() {
                 symbol={selectedSymbol}
                 timeframe={timeframe}
                 onTimeframeChange={setTimeframe}
+                indicatorConfig={indicatorConfig}
               />
             </div>
             <div className="h-full">
@@ -254,6 +268,7 @@ export function App() {
                   strategies={strategies}
                   onSaveStrategy={handleSaveStrategy}
                   onDeleteStrategy={handleDeleteStrategy}
+                  onIndicatorConfigChange={setIndicatorConfig}
                 />
               )}
               {activeBottomTab === 'nearmiss' && <NearMissRadar logs={auditLogs} />}

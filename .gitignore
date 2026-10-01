@@ -1,8 +1,33 @@
-bin/
-obj/
+# Build and compilation outputs
+[Bb]in/
+[Oo]bj/
+**/[Bb]in/
+**/[Oo]bj/
+
+# Visual Studio / Rider / JetBrains
+.vs/
+.idea/
 *.user
+*.userosv
 *.suo
+*.userprefs
+*.sln.docstates
+
+# Node & Frontend Build
 node_modules/
 dist/
-.system_generated/
+src/Presentation/TradingPlatform.Web/dist/
+src/Presentation/TradingPlatform.Api/wwwroot/assets/
+
+# Local databases and logs
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
 *.log
+.system_generated/
+
+# OS metadata
+.DS_Store
+Thumbs.db

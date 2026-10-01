@@ -48,45 +48,150 @@ public class IndicatorCalculationService : IIndicatorCalculationService
             Volume = c.Volume
         }).ToList();
 
-        // 1. Moving Averages
+        // 1. Moving Averages (Baseline + Dynamic Fibonacci & Classic Periods)
+        var dynamicIndicators = new Dictionary<string, decimal?>(StringComparer.OrdinalIgnoreCase);
+        int[] emaPeriods = { 3, 5, 8, 9, 10, 12, 13, 14, 15, 20, 21, 25, 26, 30, 34, 50, 55, 89, 100, 144, 200 };
         decimal? ema20 = null;
         decimal? ema50 = null;
         decimal? ema200 = null;
 
+        foreach (var period in emaPeriods)
+        {
+            if (quotes.Count >= period)
+            {
+                var emaResults = quotes.GetEma(period);
+                var emaVal = (decimal?)emaResults.LastOrDefault()?.Ema;
+                if (emaVal.HasValue)
+                {
+                    var rounded = Math.Round(emaVal.Value, 5);
+                    dynamicIndicators[$"EMA_{period}"] = rounded;
+                    dynamicIndicators[$"EMA{period}"] = rounded;
+                    if (period == 20) ema20 = rounded;
+                    if (period == 50) ema50 = rounded;
+                    if (period == 200) ema200 = rounded;
+                }
+            }
+        }
+
+        // 2. Simple Moving Averages (SMA)
+        int[] smaPeriods = { 10, 20, 50, 100, 200 };
+        decimal? sma20 = null;
+        decimal? sma50 = null;
+        decimal? sma200 = null;
+        foreach (var period in smaPeriods)
+        {
+            if (quotes.Count >= period)
+            {
+                var smaResults = quotes.GetSma(period);
+                var smaVal = (decimal?)smaResults.LastOrDefault()?.Sma;
+                if (smaVal.HasValue)
+                {
+                    var rounded = Math.Round(smaVal.Value, 5);
+                    dynamicIndicators[$"SMA_{period}"] = rounded;
+                    dynamicIndicators[$"SMA{period}"] = rounded;
+                    if (period == 20) sma20 = rounded;
+                    if (period == 50) sma50 = rounded;
+                    if (period == 200) sma200 = rounded;
+                }
+            }
+        }
+
+        // 3. Oscillators & Volatility (RSI & ATR)
+        int[] rsiPeriods = { 5, 7, 9, 14, 21, 25, 30 };
+        decimal? rsi14 = null;
+        foreach (var period in rsiPeriods)
+        {
+            if (quotes.Count >= period)
+            {
+                var rsiResults = quotes.GetRsi(period);
+                var rsiVal = (decimal?)rsiResults.LastOrDefault()?.Rsi;
+                if (rsiVal.HasValue)
+                {
+                    var rounded = Math.Round(rsiVal.Value, 2);
+                    dynamicIndicators[$"RSI_{period}"] = rounded;
+                    dynamicIndicators[$"RSI{period}"] = rounded;
+                    if (period == 14) rsi14 = rounded;
+                }
+            }
+        }
+
+        int[] atrPeriods = { 5, 7, 10, 14, 20, 21 };
+        decimal? atr14 = null;
+        foreach (var period in atrPeriods)
+        {
+            if (quotes.Count >= period)
+            {
+                var atrResults = quotes.GetAtr(period);
+                var atrVal = (decimal?)atrResults.LastOrDefault()?.Atr;
+                if (atrVal.HasValue)
+                {
+                    var rounded = Math.Round(atrVal.Value, 5);
+                    dynamicIndicators[$"ATR_{period}"] = rounded;
+                    dynamicIndicators[$"ATR{period}"] = rounded;
+                    if (period == 14) atr14 = rounded;
+                }
+            }
+        }
+
+        // 4. MACD (12, 26, 9)
+        decimal? macdLine = null;
+        decimal? macdSignal = null;
+        decimal? macdHistogram = null;
+        if (quotes.Count >= 26)
+        {
+            var macdResults = quotes.GetMacd(12, 26, 9);
+            var latestMacd = macdResults.LastOrDefault();
+            if (latestMacd != null)
+            {
+                if (latestMacd.Macd.HasValue) macdLine = Math.Round((decimal)latestMacd.Macd.Value, 5);
+                if (latestMacd.Signal.HasValue) macdSignal = Math.Round((decimal)latestMacd.Signal.Value, 5);
+                if (latestMacd.Histogram.HasValue) macdHistogram = Math.Round((decimal)latestMacd.Histogram.Value, 5);
+            }
+        }
+
+        // 5. Bollinger Bands (20, 2.0)
+        decimal? bbUpper = null;
+        decimal? bbMiddle = null;
+        decimal? bbLower = null;
         if (quotes.Count >= 20)
         {
-            var ema20Results = quotes.GetEma(20);
-            ema20 = (decimal?)ema20Results.LastOrDefault()?.Ema;
+            var bbResults = quotes.GetBollingerBands(20, 2.0);
+            var latestBb = bbResults.LastOrDefault();
+            if (latestBb != null)
+            {
+                if (latestBb.UpperBand.HasValue) bbUpper = Math.Round((decimal)latestBb.UpperBand.Value, 5);
+                if (latestBb.Sma.HasValue) bbMiddle = Math.Round((decimal)latestBb.Sma.Value, 5);
+                if (latestBb.LowerBand.HasValue) bbLower = Math.Round((decimal)latestBb.LowerBand.Value, 5);
+            }
         }
 
-        if (quotes.Count >= 50)
-        {
-            var ema50Results = quotes.GetEma(50);
-            ema50 = (decimal?)ema50Results.LastOrDefault()?.Ema;
-        }
-
-        if (quotes.Count >= 200)
-        {
-            var ema200Results = quotes.GetEma(200);
-            ema200 = (decimal?)ema200Results.LastOrDefault()?.Ema;
-        }
-
-        // 2. Oscillators & Volatility
-        decimal? rsi14 = null;
+        // 6. Stochastic Oscillator (14, 3, 3)
+        decimal? stochK = null;
+        decimal? stochD = null;
         if (quotes.Count >= 14)
         {
-            var rsiResults = quotes.GetRsi(14);
-            rsi14 = (decimal?)rsiResults.LastOrDefault()?.Rsi;
+            var stochResults = quotes.GetStoch(14, 3, 3);
+            var latestStoch = stochResults.LastOrDefault();
+            if (latestStoch != null)
+            {
+                if (latestStoch.Oscillator.HasValue) stochK = Math.Round((decimal)latestStoch.Oscillator.Value, 2);
+                if (latestStoch.Signal.HasValue) stochD = Math.Round((decimal)latestStoch.Signal.Value, 2);
+            }
         }
 
-        decimal? atr14 = null;
+        // 7. Average Directional Index (ADX 14)
+        decimal? adx = null;
         if (quotes.Count >= 14)
         {
-            var atrResults = quotes.GetAtr(14);
-            atr14 = (decimal?)atrResults.LastOrDefault()?.Atr;
+            var adxResults = quotes.GetAdx(14);
+            var latestAdx = adxResults.LastOrDefault();
+            if (latestAdx != null && latestAdx.Adx.HasValue)
+            {
+                adx = Math.Round((decimal)latestAdx.Adx.Value, 2);
+            }
         }
 
-        // 3. Ichimoku Cloud Components
+        // 8. Ichimoku Cloud Components
         decimal? tenkan = null;
         decimal? kijun = null;
         decimal? spanA = null;
@@ -107,7 +212,7 @@ public class IndicatorCalculationService : IIndicatorCalculationService
             }
         }
 
-        // 4. Geometry & Wick Ratios
+        // 9. Geometry & Wick Ratios
         var (upperWick, lowerWick, bodyRatio) = MarketSnapshot.CalculateRatios(
             latestCandle.Open, latestCandle.High, latestCandle.Low, latestCandle.Close);
 
@@ -121,11 +226,23 @@ public class IndicatorCalculationService : IIndicatorCalculationService
             Low = latestCandle.Low,
             Close = latestCandle.Close,
             Volume = latestCandle.Volume,
-            Ema20 = ema20.HasValue ? Math.Round(ema20.Value, 5) : null,
-            Ema50 = ema50.HasValue ? Math.Round(ema50.Value, 5) : null,
-            Ema200 = ema200.HasValue ? Math.Round(ema200.Value, 5) : null,
-            Rsi14 = rsi14.HasValue ? Math.Round(rsi14.Value, 2) : null,
-            Atr14 = atr14.HasValue ? Math.Round(atr14.Value, 5) : null,
+            Ema20 = ema20,
+            Ema50 = ema50,
+            Ema200 = ema200,
+            Sma20 = sma20,
+            Sma50 = sma50,
+            Sma200 = sma200,
+            Rsi14 = rsi14,
+            Atr14 = atr14,
+            MacdLine = macdLine,
+            MacdSignal = macdSignal,
+            MacdHistogram = macdHistogram,
+            BollingerUpper = bbUpper,
+            BollingerMiddle = bbMiddle,
+            BollingerLower = bbLower,
+            StochK = stochK,
+            StochD = stochD,
+            Adx = adx,
             IchimokuTenkan = tenkan.HasValue ? Math.Round(tenkan.Value, 5) : null,
             IchimokuKijun = kijun.HasValue ? Math.Round(kijun.Value, 5) : null,
             IchimokuSpanA = spanA.HasValue ? Math.Round(spanA.Value, 5) : null,
@@ -133,7 +250,8 @@ public class IndicatorCalculationService : IIndicatorCalculationService
             IchimokuChikou = chikou.HasValue ? Math.Round(chikou.Value, 5) : null,
             UpperWickRatio = upperWick,
             LowerWickRatio = lowerWick,
-            BodyRatio = bodyRatio
+            BodyRatio = bodyRatio,
+            DynamicIndicators = dynamicIndicators
         };
     }
 }

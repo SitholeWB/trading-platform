@@ -9,7 +9,8 @@ public enum Timeframe
     H1,
     H4,
     D1,
-    W1
+    W1,
+    MN1
 }
 
 public enum OrderType

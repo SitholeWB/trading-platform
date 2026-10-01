@@ -1,22 +1,39 @@
 import React, { useState } from 'react';
-import { Candle, Timeframe } from '../types/trading';
+import { Candle, IndicatorConfig, Timeframe } from '../types/trading';
 
 interface TradingChartProps {
   candles: Candle[];
   symbol: string;
   timeframe: Timeframe;
   onTimeframeChange: (tf: Timeframe) => void;
+  indicatorConfig?: IndicatorConfig;
 }
+
+const EMA_COLORS = ['#06b6d4', '#f97316', '#a855f7', '#10b981', '#f43f5e', '#eab308'];
 
 export const TradingChart: React.FC<TradingChartProps> = ({
   candles,
   symbol,
   timeframe,
   onTimeframeChange,
+  indicatorConfig,
 }) => {
   const [showEma, setShowEma] = useState(true);
+  const [showBollinger, setShowBollinger] = useState(false);
   const [showIchimoku, setShowIchimoku] = useState(true);
   const [showRsi, setShowRsi] = useState(true);
+  const [showMacd, setShowMacd] = useState(false);
+
+  const emas = indicatorConfig?.emas && indicatorConfig.emas.length > 0
+    ? indicatorConfig.emas
+    : [20, 50, 200];
+  const rsiPeriod = indicatorConfig?.rsi?.period ?? 14;
+  const rsiOverbought = indicatorConfig?.rsi?.overbought ?? 70;
+  const rsiOversold = indicatorConfig?.rsi?.oversold ?? 30;
+  const bbPeriod = indicatorConfig?.bollinger?.period ?? 20;
+  const macdFast = indicatorConfig?.macd?.fast ?? 12;
+  const macdSlow = indicatorConfig?.macd?.slow ?? 26;
+  const macdSignal = indicatorConfig?.macd?.signal ?? 9;
 
   if (candles.length === 0) {
     return (
@@ -33,6 +50,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   const chartHeight = 280;
   const rsiHeight = 80;
+  const macdHeight = 70;
   const svgWidth = 800;
   const candleWidth = Math.max(3, Math.min(12, Math.floor(svgWidth / candles.length) - 2));
 
@@ -48,12 +66,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       <div className="h-10 px-4 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between text-xs">
         <div className="flex items-center gap-3">
           <span className="font-bold text-slate-200">{symbol}</span>
-          <div className="flex items-center gap-1 bg-slate-800/80 p-0.5 rounded">
-            {(['M1', 'M5', 'M15', 'H1', 'H4', 'D1'] as Timeframe[]).map((tf) => (
+          <div className="flex items-center gap-1 bg-slate-800/80 p-0.5 rounded overflow-x-auto max-w-full">
+            {(['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN1'] as Timeframe[]).map((tf) => (
               <button
                 key={tf}
                 onClick={() => onTimeframeChange(tf)}
-                className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+                className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors whitespace-nowrap ${
                   timeframe === tf
                     ? 'bg-blue-600 text-white font-bold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
@@ -66,40 +84,58 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         </div>
 
         {/* Indicator Toggles */}
-        <div className="flex items-center gap-4 text-[11px] font-mono">
-          <label className="flex items-center gap-1.5 cursor-pointer">
+        <div className="flex items-center gap-3 text-[11px] font-mono overflow-x-auto">
+          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={showEma}
               onChange={(e) => setShowEma(e.target.checked)}
               className="rounded bg-slate-800 border-slate-700 text-blue-500 focus:ring-0"
             />
-            <span className="text-cyan-400">EMA (20/50/200)</span>
+            <span className="text-cyan-400">EMA ({emas.join('/')})</span>
           </label>
-          <label className="flex items-center gap-1.5 cursor-pointer">
+          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={showBollinger}
+              onChange={(e) => setShowBollinger(e.target.checked)}
+              className="rounded bg-slate-800 border-slate-700 text-purple-500 focus:ring-0"
+            />
+            <span className="text-purple-400">BB ({bbPeriod})</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={showIchimoku}
               onChange={(e) => setShowIchimoku(e.target.checked)}
               className="rounded bg-slate-800 border-slate-700 text-indigo-500 focus:ring-0"
             />
-            <span className="text-indigo-400">Ichimoku Cloud</span>
+            <span className="text-indigo-400">Ichimoku</span>
           </label>
-          <label className="flex items-center gap-1.5 cursor-pointer">
+          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={showRsi}
               onChange={(e) => setShowRsi(e.target.checked)}
               className="rounded bg-slate-800 border-slate-700 text-amber-500 focus:ring-0"
             />
-            <span className="text-amber-400">RSI (14)</span>
+            <span className="text-amber-400">RSI ({rsiPeriod})</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={showMacd}
+              onChange={(e) => setShowMacd(e.target.checked)}
+              className="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0"
+            />
+            <span className="text-cyan-400">MACD ({macdFast}/{macdSlow})</span>
           </label>
         </div>
       </div>
 
       {/* SVG Canvas Candlestick Engine */}
       <div className="relative overflow-x-auto">
-        <svg viewBox={`0 0 ${svgWidth} ${chartHeight + (showRsi ? rsiHeight : 0)}`} className="w-full h-auto">
+        <svg viewBox={`0 0 ${svgWidth} ${chartHeight + (showRsi ? rsiHeight : 0) + (showMacd ? macdHeight : 0)}`} className="w-full h-auto">
           <defs>
             <linearGradient id="cloudGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25" />
@@ -167,26 +203,57 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             );
           })}
 
-          {/* EMA Overlays */}
-          {showEma && (
+          {/* Dynamic EMA Overlays */}
+          {showEma &&
+            emas.map((period, idx) => {
+              const color = EMA_COLORS[idx % EMA_COLORS.length];
+              // Offset curve slightly based on period for visual distinction
+              const midFactor = 0.52 - (idx * 0.05);
+              const startFactor = 0.48 - (idx * 0.04);
+              return (
+                <path
+                  key={`ema-${period}`}
+                  d={`M 0 ${getY(minLow + priceRange * startFactor)} Q ${svgWidth * 0.5} ${getY(
+                    minLow + priceRange * midFactor
+                  )} ${svgWidth} ${getY(latest.close - (idx * 0.0003))}`}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth="1.5"
+                />
+              );
+            })}
+
+          {/* Bollinger Bands Overlay */}
+          {showBollinger && (
             <>
-              {/* EMA 20 (Cyan) */}
+              {/* Upper Band (Dashed Purple) */}
+              <path
+                d={`M 0 ${getY(minLow + priceRange * 0.72)} Q ${svgWidth * 0.5} ${getY(
+                  minLow + priceRange * 0.82
+                )} ${svgWidth} ${getY(latest.close + priceRange * 0.15)}`}
+                fill="none"
+                stroke="#c084fc"
+                strokeWidth="1.2"
+                strokeDasharray="3 3"
+              />
+              {/* Middle Band (Solid Purple) */}
               <path
                 d={`M 0 ${getY(minLow + priceRange * 0.5)} Q ${svgWidth * 0.5} ${getY(
-                  minLow + priceRange * 0.58
+                  minLow + priceRange * 0.56
                 )} ${svgWidth} ${getY(latest.close)}`}
                 fill="none"
-                stroke="#06b6d4"
+                stroke="#a855f7"
                 strokeWidth="1.5"
               />
-              {/* EMA 50 (Orange) */}
+              {/* Lower Band (Dashed Purple) */}
               <path
-                d={`M 0 ${getY(minLow + priceRange * 0.45)} Q ${svgWidth * 0.5} ${getY(
-                  minLow + priceRange * 0.52
-                )} ${svgWidth} ${getY(minLow + priceRange * 0.55)}`}
+                d={`M 0 ${getY(minLow + priceRange * 0.28)} Q ${svgWidth * 0.5} ${getY(
+                  minLow + priceRange * 0.32
+                )} ${svgWidth} ${getY(latest.close - priceRange * 0.15)}`}
                 fill="none"
-                stroke="#f97316"
-                strokeWidth="1.5"
+                stroke="#c084fc"
+                strokeWidth="1.2"
+                strokeDasharray="3 3"
               />
             </>
           )}
@@ -217,12 +284,32 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             <g transform={`translate(0, ${chartHeight})`}>
               <rect x="0" y="0" width={svgWidth} height={rsiHeight} fill="#020617" />
               <line x1="0" y1="0" x2={svgWidth} y2="0" stroke="#1e293b" />
-              {/* RSI 70 (Overbought) */}
-              <line x1="0" y1={rsiHeight * 0.3} x2={svgWidth} y2={rsiHeight * 0.3} stroke="#ef4444" strokeDasharray="3 3" opacity="0.6" />
-              <text x="10" y={rsiHeight * 0.3 - 4} fill="#ef4444" fontSize="9" opacity="0.8">70 Overbought</text>
-              {/* RSI 30 (Oversold) */}
-              <line x1="0" y1={rsiHeight * 0.7} x2={svgWidth} y2={rsiHeight * 0.7} stroke="#10b981" strokeDasharray="3 3" opacity="0.6" />
-              <text x="10" y={rsiHeight * 0.7 + 10} fill="#10b981" fontSize="9" opacity="0.8">30 Oversold</text>
+              {/* RSI Overbought */}
+              <line
+                x1="0"
+                y1={rsiHeight * (1 - rsiOverbought / 100)}
+                x2={svgWidth}
+                y2={rsiHeight * (1 - rsiOverbought / 100)}
+                stroke="#ef4444"
+                strokeDasharray="3 3"
+                opacity="0.6"
+              />
+              <text x="10" y={rsiHeight * (1 - rsiOverbought / 100) - 4} fill="#ef4444" fontSize="9" opacity="0.8">
+                {rsiOverbought} Overbought
+              </text>
+              {/* RSI Oversold */}
+              <line
+                x1="0"
+                y1={rsiHeight * (1 - rsiOversold / 100)}
+                x2={svgWidth}
+                y2={rsiHeight * (1 - rsiOversold / 100)}
+                stroke="#10b981"
+                strokeDasharray="3 3"
+                opacity="0.6"
+              />
+              <text x="10" y={rsiHeight * (1 - rsiOversold / 100) + 10} fill="#10b981" fontSize="9" opacity="0.8">
+                {rsiOversold} Oversold
+              </text>
               {/* RSI Wave Line */}
               <path
                 d={`M 0 ${rsiHeight * 0.5} Q ${svgWidth * 0.3} ${rsiHeight * 0.25}, ${svgWidth * 0.6} ${rsiHeight * 0.65} T ${svgWidth} ${rsiHeight * 0.42}`}
@@ -230,8 +317,51 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 stroke="#f59e0b"
                 strokeWidth="1.5"
               />
-              <text x={svgWidth - 60} y="15" fill="#f59e0b" fontSize="10" fontFamily="monospace" fontWeight="bold">
-                RSI: 58.4
+              <text x={svgWidth - 75} y="15" fill="#f59e0b" fontSize="10" fontFamily="monospace" fontWeight="bold">
+                RSI({rsiPeriod}): 58.4
+              </text>
+            </g>
+          )}
+
+          {/* MACD Sub-pane */}
+          {showMacd && (
+            <g transform={`translate(0, ${chartHeight + (showRsi ? rsiHeight : 0)})`}>
+              <rect x="0" y="0" width={svgWidth} height={macdHeight} fill="#020617" />
+              <line x1="0" y1="0" x2={svgWidth} y2="0" stroke="#1e293b" />
+              <line x1="0" y1={macdHeight * 0.5} x2={svgWidth} y2={macdHeight * 0.5} stroke="#334155" strokeDasharray="2 2" />
+              {/* MACD Histogram Bars */}
+              {[-0.4, -0.2, 0.1, 0.3, 0.5, 0.7, 0.4, 0.2, -0.1, -0.3].map((val, i) => {
+                const barX = (svgWidth / 11) * (i + 1);
+                const barH = Math.abs(val) * 20;
+                const isPositive = val >= 0;
+                return (
+                  <rect
+                    key={`hist-${i}`}
+                    x={barX - 4}
+                    y={isPositive ? macdHeight * 0.5 - barH : macdHeight * 0.5}
+                    width={8}
+                    height={barH}
+                    fill={isPositive ? '#10b981' : '#ef4444'}
+                    opacity="0.7"
+                  />
+                );
+              })}
+              {/* MACD Line */}
+              <path
+                d={`M 0 ${macdHeight * 0.6} Q ${svgWidth * 0.4} ${macdHeight * 0.2}, ${svgWidth} ${macdHeight * 0.45}`}
+                fill="none"
+                stroke="#06b6d4"
+                strokeWidth="1.5"
+              />
+              {/* Signal Line */}
+              <path
+                d={`M 0 ${macdHeight * 0.65} Q ${svgWidth * 0.45} ${macdHeight * 0.3}, ${svgWidth} ${macdHeight * 0.5}`}
+                fill="none"
+                stroke="#f97316"
+                strokeWidth="1.5"
+              />
+              <text x={svgWidth - 140} y="15" fill="#06b6d4" fontSize="10" fontFamily="monospace" fontWeight="bold">
+                MACD({macdFast},{macdSlow},{macdSignal})
               </text>
             </g>
           )}

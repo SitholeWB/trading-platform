@@ -137,9 +137,72 @@ public static class JsonStrategyCompiler
         };
     }
 
+    private static string FormatOperand(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "null";
+        raw = raw.Trim();
+
+        var emaMatch = System.Text.RegularExpressions.Regex.Match(raw, @"^Ema(?:_|\()?\s*(\d+)\s*\)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (emaMatch.Success && int.TryParse(emaMatch.Groups[1].Value, out var emaPeriod))
+        {
+            return $"input1.Ema({emaPeriod})";
+        }
+
+        var smaMatch = System.Text.RegularExpressions.Regex.Match(raw, @"^Sma(?:_|\()?\s*(\d+)\s*\)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (smaMatch.Success && int.TryParse(smaMatch.Groups[1].Value, out var smaPeriod))
+        {
+            return $"input1.Sma({smaPeriod})";
+        }
+
+        var rsiMatch = System.Text.RegularExpressions.Regex.Match(raw, @"^Rsi(?:_|\()?\s*(\d+)\s*\)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (rsiMatch.Success && int.TryParse(rsiMatch.Groups[1].Value, out var rsiPeriod))
+        {
+            return $"input1.Rsi({rsiPeriod})";
+        }
+
+        var atrMatch = System.Text.RegularExpressions.Regex.Match(raw, @"^Atr(?:_|\()?\s*(\d+)\s*\)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (atrMatch.Success && int.TryParse(atrMatch.Groups[1].Value, out var atrPeriod))
+        {
+            return $"input1.Atr({atrPeriod})";
+        }
+
+        // MACD Aliases
+        if (raw.Equals("Macd", StringComparison.OrdinalIgnoreCase) || raw.Equals("MacdLine", StringComparison.OrdinalIgnoreCase))
+            return "input1.MacdLine";
+        if (raw.Equals("MacdSignal", StringComparison.OrdinalIgnoreCase))
+            return "input1.MacdSignal";
+        if (raw.Equals("MacdHistogram", StringComparison.OrdinalIgnoreCase) || raw.Equals("MacdHist", StringComparison.OrdinalIgnoreCase))
+            return "input1.MacdHistogram";
+
+        // Bollinger Bands Aliases
+        if (raw.Equals("BollingerUpper", StringComparison.OrdinalIgnoreCase) || raw.Equals("BbUpper", StringComparison.OrdinalIgnoreCase))
+            return "input1.BollingerUpper";
+        if (raw.Equals("BollingerMiddle", StringComparison.OrdinalIgnoreCase) || raw.Equals("BbMiddle", StringComparison.OrdinalIgnoreCase))
+            return "input1.BollingerMiddle";
+        if (raw.Equals("BollingerLower", StringComparison.OrdinalIgnoreCase) || raw.Equals("BbLower", StringComparison.OrdinalIgnoreCase))
+            return "input1.BollingerLower";
+
+        // Stochastic Aliases
+        if (raw.Equals("StochK", StringComparison.OrdinalIgnoreCase) || raw.Equals("StochasticK", StringComparison.OrdinalIgnoreCase))
+            return "input1.StochK";
+        if (raw.Equals("StochD", StringComparison.OrdinalIgnoreCase) || raw.Equals("StochasticD", StringComparison.OrdinalIgnoreCase))
+            return "input1.StochD";
+
+        // ADX Alias
+        if (raw.Equals("Adx", StringComparison.OrdinalIgnoreCase))
+            return "input1.Adx";
+
+        if (raw.StartsWith("input1.", StringComparison.OrdinalIgnoreCase))
+        {
+            return raw;
+        }
+
+        return $"input1.{raw}";
+    }
+
     private static string TranslateRqbRule(ReactQueryBuilderRule rule)
     {
-        string left = $"input1.{rule.Field}";
+        string left = FormatOperand(rule.Field);
         string op = rule.Operator switch
         {
             "=" => "==",
@@ -155,7 +218,7 @@ public static class JsonStrategyCompiler
         string right;
         if (rule.ValueSource != null && rule.ValueSource.Equals("field", StringComparison.OrdinalIgnoreCase))
         {
-            right = $"input1.{rule.Value}";
+            right = FormatOperand(rule.Value?.ToString());
         }
         else
         {
