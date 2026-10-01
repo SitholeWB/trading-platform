@@ -1,0 +1,152 @@
+name: Build & Test Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: 'true'
+
+jobs:
+  frontend-check:
+    name: Frontend Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/Presentation/TradingPlatform.Web
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: 'src/Presentation/TradingPlatform.Web/package-lock.json'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Type-Check & Vite Build
+        run: npm run build
+
+  dotnet-build-test-publish:
+    name: .NET Build, Test & Package
+    runs-on: ubuntu-latest
+    needs: [] # Can run in parallel with frontend-check for maximum speed
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js (for Web SPA compilation)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: 'src/Presentation/TradingPlatform.Web/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        run: npm ci --prefix src/Presentation/TradingPlatform.Web
+
+      - name: Setup .NET SDK 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'TradingPlatform.slnx') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore NuGet Dependencies
+        run: dotnet restore TradingPlatform.slnx
+
+      - name: Build Solution (Release)
+        run: dotnet build TradingPlatform.slnx --configuration Release --no-restore
+
+      - name: Run Tests with Coverage
+        run: >
+          dotnet test TradingPlatform.slnx
+          --configuration Release
+          --no-build
+          --verbosity normal
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+
+      - name: Publish Test Results Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            ./TestResults/*.trx
+            ./TestResults/**/coverage.cobertura.xml
+          retention-days: 14
+
+      - name: Publish API Binary
+        run: >
+          dotnet publish src/Presentation/TradingPlatform.Api/TradingPlatform.Api.csproj
+          --configuration Release
+          --no-build
+          --output ./publish/api
+
+      - name: Publish Worker Binary
+        run: >
+          dotnet publish src/Presentation/TradingPlatform.Worker/TradingPlatform.Worker.csproj
+          --configuration Release
+          --no-build
+          --output ./publish/worker
+
+      - name: Upload API Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-platform-api
+          path: ./publish/api
+          retention-days: 14
+
+      - name: Upload Worker Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-platform-worker
+          path: ./publish/worker
+          retention-days: 14
+
+      - name: Generate Job Summary
+        if: always()
+        run: |
+          echo "## Build & Test Pipeline Summary :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** Finished execution" >> $GITHUB_STEP_SUMMARY
+          echo "- **Configuration:** Release" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Runtime:** .NET 10.0" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend:** TypeScript + Vite (embedded in API wwwroot)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artifacts:** API and Worker published and archived" >> $GITHUB_STEP_SUMMARY
