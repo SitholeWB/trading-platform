@@ -69,4 +69,23 @@ public class StrategyDefinition
         AutoTradingEnabled = enabled;
         UpdatedAtUtc = DateTime.UtcNow;
     }
+
+    /// <summary>
+    /// Helper to extract configured indicator settings if present in RawJsonRules.
+    /// </summary>
+    public string? GetIndicatorConfigJson()
+    {
+        if (string.IsNullOrWhiteSpace(RawJsonRules)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(RawJsonRules);
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("indicators", out var ind))
+            {
+                return ind.GetRawText();
+            }
+        }
+        catch { }
+        return null;
+    }
 }

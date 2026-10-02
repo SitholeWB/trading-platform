@@ -130,7 +130,18 @@ public class CandleIngestionWorker : BackgroundService
                 { "field": "Close", "operator": ">", "value": "IchimokuSpanA", "valueSource": "field" },
                 { "field": "Rsi14", "operator": ">", "value": 45 },
                 { "field": "Close", "operator": ">", "value": "Open", "valueSource": "field" }
-              ]
+              ],
+              "indicators": {
+                "emas": [20, 50, 200],
+                "smas": [20, 50, 200],
+                "rsi": { "period": 14, "overbought": 70, "oversold": 30 },
+                "macd": { "fast": 12, "slow": 26, "signal": 9 },
+                "bollinger": { "period": 20, "stdDev": 2.0 },
+                "stoch": { "kPeriod": 14, "dPeriod": 3, "smooth": 3 },
+                "atr": { "period": 14, "slMultiplier": 1.5, "tpMultiplier": 3.0 },
+                "adx": { "period": 14, "threshold": 25 },
+                "ichimoku": { "tenkan": 9, "kijun": 26, "senkou": 52 }
+              }
             }
             """;
 
@@ -152,7 +163,18 @@ public class CandleIngestionWorker : BackgroundService
                 { "field": "Close", "operator": "<", "value": "Ema50", "valueSource": "field" },
                 { "field": "Rsi14", "operator": "<", "value": 40 },
                 { "field": "Close", "operator": "<", "value": "Open", "valueSource": "field" }
-              ]
+              ],
+              "indicators": {
+                "emas": [20, 50, 200],
+                "smas": [20, 50, 200],
+                "rsi": { "period": 14, "overbought": 70, "oversold": 30 },
+                "macd": { "fast": 12, "slow": 26, "signal": 9 },
+                "bollinger": { "period": 20, "stdDev": 2.0 },
+                "stoch": { "kPeriod": 14, "dPeriod": 3, "smooth": 3 },
+                "atr": { "period": 14, "slMultiplier": 1.5, "tpMultiplier": 3.0 },
+                "adx": { "period": 14, "threshold": 25 },
+                "ichimoku": { "tenkan": 9, "kijun": 26, "senkou": 52 }
+              }
             }
             """;
 
@@ -165,6 +187,18 @@ public class CandleIngestionWorker : BackgroundService
                 aiValidationEnabled: false);
 
             await strategyRepo.AddAsync(strategy2, ct);
+        }
+
+        // Register configured indicator periods with indicator service
+        var indicatorService = sp.GetService<IIndicatorCalculationService>();
+        if (indicatorService != null)
+        {
+            var allStrategies = await strategyRepo.GetAllAsync(ct);
+            foreach (var s in allStrategies)
+            {
+                var (emas, smas) = TradingPlatform.RulesEngine.JsonStrategyCompiler.ExtractConfiguredPeriods(s.RawJsonRules);
+                indicatorService.RegisterIndicatorPeriods(emas, smas);
+            }
         }
 
         // 2. Seed minimum 120 historical candles into sliding window

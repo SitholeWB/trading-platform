@@ -31,8 +31,32 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 
 export const tradingApi = {
   // Strategies
-  getStrategies: () => request<StrategyDefinition[]>('/strategies'),
-  getStrategyById: (id: string) => request<StrategyDefinition>(`/strategies/${id}`),
+  getStrategies: async (): Promise<StrategyDefinition[]> => {
+    const list = await request<StrategyDefinition[]>('/strategies');
+    return list.map((s) => {
+      if (!s.indicators && s.rawJsonRules) {
+        try {
+          const parsed = JSON.parse(s.rawJsonRules);
+          if (parsed && parsed.indicators) {
+            return { ...s, indicators: parsed.indicators };
+          }
+        } catch { }
+      }
+      return s;
+    });
+  },
+  getStrategyById: async (id: string): Promise<StrategyDefinition> => {
+    const s = await request<StrategyDefinition>(`/strategies/${id}`);
+    if (!s.indicators && s.rawJsonRules) {
+      try {
+        const parsed = JSON.parse(s.rawJsonRules);
+        if (parsed && parsed.indicators) {
+          return { ...s, indicators: parsed.indicators };
+        }
+      } catch { }
+    }
+    return s;
+  },
   createStrategy: (strategy: {
     name: string;
     description: string;

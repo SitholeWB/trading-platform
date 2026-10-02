@@ -6,6 +6,33 @@ namespace TradingPlatform.RulesEngine.Indicators;
 
 public class IndicatorCalculationService : IIndicatorCalculationService
 {
+    private readonly HashSet<int> _customEmaPeriods = new();
+    private readonly HashSet<int> _customSmaPeriods = new();
+
+    public void RegisterIndicatorPeriods(IEnumerable<int>? emaPeriods, IEnumerable<int>? smaPeriods = null)
+    {
+        if (emaPeriods != null)
+        {
+            lock (_customEmaPeriods)
+            {
+                foreach (var p in emaPeriods)
+                {
+                    if (p > 0) _customEmaPeriods.Add(p);
+                }
+            }
+        }
+        if (smaPeriods != null)
+        {
+            lock (_customSmaPeriods)
+            {
+                foreach (var p in smaPeriods)
+                {
+                    if (p > 0) _customSmaPeriods.Add(p);
+                }
+            }
+        }
+    }
+
     public MarketSnapshot CalculateSnapshot(IReadOnlyList<Candle> slidingWindow)
     {
         if (slidingWindow == null || slidingWindow.Count == 0)
@@ -48,14 +75,19 @@ public class IndicatorCalculationService : IIndicatorCalculationService
             Volume = c.Volume
         }).ToList();
 
-        // 1. Moving Averages (Baseline + Dynamic Fibonacci & Classic Periods)
+        // 1. Moving Averages (Baseline + Dynamic Fibonacci & Custom Periods)
         var dynamicIndicators = new Dictionary<string, decimal?>(StringComparer.OrdinalIgnoreCase);
-        int[] emaPeriods = { 3, 5, 8, 9, 10, 12, 13, 14, 15, 20, 21, 25, 26, 30, 34, 50, 55, 89, 100, 144, 200 };
+        int[] defaultEmaPeriods = { 3, 5, 8, 9, 10, 12, 13, 14, 15, 20, 21, 25, 26, 30, 34, 50, 55, 89, 100, 144, 200 };
+        List<int> allEmaPeriods;
+        lock (_customEmaPeriods)
+        {
+            allEmaPeriods = defaultEmaPeriods.Union(_customEmaPeriods).OrderBy(x => x).ToList();
+        }
         decimal? ema20 = null;
         decimal? ema50 = null;
         decimal? ema200 = null;
 
-        foreach (var period in emaPeriods)
+        foreach (var period in allEmaPeriods)
         {
             if (quotes.Count >= period)
             {
@@ -74,11 +106,16 @@ public class IndicatorCalculationService : IIndicatorCalculationService
         }
 
         // 2. Simple Moving Averages (SMA)
-        int[] smaPeriods = { 10, 20, 50, 100, 200 };
+        int[] defaultSmaPeriods = { 10, 20, 50, 100, 200 };
+        List<int> allSmaPeriods;
+        lock (_customSmaPeriods)
+        {
+            allSmaPeriods = defaultSmaPeriods.Union(_customSmaPeriods).OrderBy(x => x).ToList();
+        }
         decimal? sma20 = null;
         decimal? sma50 = null;
         decimal? sma200 = null;
-        foreach (var period in smaPeriods)
+        foreach (var period in allSmaPeriods)
         {
             if (quotes.Count >= period)
             {

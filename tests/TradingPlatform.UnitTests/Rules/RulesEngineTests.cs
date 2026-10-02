@@ -83,4 +83,60 @@ public class RulesEngineTests
         Assert.NotEmpty(results[0].RuleDetails);
         Assert.Contains(results[0].RuleDetails, r => r.RuleName.Contains("Rsi14"));
     }
+
+    [Fact]
+    public async Task Evaluate_StrategyWithEmbeddedIndicatorConfig_ParsesAndEvaluatesCorrectly()
+    {
+        string rawJson = """
+        {
+          "combinator": "and",
+          "rules": [
+            { "field": "Close", "operator": ">", "value": "Ema21", "valueSource": "field" },
+            { "field": "Ema21", "operator": ">", "value": "Ema55", "valueSource": "field" }
+          ],
+          "indicators": {
+            "emas": [9, 21, 55],
+            "smas": [20, 50, 200],
+            "rsi": { "period": 14, "overbought": 70, "oversold": 30 },
+            "macd": { "fast": 12, "slow": 26, "signal": 9 }
+          }
+        }
+        """;
+
+        var strategy = new StrategyDefinition("CustomEmaCrossover", "Custom 21/55 EMA crossover", Timeframe.M5, rawJson);
+
+        // Verify period extraction
+        var (extractedEmas, extractedSmas) = JsonStrategyCompiler.ExtractConfiguredPeriods(strategy.RawJsonRules);
+        Assert.Contains(9, extractedEmas);
+        Assert.Contains(21, extractedEmas);
+        Assert.Contains(55, extractedEmas);
+        Assert.Contains(20, extractedSmas);
+
+        // Verify indicator config json helper
+        var indJson = strategy.GetIndicatorConfigJson();
+        Assert.NotNull(indJson);
+        Assert.Contains("emas", indJson);
+
+        var snapshot = new MarketSnapshot
+        {
+            Symbol = "EURUSD",
+            Timeframe = Timeframe.M5,
+            Timestamp = DateTime.UtcNow,
+            Open = 1.0500m,
+            High = 1.0600m,
+            Low = 1.0480m,
+            Close = 1.0580m,
+            DynamicIndicators = new Dictionary<string, decimal?>
+            {
+                ["EMA_21"] = 1.0550m,
+                ["EMA_55"] = 1.0520m
+            }
+        };
+
+        var results = await _rulesService.EvaluateAsync(snapshot, new[] { strategy });
+
+        Assert.Single(results);
+        Assert.Equal(SignalState.FullyMet, results[0].State);
+        Assert.Equal(OrderType.Buy, results[0].RecommendedOrderType);
+    }
 }

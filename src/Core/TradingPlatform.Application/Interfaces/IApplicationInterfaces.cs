@@ -33,6 +33,7 @@ public interface IRulesEngineService
 public interface IIndicatorCalculationService
 {
     MarketSnapshot CalculateSnapshot(IReadOnlyList<Candle> slidingWindow);
+    void RegisterIndicatorPeriods(IEnumerable<int>? emaPeriods, IEnumerable<int>? smaPeriods = null);
 }
 
 public interface ICandleBufferService

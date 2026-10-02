@@ -100,7 +100,11 @@ export function App() {
   }, []);
 
   const handleSaveStrategy = async (strategyDto: any) => {
-    await tradingApi.createStrategy(strategyDto);
+    if (strategyDto.id) {
+      await tradingApi.updateStrategy(strategyDto.id, strategyDto);
+    } else {
+      await tradingApi.createStrategy(strategyDto);
+    }
     const updated = await tradingApi.getStrategies();
     setStrategies(updated);
   };

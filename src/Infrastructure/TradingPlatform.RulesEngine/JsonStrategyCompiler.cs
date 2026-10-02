@@ -8,6 +8,7 @@ public class ReactQueryBuilderGroup
 {
     public string Combinator { get; set; } = "and"; // "and" | "or"
     public List<ReactQueryBuilderRule> Rules { get; set; } = new();
+    public JsonElement? Indicators { get; set; }
 }
 
 public class ReactQueryBuilderRule
@@ -240,5 +241,62 @@ public static class JsonStrategyCompiler
                 r.Expression = System.Text.RegularExpressions.Regex.Replace(r.Expression, @"\bSnapshot\.", "input1.", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             }
         }
+    }
+
+    /// <summary>
+    /// Extracts configured indicator periods from strategy JSON rules (from either "indicators" or rule operands).
+    /// </summary>
+    public static (List<int> EmaPeriods, List<int> SmaPeriods) ExtractConfiguredPeriods(string? rawJson)
+    {
+        var emaPeriods = new List<int>();
+        var smaPeriods = new List<int>();
+
+        if (string.IsNullOrWhiteSpace(rawJson))
+            return (emaPeriods, smaPeriods);
+
+        try
+        {
+            using var doc = JsonDocument.Parse(rawJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("indicators", out var indEl) &&
+                indEl.ValueKind == JsonValueKind.Object)
+            {
+                if (indEl.TryGetProperty("emas", out var emasEl) && emasEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in emasEl.EnumerateArray())
+                    {
+                        if (item.TryGetInt32(out var p) && p > 0 && !emaPeriods.Contains(p))
+                            emaPeriods.Add(p);
+                    }
+                }
+
+                if (indEl.TryGetProperty("smas", out var smasEl) && smasEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in smasEl.EnumerateArray())
+                    {
+                        if (item.TryGetInt32(out var p) && p > 0 && !smaPeriods.Contains(p))
+                            smaPeriods.Add(p);
+                    }
+                }
+            }
+        }
+        catch { }
+
+        // Also extract any direct EmaXX or SmaXX referenced in rules
+        var emaMatches = System.Text.RegularExpressions.Regex.Matches(rawJson, @"Ema(?:_|\()?\s*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in emaMatches)
+        {
+            if (int.TryParse(m.Groups[1].Value, out var p) && p > 0 && !emaPeriods.Contains(p))
+                emaPeriods.Add(p);
+        }
+
+        var smaMatches = System.Text.RegularExpressions.Regex.Matches(rawJson, @"Sma(?:_|\()?\s*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in smaMatches)
+        {
+            if (int.TryParse(m.Groups[1].Value, out var p) && p > 0 && !smaPeriods.Contains(p))
+                smaPeriods.Add(p);
+        }
+
+        return (emaPeriods, smaPeriods);
     }
 }

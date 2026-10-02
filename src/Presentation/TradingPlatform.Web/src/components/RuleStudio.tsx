@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { IndicatorConfig, StrategyDefinition, Timeframe } from '../types/trading';
 
 interface RuleStudioProps {
@@ -60,9 +60,14 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
   onDeleteStrategy,
   onIndicatorConfigChange,
 }) => {
-  const [selectedStrategy, setSelectedStrategy] = useState<StrategyDefinition | null>(
-    strategies[0] || null
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(
+    strategies[0]?.id || null
   );
+  const [isSaving, setIsSaving] = useState(false);
+  const [statusFeedback, setStatusFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const [name, setName] = useState('NewStrategy');
   const [description, setDescription] = useState('Quantitative strategy');
@@ -203,7 +208,74 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
     setRules(rules.map((r) => (r.id === id ? { ...r, ...updates } : r)));
   };
 
-  // Compile visual state to React Query Builder JSON schema
+  const loadStrategy = (strat: StrategyDefinition | null) => {
+    if (!strat) {
+      setSelectedStrategyId(null);
+      setName('NewCustomStrategy');
+      setDescription('Custom quantitative strategy with dynamic indicators');
+      setTimeframe('M5');
+      setAutoTrading(true);
+      setAiValidation(false);
+      setCombinator('and');
+      setRules([
+        { id: '1', field: 'Close', operator: '>', value: 'Ema50', valueSource: 'field' },
+        { id: '2', field: 'Rsi14', operator: '>', value: '45', valueSource: 'value' },
+      ]);
+      updateIndicatorConfig(DEFAULT_INDICATOR_CONFIG);
+      return;
+    }
+
+    setSelectedStrategyId(strat.id);
+    setName(strat.name);
+    setDescription(strat.description || '');
+    setTimeframe(strat.timeframe || 'M5');
+    setAutoTrading(strat.autoTradingEnabled);
+    setAiValidation(strat.aiValidationEnabled);
+
+    try {
+      const parsed = JSON.parse(strat.rawJsonRules);
+      if (parsed.combinator) setCombinator(parsed.combinator);
+
+      if (Array.isArray(parsed.rules) && parsed.rules.length > 0) {
+        setRules(
+          parsed.rules.map((r: any, idx: number) => ({
+            id: `${idx + 1}-${Math.random().toString(36).substring(7)}`,
+            field: r.field || 'Close',
+            operator: r.operator || '>',
+            value: String(r.value ?? ''),
+            valueSource:
+              r.valueSource ||
+              (typeof r.value === 'string' && isNaN(Number(r.value)) ? 'field' : 'value'),
+          }))
+        );
+      }
+
+      if (parsed.indicators) {
+        const loaded: IndicatorConfig = {
+          ...DEFAULT_INDICATOR_CONFIG,
+          ...parsed.indicators,
+        };
+        updateIndicatorConfig(loaded);
+      } else if (strat.indicators) {
+        updateIndicatorConfig({
+          ...DEFAULT_INDICATOR_CONFIG,
+          ...strat.indicators,
+        });
+      }
+    } catch (err) {
+      console.warn('Could not parse strategy JSON rules', err);
+    }
+  };
+
+  const initialSyncRef = useRef(false);
+  useEffect(() => {
+    if (!initialSyncRef.current && strategies.length > 0) {
+      loadStrategy(strategies[0]);
+      initialSyncRef.current = true;
+    }
+  }, [strategies]);
+
+  // Compile visual state to React Query Builder JSON schema including custom indicator configs
   const compiledJson = JSON.stringify(
     {
       combinator,
@@ -213,34 +285,115 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
         value: r.valueSource === 'value' ? Number(r.value) || r.value : r.value,
         valueSource: r.valueSource,
       })),
+      indicators: indicatorConfig,
     },
     null,
     2
   );
 
-  const handleSave = async () => {
-    await onSaveStrategy({
-      name,
-      description,
-      timeframe,
-      rawJsonRules: compiledJson,
-      autoTradingEnabled: autoTrading,
-      aiValidationEnabled: aiValidation,
-    });
+  const handleSave = async (saveAsNew = false) => {
+    try {
+      setIsSaving(true);
+      setStatusFeedback(null);
+      const targetId = saveAsNew ? undefined : (selectedStrategyId || undefined);
+      await onSaveStrategy({
+        id: targetId,
+        name: saveAsNew ? `${name}_Copy` : name,
+        description,
+        timeframe,
+        rawJsonRules: compiledJson,
+        isActive: true,
+        autoTradingEnabled: autoTrading,
+        aiValidationEnabled: aiValidation,
+      });
+
+      setStatusFeedback({
+        type: 'success',
+        message: saveAsNew || !targetId
+          ? '✓ Saved new strategy with indicators to database!'
+          : '✓ Updated strategy & indicator configs in database!',
+      });
+      setTimeout(() => setStatusFeedback(null), 4000);
+    } catch (err: any) {
+      setStatusFeedback({
+        type: 'error',
+        message: `Save failed: ${err.message || 'Unknown error'}`,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedStrategyId || !onDeleteStrategy) return;
+    if (window.confirm(`Delete strategy "${name}" from database?`)) {
+      await onDeleteStrategy(selectedStrategyId);
+      loadStrategy(null);
+    }
   };
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col h-full">
       {/* Studio Header */}
-      <div className="h-12 px-4 bg-slate-950/60 border-b border-slate-800 flex items-center justify-between">
+      <div className="min-h-12 px-4 py-2 bg-slate-950/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="font-bold text-sm text-slate-100">Dynamic Strategy Studio</span>
           <span className="text-xs bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20 font-mono">
             React Query Builder ⇄ RulesEngine
           </span>
+
+          {/* Strategy Selection Toolbar */}
+          <div className="flex items-center gap-1.5 ml-2 pl-3 border-l border-slate-800">
+            <span className="text-[10px] text-slate-400 font-mono uppercase">Strategy:</span>
+            <select
+              value={selectedStrategyId || ''}
+              onChange={(e) => {
+                const strat = strategies.find((s) => s.id === e.target.value);
+                loadStrategy(strat || null);
+              }}
+              className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 font-medium focus:border-blue-500 focus:outline-none max-w-[190px]"
+            >
+              <option value="">+ New Strategy</option>
+              {strategies.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.timeframe})
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={() => loadStrategy(null)}
+              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700"
+              title="Create blank new strategy"
+            >
+              + New
+            </button>
+
+            {selectedStrategyId && (
+              <button
+                onClick={handleDelete}
+                className="px-2 py-1 rounded bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs font-medium border border-red-800/50"
+                title="Delete strategy from database"
+              >
+                🗑️
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {statusFeedback && (
+            <span
+              className={`text-xs px-2.5 py-1 rounded font-medium border ${
+                statusFeedback.type === 'success'
+                  ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700'
+                  : 'bg-red-950/80 text-red-300 border-red-700'
+              }`}
+            >
+              {statusFeedback.message}
+            </span>
+          )}
+
           <button
             onClick={() => setShowIndicatorSettings(!showIndicatorSettings)}
             className={`px-3 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors border ${
@@ -275,11 +428,23 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
           </div>
 
           <button
-            onClick={handleSave}
-            className="px-3.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-colors"
+            onClick={() => handleSave(false)}
+            disabled={isSaving}
+            className="px-3.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors"
           >
-            Save Strategy
+            {isSaving ? 'Saving...' : selectedStrategyId ? 'Update Strategy' : 'Save Strategy'}
           </button>
+
+          {selectedStrategyId && (
+            <button
+              onClick={() => handleSave(true)}
+              disabled={isSaving}
+              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs border border-slate-700 transition-colors"
+              title="Save current rules & indicators as a new copy in database"
+            >
+              Save as Copy
+            </button>
+          )}
         </div>
       </div>
 

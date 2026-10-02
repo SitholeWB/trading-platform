@@ -50,7 +50,7 @@ strategiesGroup.MapGet("/{id:guid}", async (Guid id, IMediator mediator, Cancell
     return strategy != null ? Results.Ok(strategy) : Results.NotFound();
 });
 
-strategiesGroup.MapPost("/", async ([FromBody] CreateStrategyDto dto, IStrategyRepository repo, CancellationToken ct) =>
+strategiesGroup.MapPost("/", async ([FromBody] CreateStrategyDto dto, IStrategyRepository repo, IIndicatorCalculationService indicatorCalc, CancellationToken ct) =>
 {
     var strategy = new StrategyDefinition(
         dto.Name,
@@ -60,11 +60,14 @@ strategiesGroup.MapPost("/", async ([FromBody] CreateStrategyDto dto, IStrategyR
         dto.AutoTradingEnabled,
         dto.AiValidationEnabled);
 
+    var (emas, smas) = JsonStrategyCompiler.ExtractConfiguredPeriods(dto.RawJsonRules);
+    indicatorCalc.RegisterIndicatorPeriods(emas, smas);
+
     await repo.AddAsync(strategy, ct);
     return Results.Created($"/api/strategies/{strategy.Id}", strategy);
 });
 
-strategiesGroup.MapPut("/{id:guid}", async (Guid id, [FromBody] UpdateStrategyDto dto, IStrategyRepository repo, CancellationToken ct) =>
+strategiesGroup.MapPut("/{id:guid}", async (Guid id, [FromBody] UpdateStrategyDto dto, IStrategyRepository repo, IIndicatorCalculationService indicatorCalc, CancellationToken ct) =>
 {
     var strategy = await repo.GetByIdAsync(id, ct);
     if (strategy == null) return Results.NotFound();
@@ -76,6 +79,9 @@ strategiesGroup.MapPut("/{id:guid}", async (Guid id, [FromBody] UpdateStrategyDt
     strategy.SetAutoTrading(dto.AutoTradingEnabled);
     strategy.AiValidationEnabled = dto.AiValidationEnabled;
     if (dto.IsActive) strategy.Activate(); else strategy.Deactivate();
+
+    var (emas, smas) = JsonStrategyCompiler.ExtractConfiguredPeriods(dto.RawJsonRules);
+    indicatorCalc.RegisterIndicatorPeriods(emas, smas);
 
     await repo.UpdateAsync(strategy, ct);
     return Results.Ok(strategy);
