@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Header } from './components/Header';
+import { NavigationSidebar, PageId } from './components/NavigationSidebar';
+import { BotOverview } from './components/BotOverview';
 import { TradingChart } from './components/TradingChart';
 import { RuleStudio } from './components/RuleStudio';
 import { NearMissRadar } from './components/NearMissRadar';
@@ -20,9 +22,9 @@ import {
 } from './types/trading';
 
 export function App() {
+  const [activePage, setActivePage] = useState<PageId>('dashboard');
   const [selectedSymbol, setSelectedSymbol] = useState('EURUSD');
   const [timeframe, setTimeframe] = useState<Timeframe>('M5');
-  const [activeBottomTab, setActiveBottomTab] = useState<'rules' | 'nearmiss' | 'positions' | 'sim'>('rules');
 
   const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>({
     emas: [20, 50, 200],
@@ -142,7 +144,7 @@ export function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#090d16] text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen w-screen bg-[#080c15] text-slate-100 overflow-hidden font-sans">
       {/* Top Header & Telemetry */}
       <Header
         account={account}
@@ -152,139 +154,144 @@ export function App() {
         currentPrice={currentPrice}
       />
 
-      {/* Main Terminal Workspace */}
-      <div className="flex-1 flex overflow-hidden p-3 gap-3">
-        {/* Left Watchlist Sidebar */}
-        <aside className="w-56 bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col font-mono text-xs hidden md:flex">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-            Forex Watchlist
-          </div>
-          <div className="space-y-1.5 flex-1 overflow-y-auto">
-            {[
-              { s: 'EURUSD', p: currentPrice.toFixed(5), chg: '+0.18%', up: true },
-              { s: 'GBPUSD', p: '1.26420', chg: '-0.12%', up: false },
-              { s: 'USDJPY', p: '154.210', chg: '+0.45%', up: true },
-              { s: 'AUDUSD', p: '0.65340', chg: '+0.04%', up: true },
-              { s: 'USDCAD', p: '1.38120', chg: '-0.22%', up: false },
-            ].map((pair) => (
-              <button
-                key={pair.s}
-                onClick={() => setSelectedSymbol(pair.s)}
-                className={`w-full p-2 rounded-lg flex items-center justify-between text-left transition-colors border ${
-                  selectedSymbol === pair.s
-                    ? 'bg-blue-600/20 border-blue-500/40 text-blue-300 font-bold'
-                    : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-800/60 text-slate-300'
-                }`}
-              >
-                <div>
-                  <div className="font-bold">{pair.s}</div>
-                  <div className="text-[10px] text-slate-500">{pair.p}</div>
-                </div>
-                <div
-                  className={`text-[11px] font-bold ${
-                    pair.up ? 'text-emerald-400' : 'text-red-400'
-                  }`}
-                >
-                  {pair.chg}
-                </div>
-              </button>
-            ))}
-          </div>
+      {/* Main Terminal Workspace: Left Sidebar + Dedicated Page Viewport */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Robotic Navigation Sidebar */}
+        <NavigationSidebar
+          activePage={activePage}
+          onSelectPage={setActivePage}
+          activeStrategiesCount={strategies.filter((s) => s.isActive && s.autoTradingEnabled).length}
+          openPositionsCount={positions.filter((p) => p.status === 'Open').length}
+          auditLogsCount={auditLogs.length}
+          isKillSwitchEngaged={risk?.isKillSwitchEngaged ?? false}
+          onOpenKillSwitch={() => setIsKillSwitchOpen(true)}
+        />
 
-          <div className="pt-3 border-t border-slate-800 text-[10px] text-slate-500 text-center">
-            NetMQ MT5 & Oanda Stream
-          </div>
-        </aside>
+        {/* Dedicated Page Viewport */}
+        <main className="flex-1 h-full overflow-hidden bg-[#090e1a] flex flex-col">
+          {/* Page 1: Bot Operations & Mission Control */}
+          {activePage === 'dashboard' && (
+            <BotOverview
+              account={account}
+              risk={risk}
+              strategies={strategies}
+              positions={positions}
+              auditLogs={auditLogs}
+              onOpenKillSwitch={() => setIsKillSwitchOpen(true)}
+              onNavigateTo={setActivePage}
+              selectedSymbol={selectedSymbol}
+              currentPrice={currentPrice}
+            />
+          )}
 
-        {/* Center / Right Multi-Pane Layout */}
-        <div className="flex-1 flex flex-col gap-3 overflow-hidden">
-          {/* Top Row: Interactive Chart & Risk Radar */}
-          <div className="h-[46%] grid grid-cols-1 lg:grid-cols-4 gap-3">
-            <div className="lg:col-span-3 h-full">
-              <TradingChart
-                candles={candles}
-                symbol={selectedSymbol}
-                timeframe={timeframe}
-                onTimeframeChange={setTimeframe}
-                indicatorConfig={indicatorConfig}
+          {/* Page 2: Strategy Studio & Brain */}
+          {activePage === 'strategies' && (
+            <div className="flex-1 h-full p-3 overflow-hidden">
+              <RuleStudio
+                strategies={strategies}
+                onSaveStrategy={handleSaveStrategy}
+                onDeleteStrategy={handleDeleteStrategy}
+                onIndicatorConfigChange={setIndicatorConfig}
               />
             </div>
-            <div className="h-full">
-              <RiskConsole
-                account={account}
-                risk={risk}
-                positions={positions}
-                onOpenKillSwitch={() => setIsKillSwitchOpen(true)}
-              />
-            </div>
-          </div>
+          )}
 
-          {/* Bottom Row: Tabbed Command Center */}
-          <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
-            {/* Tab Navigation */}
-            <div className="h-10 px-4 bg-slate-950 border-b border-slate-800 flex items-center gap-2">
-              <button
-                onClick={() => setActiveBottomTab('rules')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeBottomTab === 'rules'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                ⚡ Dynamic Strategy Studio
-              </button>
-              <button
-                onClick={() => setActiveBottomTab('nearmiss')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeBottomTab === 'nearmiss'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                🎯 Near-Miss & Audit Radar ({auditLogs.length})
-              </button>
-              <button
-                onClick={() => setActiveBottomTab('positions')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeBottomTab === 'positions'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                💼 Active Positions ({positions.filter((p) => p.status === 'Open').length})
-              </button>
-              <button
-                onClick={() => setActiveBottomTab('sim')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeBottomTab === 'sim'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                🔬 Ingestion Sandbox
-              </button>
+          {/* Page 3: Near-Miss & Audit Radar */}
+          {activePage === 'radar' && (
+            <div className="flex-1 h-full p-3 overflow-hidden">
+              <NearMissRadar logs={auditLogs} />
             </div>
+          )}
 
-            {/* Tab Pane Body */}
-            <div className="flex-1 overflow-hidden p-2">
-              {activeBottomTab === 'rules' && (
-                <RuleStudio
-                  strategies={strategies}
-                  onSaveStrategy={handleSaveStrategy}
-                  onDeleteStrategy={handleDeleteStrategy}
-                  onIndicatorConfigChange={setIndicatorConfig}
-                />
-              )}
-              {activeBottomTab === 'nearmiss' && <NearMissRadar logs={auditLogs} />}
-              {activeBottomTab === 'positions' && (
-                <PositionsManager positions={positions} onClosePosition={handleClosePosition} />
-              )}
-              {activeBottomTab === 'sim' && (
+          {/* Page 4: Positions & Risk Engine */}
+          {activePage === 'positions' && (
+            <div className="flex-1 h-full p-4 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 h-full">
+                <div className="xl:col-span-2 min-h-[500px] h-full">
+                  <PositionsManager
+                    positions={positions}
+                    onClosePosition={handleClosePosition}
+                  />
+                </div>
+                <div className="min-h-[500px]">
+                  <RiskConsole
+                    account={account}
+                    risk={risk}
+                    positions={positions}
+                    onOpenKillSwitch={() => setIsKillSwitchOpen(true)}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Page 5: Ingestion & Simulation Sandbox */}
+          {activePage === 'sandbox' && (
+            <div className="flex-1 h-full p-4 overflow-y-auto">
+              <div className="max-w-4xl mx-auto py-2">
                 <SimulatorConsole onSimulateCandle={handleSimulateCandle} />
-              )}
+              </div>
             </div>
-          </div>
-        </div>
+          )}
+
+          {/* Page 6: Dedicated Chart & Technical Inspector */}
+          {activePage === 'chart' && (
+            <div className="flex-1 h-full p-3 flex gap-3 overflow-hidden">
+              {/* Forex Pair Watchlist Sidebar */}
+              <aside className="w-56 bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col font-mono text-xs hidden md:flex flex-shrink-0">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Market Watchlist
+                </div>
+                <div className="space-y-1.5 flex-1 overflow-y-auto">
+                  {[
+                    { s: 'EURUSD', p: currentPrice.toFixed(5), chg: '+0.18%', up: true },
+                    { s: 'GBPUSD', p: '1.26420', chg: '-0.12%', up: false },
+                    { s: 'USDJPY', p: '154.210', chg: '+0.45%', up: true },
+                    { s: 'AUDUSD', p: '0.65340', chg: '+0.04%', up: true },
+                    { s: 'USDCAD', p: '1.38120', chg: '-0.22%', up: false },
+                  ].map((pair) => (
+                    <button
+                      key={pair.s}
+                      onClick={() => setSelectedSymbol(pair.s)}
+                      className={`w-full p-2 rounded-lg flex items-center justify-between text-left transition-colors border ${
+                        selectedSymbol === pair.s
+                          ? 'bg-blue-600/20 border-blue-500/40 text-blue-300 font-bold'
+                          : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-800/60 text-slate-300'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-bold">{pair.s}</div>
+                        <div className="text-[10px] text-slate-500">{pair.p}</div>
+                      </div>
+                      <div
+                        className={`text-[11px] font-bold ${
+                          pair.up ? 'text-emerald-400' : 'text-red-400'
+                        }`}
+                      >
+                        {pair.chg}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="pt-3 border-t border-slate-800 text-[10px] text-slate-500 text-center">
+                  NetMQ MT5 & Oanda Feeds
+                </div>
+              </aside>
+
+              {/* Full Interactive Chart */}
+              <div className="flex-1 h-full overflow-hidden">
+                <TradingChart
+                  candles={candles}
+                  symbol={selectedSymbol}
+                  timeframe={timeframe}
+                  onTimeframeChange={setTimeframe}
+                  indicatorConfig={indicatorConfig}
+                />
+              </div>
+            </div>
+          )}
+        </main>
       </div>
 
       {/* Emergency Kill Switch Modal */}
