@@ -72,21 +72,6 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   return (
     <aside className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between p-3 select-none flex-shrink-0">
       <div className="space-y-4">
-        {/* Brand / Robot Identity */}
-        <div className="px-2 py-1 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 flex items-center justify-center font-black text-white text-base shadow-lg shadow-blue-500/20">
-            🤖
-          </div>
-          <div>
-            <div className="text-sm font-extrabold tracking-wider text-slate-100 uppercase">
-              QUANT<span className="text-blue-400">BOT</span>
-            </div>
-            <div className="text-[10px] text-slate-400 font-mono tracking-tight">
-              Algorithmic FX Execution
-            </div>
-          </div>
-        </div>
-
         {/* Navigation Section */}
         <div className="space-y-1">
           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 font-mono">
