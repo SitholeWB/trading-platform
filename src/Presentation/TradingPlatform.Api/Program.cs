@@ -7,6 +7,7 @@ using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Application.Queries;
 using TradingPlatform.Broker.Abstractions;
 using TradingPlatform.Broker.Oanda;
+using TradingPlatform.Broker.Public;
 using TradingPlatform.Domain.Entities;
 using TradingPlatform.Domain.Enums;
 using TradingPlatform.Domain.Models;
@@ -21,9 +22,17 @@ builder.Services.AddApplicationServices();
 builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddRulesEngineServices();
 builder.Services.AddOandaBroker(builder.Configuration);
+builder.Services.AddPublicMarketDataServices();
 builder.Services.AddHostedService<SpaHostedService>();
 
 var app = builder.Build();
+
+// Auto-initialize database schema on startup (supports SQLite & InMemory for desktop & web)
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<TradingDbContext>();
+    db.Database.EnsureCreated();
+}
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -222,6 +231,128 @@ app.MapPost("/api/simulation/candle", async ([FromBody] IngestCandleDto dto, IMe
     });
 }).WithTags("Simulation");
 
+// ----------------------------------------------------
+// 7. Market Data & Multi-Timeframe Feeds
+// ----------------------------------------------------
+var marketDataGroup = app.MapGroup("/api/market-data").WithTags("Market Data");
+
+marketDataGroup.MapGet("/candles", async (
+    [FromQuery] string? symbol,
+    [FromQuery] string? timeframe,
+    [FromQuery] int? count,
+    IHistoricalDataProvider dataProvider,
+    CancellationToken ct) =>
+{
+    string sym = string.IsNullOrWhiteSpace(symbol) ? "EURUSD" : symbol.Trim().ToUpperInvariant();
+    string tf = string.IsNullOrWhiteSpace(timeframe) ? "M5" : timeframe.Trim().ToUpperInvariant();
+    int limit = count.HasValue && count.Value > 0 ? count.Value : 60;
+
+    var candles = await dataProvider.GetHistoricalCandlesAsync(sym, tf, limit, ct);
+    return Results.Ok(candles);
+});
+
+marketDataGroup.MapGet("/providers", async (IBrokerConfigurationRepository repo, CancellationToken ct) =>
+{
+    var config = await repo.GetConfigurationAsync(ct);
+    var providers = new[]
+    {
+        new
+        {
+            Id = "KeylessPublic",
+            Name = "Keyless Public (Yahoo Finance FX + Binance Crypto)",
+            Description = "100% Free, zero-setup, multi-timeframe candles (~1m delay). Works out of the box for sharing.",
+            RequiresKey = false,
+            IsConfigured = true,
+            SupportedTimeframes = new[] { "M1", "M5", "M15", "M30", "H1", "D1", "W1", "MN1" }
+        },
+        new
+        {
+            Id = "Oanda",
+            Name = "OANDA v20 REST & Streaming",
+            Description = "Direct broker institutional feed & order execution for Practice and Live accounts.",
+            RequiresKey = true,
+            IsConfigured = !string.IsNullOrWhiteSpace(config.OandaApiToken) && !string.IsNullOrWhiteSpace(config.OandaAccountId),
+            SupportedTimeframes = new[] { "M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN1" }
+        },
+        new
+        {
+            Id = "ZeroMQ",
+            Name = "MetaTrader 5 ZeroMQ Bridge",
+            Description = "Connects to a running desktop MetaTrader 5 terminal with zero latency over local NetMQ.",
+            RequiresKey = false,
+            IsConfigured = true,
+            SupportedTimeframes = new[] { "M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN1" }
+        },
+        new
+        {
+            Id = "Synthetic",
+            Name = "Offline Simulation Sandbox",
+            Description = "Standalone synthetic market generator with zero external network dependencies.",
+            RequiresKey = false,
+            IsConfigured = true,
+            SupportedTimeframes = new[] { "M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN1" }
+        }
+    };
+
+    return Results.Ok(new
+    {
+        ActiveProvider = config.ActiveProvider,
+        Providers = providers
+    });
+});
+
+// ----------------------------------------------------
+// 8. Broker Settings & Key Configuration
+// ----------------------------------------------------
+var settingsGroup = app.MapGroup("/api/settings").WithTags("Settings");
+
+settingsGroup.MapGet("/broker-config", async (IBrokerConfigurationRepository repo, CancellationToken ct) =>
+{
+    var config = await repo.GetConfigurationAsync(ct);
+    return Results.Ok(new
+    {
+        config.ActiveProvider,
+        config.OandaAccountId,
+        HasOandaToken = !string.IsNullOrWhiteSpace(config.OandaApiToken),
+        MaskedOandaToken = MaskSecret(config.OandaApiToken),
+        config.OandaEnvironment,
+        config.TwelveDataApiKey,
+        config.UpdatedAtUtc
+    });
+});
+
+settingsGroup.MapPost("/broker-config", async (
+    [FromBody] UpdateBrokerConfigDto dto,
+    IBrokerConfigurationRepository repo,
+    CancellationToken ct) =>
+{
+    var config = await repo.GetConfigurationAsync(ct);
+
+    if (!string.IsNullOrWhiteSpace(dto.ActiveProvider))
+        config.ActiveProvider = dto.ActiveProvider;
+
+    if (dto.OandaApiToken != null && dto.OandaApiToken != "******")
+        config.OandaApiToken = dto.OandaApiToken;
+
+    if (dto.OandaAccountId != null)
+        config.OandaAccountId = dto.OandaAccountId;
+
+    if (!string.IsNullOrWhiteSpace(dto.OandaEnvironment))
+        config.OandaEnvironment = dto.OandaEnvironment;
+
+    if (dto.TwelveDataApiKey != null && dto.TwelveDataApiKey != "******")
+        config.TwelveDataApiKey = dto.TwelveDataApiKey;
+
+    await repo.UpdateConfigurationAsync(config, ct);
+
+    return Results.Ok(new
+    {
+        Success = true,
+        ActiveProvider = config.ActiveProvider,
+        Message = "Broker settings updated successfully."
+    });
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
@@ -257,5 +388,19 @@ public record IngestCandleDto(
     decimal Volume,
     bool IsComplete);
 
-// Expose Program for WebApplicationFactory in integration tests
-public partial class Program { }
+public record UpdateBrokerConfigDto(
+    string? ActiveProvider,
+    string? OandaApiToken,
+    string? OandaAccountId,
+    string? OandaEnvironment,
+    string? TwelveDataApiKey);
+
+public partial class Program
+{
+    public static string MaskSecret(string? secret)
+    {
+        if (string.IsNullOrWhiteSpace(secret)) return string.Empty;
+        if (secret.Length <= 8) return "********";
+        return $"{secret[..4]}...{secret[^4..]}";
+    }
+}

@@ -25,6 +25,13 @@ public static class DependencyInjection
                     sql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorNumbersToAdd: null);
                 });
             }
+            else if (provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
+            {
+                var sqliteConnection = !string.IsNullOrWhiteSpace(connectionString)
+                    ? connectionString
+                    : "Data Source=trading_platform.db";
+                options.UseSqlite(sqliteConnection);
+            }
             else
             {
                 // In-Memory database for local development, fast startup, and unit/integration testing
@@ -37,6 +44,7 @@ public static class DependencyInjection
         services.AddScoped<IStrategyRepository, StrategyRepository>();
         services.AddScoped<ITradeRepository, TradeRepository>();
         services.AddScoped<IRiskProfileRepository, RiskProfileRepository>();
+        services.AddScoped<IBrokerConfigurationRepository, BrokerConfigurationRepository>();
 
         return services;
     }

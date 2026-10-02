@@ -9,6 +9,8 @@ interface NavigationSidebarProps {
   openPositionsCount: number;
   auditLogsCount: number;
   isKillSwitchEngaged: boolean;
+  activeProvider?: string;
+  onOpenSettings?: () => void;
 }
 
 export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
@@ -18,6 +20,8 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   openPositionsCount,
   auditLogsCount,
   isKillSwitchEngaged,
+  activeProvider = 'KeylessPublic',
+  onOpenSettings,
 }) => {
   const navItems = [
     {
@@ -120,8 +124,8 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
         </nav>
       </div>
 
-      {/* Bottom: Connection Status */}
-      <div className="p-3 border-t border-slate-800/80 bg-slate-950 text-[11px] font-mono text-slate-400">
+      {/* Bottom: Connection Status & Settings */}
+      <div className="p-3 border-t border-slate-800/80 bg-slate-950 text-[11px] font-mono text-slate-400 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-slate-500">Broker Bridge</span>
           <span className="text-emerald-400 font-medium flex items-center gap-1.5">
@@ -129,10 +133,21 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
             Connected
           </span>
         </div>
-        <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
-          <span>Feed: MT5 ZeroMQ</span>
-          <span>EURUSD M5</span>
+        <div className="flex items-center justify-between text-[10px] text-slate-400">
+          <span className="truncate">
+            Feed: {activeProvider === 'KeylessPublic' ? 'Public (Yahoo/Binance)' : activeProvider === 'Oanda' ? 'OANDA v20' : activeProvider === 'ZeroMQ' ? 'MT5 ZeroMQ' : 'Sandbox'}
+          </span>
+          <span className="text-slate-500">M5</span>
         </div>
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="w-full mt-1 py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-slate-800 hover:text-slate-200 border border-slate-800 text-[11px] font-sans font-medium flex items-center justify-center gap-1.5 text-slate-400 transition-colors"
+          >
+            <span>⚙️</span>
+            <span>Feed & Keys Settings</span>
+          </button>
+        )}
       </div>
     </aside>
   );

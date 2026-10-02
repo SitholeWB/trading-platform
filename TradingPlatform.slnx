@@ -8,6 +8,7 @@
     <Project Path="src/Infrastructure/TradingPlatform.AI.Abstractions/TradingPlatform.AI.Abstractions.csproj" />
     <Project Path="src/Infrastructure/TradingPlatform.Broker.Abstractions/TradingPlatform.Broker.Abstractions.csproj" />
     <Project Path="src/Infrastructure/TradingPlatform.Broker.Oanda/TradingPlatform.Broker.Oanda.csproj" />
+    <Project Path="src/Infrastructure/TradingPlatform.Broker.Public/TradingPlatform.Broker.Public.csproj" />
     <Project Path="src/Infrastructure/TradingPlatform.Broker.ZeroMQ/TradingPlatform.Broker.ZeroMQ.csproj" />
     <Project Path="src/Infrastructure/TradingPlatform.Persistence/TradingPlatform.Persistence.csproj" />
     <Project Path="src/Infrastructure/TradingPlatform.RulesEngine/TradingPlatform.RulesEngine.csproj" />

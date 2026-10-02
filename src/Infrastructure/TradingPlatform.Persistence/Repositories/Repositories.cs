@@ -173,3 +173,36 @@ public class RiskProfileRepository : IRiskProfileRepository
         await _context.SaveChangesAsync(ct);
     }
 }
+
+public class BrokerConfigurationRepository : IBrokerConfigurationRepository
+{
+    private readonly TradingDbContext _context;
+
+    public BrokerConfigurationRepository(TradingDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<BrokerConfiguration> GetConfigurationAsync(CancellationToken ct = default)
+    {
+        var config = await _context.BrokerConfigurations.FirstOrDefaultAsync(ct);
+        if (config == null)
+        {
+            config = new BrokerConfiguration
+            {
+                ActiveProvider = "KeylessPublic",
+                OandaEnvironment = "Practice"
+            };
+            _context.BrokerConfigurations.Add(config);
+            await _context.SaveChangesAsync(ct);
+        }
+        return config;
+    }
+
+    public async Task UpdateConfigurationAsync(BrokerConfiguration configuration, CancellationToken ct = default)
+    {
+        configuration.UpdatedAtUtc = DateTime.UtcNow;
+        _context.BrokerConfigurations.Update(configuration);
+        await _context.SaveChangesAsync(ct);
+    }
+}

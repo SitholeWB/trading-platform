@@ -173,3 +173,22 @@ export interface ReactQueryBuilderGroup {
   combinator: 'and' | 'or';
   rules: (ReactQueryBuilderRule | ReactQueryBuilderGroup)[];
 }
+
+export interface MarketDataProviderInfo {
+  id: string;
+  name: string;
+  description: string;
+  requiresKey: boolean;
+  isConfigured: boolean;
+  supportedTimeframes: Timeframe[];
+}
+
+export interface BrokerConfig {
+  activeProvider: string;
+  oandaAccountId: string;
+  hasOandaToken: boolean;
+  maskedOandaToken: string;
+  oandaEnvironment: string;
+  twelveDataApiKey: string;
+  updatedAtUtc: string;
+}

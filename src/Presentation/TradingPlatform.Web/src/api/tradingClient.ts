@@ -131,4 +131,22 @@ export const tradingApi = {
       method: 'POST',
       body: JSON.stringify(candle),
     }),
+
+  // Market Data & Public Multi-Timeframe Feeds
+  getCandles: (symbol: string, timeframe: string, count = 60) =>
+    request<Candle[]>(`/market-data/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&count=${count}`),
+
+  getProviders: () =>
+    request<{ activeProvider: string; providers: any[] }>('/market-data/providers'),
+
+  // Broker Settings & Key Configuration
+  getBrokerConfig: () =>
+    request<any>('/settings/broker-config'),
+
+  updateBrokerConfig: (config: any) =>
+    request<any>('/settings/broker-config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
 };
+

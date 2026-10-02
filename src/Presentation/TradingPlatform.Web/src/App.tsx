@@ -9,6 +9,7 @@ import { PositionsManager } from './components/PositionsManager';
 import { RiskConsole } from './components/RiskConsole';
 import { SimulatorConsole } from './components/SimulatorConsole';
 import { KillSwitchModal } from './components/KillSwitchModal';
+import { BrokerSettingsModal } from './components/BrokerSettingsModal';
 import { tradingApi } from './api/tradingClient';
 import {
   AccountSummary,
@@ -44,6 +45,8 @@ export function App() {
   const [risk, setRisk] = useState<RiskProfile | null>(null);
   const [account, setAccount] = useState<AccountSummary | null>(null);
   const [isKillSwitchOpen, setIsKillSwitchOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeProvider, setActiveProvider] = useState('KeylessPublic');
 
   // Initial synthetic candlestick data for charting
   const [candles, setCandles] = useState<Candle[]>(() => {
@@ -78,12 +81,13 @@ export function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [strats, logs, pos, rk, acc] = await Promise.allSettled([
+        const [strats, logs, pos, rk, acc, cfg] = await Promise.allSettled([
           tradingApi.getStrategies(),
           tradingApi.getAuditLogs(30),
           tradingApi.getPositions(),
           tradingApi.getRiskProfile(),
           tradingApi.getAccountSummary(),
+          tradingApi.getBrokerConfig(),
         ]);
 
         if (strats.status === 'fulfilled') setStrategies(strats.value);
@@ -91,6 +95,9 @@ export function App() {
         if (pos.status === 'fulfilled') setPositions(pos.value);
         if (rk.status === 'fulfilled') setRisk(rk.value);
         if (acc.status === 'fulfilled') setAccount(acc.value);
+        if (cfg.status === 'fulfilled' && cfg.value?.activeProvider) {
+          setActiveProvider(cfg.value.activeProvider);
+        }
       } catch (err) {
         console.warn('Backend polling warning:', err);
       }
@@ -100,6 +107,24 @@ export function App() {
     const interval = setInterval(fetchData, 2500);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch real-time / public multi-timeframe candles from active provider
+  const fetchLiveCandles = async () => {
+    try {
+      const realCandles = await tradingApi.getCandles(selectedSymbol, timeframe, 60);
+      if (realCandles && realCandles.length > 0) {
+        setCandles(realCandles);
+      }
+    } catch (err) {
+      console.warn('Live candles fetch warning:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveCandles();
+    const interval = setInterval(fetchLiveCandles, 8000);
+    return () => clearInterval(interval);
+  }, [selectedSymbol, timeframe, activeProvider]);
 
   const handleSaveStrategy = async (strategyDto: any) => {
     if (strategyDto.id) {
@@ -162,6 +187,8 @@ export function App() {
         openPositionsCount={positions.filter((p) => p.status === 'Open').length}
         auditLogsCount={auditLogs.length}
         isKillSwitchEngaged={risk?.isKillSwitchEngaged ?? false}
+        activeProvider={activeProvider}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* Main Terminal Workspace: Top Header + Dedicated Page Viewport */}
@@ -255,6 +282,8 @@ export function App() {
                     { s: 'EURUSD', p: currentPrice.toFixed(5), chg: '+0.18%', up: true },
                     { s: 'GBPUSD', p: '1.26420', chg: '-0.12%', up: false },
                     { s: 'USDJPY', p: '154.210', chg: '+0.45%', up: true },
+                    { s: 'BTCUSDT', p: '68,450', chg: '+1.85%', up: true },
+                    { s: 'ETHUSDT', p: '3,520', chg: '+0.95%', up: true },
                     { s: 'AUDUSD', p: '0.65340', chg: '+0.04%', up: true },
                     { s: 'USDCAD', p: '1.38120', chg: '-0.22%', up: false },
                   ].map((pair) => (
@@ -308,6 +337,16 @@ export function App() {
         onClose={() => setIsKillSwitchOpen(false)}
         risk={risk}
         onToggleKillSwitch={handleToggleKillSwitch}
+      />
+
+      {/* Broker & Keyless Market Data Settings Modal */}
+      <BrokerSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onProviderChanged={(newProvider) => {
+          setActiveProvider(newProvider);
+          fetchLiveCandles();
+        }}
       />
     </div>
   );

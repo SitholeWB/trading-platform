@@ -10,6 +10,7 @@ public class TradingDbContext : DbContext
     public DbSet<TradeOrder> TradeOrders => Set<TradeOrder>();
     public DbSet<Position> Positions => Set<Position>();
     public DbSet<RiskProfile> RiskProfiles => Set<RiskProfile>();
+    public DbSet<BrokerConfiguration> BrokerConfigurations => Set<BrokerConfiguration>();
 
     public TradingDbContext(DbContextOptions<TradingDbContext> options)
         : base(options)
@@ -96,6 +97,17 @@ public class TradingDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.MaxDailyDrawdownPercent).HasPrecision(5, 2);
             entity.Property(e => e.MaxSpreadPipsPerSymbolJson).IsRequired().HasMaxLength(2000);
+        });
+
+        // 6. BrokerConfiguration configuration
+        modelBuilder.Entity<BrokerConfiguration>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ActiveProvider).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.OandaApiToken).HasMaxLength(200);
+            entity.Property(e => e.OandaAccountId).HasMaxLength(100);
+            entity.Property(e => e.OandaEnvironment).HasMaxLength(50);
+            entity.Property(e => e.TwelveDataApiKey).HasMaxLength(100);
         });
     }
 }

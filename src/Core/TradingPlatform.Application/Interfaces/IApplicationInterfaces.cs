@@ -76,3 +76,9 @@ public interface IRiskProfileRepository
     Task<RiskProfile> GetOrCreateProfileAsync(CancellationToken ct = default);
     Task UpdateProfileAsync(RiskProfile profile, CancellationToken ct = default);
 }
+
+public interface IBrokerConfigurationRepository
+{
+    Task<BrokerConfiguration> GetConfigurationAsync(CancellationToken ct = default);
+    Task UpdateConfigurationAsync(BrokerConfiguration configuration, CancellationToken ct = default);
+}
