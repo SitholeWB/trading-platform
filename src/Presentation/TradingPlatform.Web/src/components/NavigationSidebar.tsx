@@ -9,7 +9,6 @@ interface NavigationSidebarProps {
   openPositionsCount: number;
   auditLogsCount: number;
   isKillSwitchEngaged: boolean;
-  onOpenKillSwitch: () => void;
 }
 
 export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
@@ -19,92 +18,96 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   openPositionsCount,
   auditLogsCount,
   isKillSwitchEngaged,
-  onOpenKillSwitch,
 }) => {
   const navItems = [
     {
       id: 'dashboard' as PageId,
       icon: '🤖',
-      label: 'Bot Overview',
-      desc: 'System health & decisions',
+      label: 'Dashboard',
       badge: null,
     },
     {
       id: 'strategies' as PageId,
       icon: '⚡',
-      label: 'Strategy Studio',
-      desc: 'Rules AST & Indicators',
+      label: 'Strategies',
       badge: activeStrategiesCount > 0 ? `${activeStrategiesCount} Active` : null,
       badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
     },
     {
       id: 'radar' as PageId,
       icon: '🎯',
-      label: 'Near-Miss Radar',
-      desc: 'Forensic audits & signals',
+      label: 'Audit Radar',
       badge: auditLogsCount > 0 ? `${auditLogsCount}` : null,
       badgeColor: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
     },
     {
       id: 'positions' as PageId,
       icon: '💼',
-      label: 'Positions & Orders',
-      desc: 'Order book & trailing stop',
-      badge: openPositionsCount > 0 ? `${openPositionsCount} Open` : null,
+      label: 'Positions',
+      badge: openPositionsCount > 0 ? `${openPositionsCount}` : null,
       badgeColor: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
     },
     {
       id: 'sandbox' as PageId,
       icon: '🔬',
-      label: 'Ingestion Sandbox',
-      desc: 'Synthetic tick simulator',
+      label: 'Simulator',
       badge: null,
     },
     {
       id: 'chart' as PageId,
       icon: '📈',
-      label: 'Chart Inspector',
-      desc: 'Candles & indicator curves',
+      label: 'Live Chart',
       badge: null,
     },
   ];
 
   return (
-    <aside className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between p-3 select-none flex-shrink-0">
-      <div className="space-y-4">
-        {/* Navigation Section */}
-        <div className="space-y-1">
-          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 font-mono">
-            Navigation
+    <aside className="w-56 bg-slate-950 border-r border-slate-800 flex flex-col justify-between select-none flex-shrink-0 h-screen">
+      {/* Top: Clean Robot Identity & Status */}
+      <div>
+        <div className="h-13 min-h-[52px] px-3.5 border-b border-slate-800 flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-sm shadow-sm">
+            🤖
           </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-bold tracking-wider text-slate-100 uppercase truncate">
+              Trading Robot
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isKillSwitchEngaged ? 'bg-red-500 animate-ping' : 'bg-emerald-400 animate-pulse'
+                }`}
+              />
+              <span className={isKillSwitchEngaged ? 'text-red-400 font-bold' : 'text-emerald-400'}>
+                {isKillSwitchEngaged ? 'Halted' : 'Auto-Trading'}
+              </span>
+            </span>
+          </div>
+        </div>
 
+        {/* Clean Single-Line Navigation Items */}
+        <nav className="p-2 space-y-1">
           {navItems.map((item) => {
             const isActive = activePage === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => onSelectPage(item.id)}
-                className={`w-full text-left p-2.5 rounded-xl flex items-center justify-between transition-all border ${
+                className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-all border text-xs font-medium ${
                   isActive
-                    ? 'bg-blue-600/15 border-blue-500/40 text-slate-100 shadow-sm'
-                    : 'bg-transparent border-transparent hover:bg-slate-900 text-slate-300'
+                    ? 'bg-blue-600/20 border-blue-500/40 text-blue-300 font-semibold shadow-sm'
+                    : 'bg-transparent border-transparent hover:bg-slate-900 hover:text-slate-200 text-slate-400'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-lg leading-none">{item.icon}</span>
-                  <div>
-                    <div className={`text-xs font-bold ${isActive ? 'text-blue-400' : 'text-slate-200'}`}>
-                      {item.label}
-                    </div>
-                    <div className="text-[10px] text-slate-400 leading-tight">
-                      {item.desc}
-                    </div>
-                  </div>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base leading-none">{item.icon}</span>
+                  <span>{item.label}</span>
                 </div>
 
                 {item.badge && (
                   <span
-                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold ${
+                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full border font-bold ${
                       item.badgeColor || 'bg-slate-800 text-slate-300 border-slate-700'
                     }`}
                   >
@@ -114,52 +117,21 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               </button>
             );
           })}
-        </div>
+        </nav>
       </div>
 
-      {/* Bottom Sentinel & Kill Switch */}
-      <div className="pt-3 border-t border-slate-800 space-y-2.5">
-        {/* Engine Status Card */}
-        <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-2.5 text-xs font-mono">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400 text-[10px]">ENGINE STATE</span>
-            <span className="flex items-center gap-1.5">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isKillSwitchEngaged ? 'bg-red-500 animate-ping' : 'bg-emerald-400 animate-pulse'
-                }`}
-              />
-              <span
-                className={`text-[10px] font-bold ${
-                  isKillSwitchEngaged ? 'text-red-400' : 'text-emerald-400'
-                }`}
-              >
-                {isKillSwitchEngaged ? 'EMERGENCY STOP' : 'SCANNING LIVE'}
-              </span>
-            </span>
-          </div>
-
-          <div className="mt-1 text-[10px] text-slate-400 flex items-center justify-between">
-            <span>Broker Protocol:</span>
-            <span className="text-slate-200 font-semibold">NetMQ MT5 PUB</span>
-          </div>
+      {/* Bottom: Connection Status */}
+      <div className="p-3 border-t border-slate-800/80 bg-slate-950 text-[11px] font-mono text-slate-400">
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500">Broker Bridge</span>
+          <span className="text-emerald-400 font-medium flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            Connected
+          </span>
         </div>
-
-        {/* Emergency Kill Switch Button */}
-        <button
-          onClick={onOpenKillSwitch}
-          className={`w-full py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md ${
-            isKillSwitchEngaged
-              ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-              : 'bg-red-600/90 hover:bg-red-600 text-white shadow-red-950/40'
-          }`}
-        >
-          <span>🚨</span>
-          <span>{isKillSwitchEngaged ? 'Reset Emergency Stop' : 'Kill Switch (Halt Robot)'}</span>
-        </button>
-
-        <div className="text-[10px] text-slate-400 text-center font-mono">
-          .NET 10 LTS · Clean Hexagonal
+        <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+          <span>Feed: MT5 ZeroMQ</span>
+          <span>EURUSD M5</span>
         </div>
       </div>
     </aside>

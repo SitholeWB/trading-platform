@@ -2,6 +2,7 @@ import React from 'react';
 import { AccountSummary, RiskProfile } from '../types/trading';
 
 interface HeaderProps {
+  pageTitle: string;
   account: AccountSummary | null;
   risk: RiskProfile | null;
   onOpenKillSwitch: () => void;
@@ -10,6 +11,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  pageTitle,
   account,
   risk,
   onOpenKillSwitch,
@@ -22,88 +24,66 @@ export const Header: React.FC<HeaderProps> = ({
 
   const ddColor =
     currentDrawdown >= maxDrawdown
-      ? 'text-red-500'
+      ? 'text-red-400'
       : currentDrawdown >= maxDrawdown * 0.7
       ? 'text-amber-400'
       : 'text-emerald-400';
 
   return (
-    <header className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 select-none">
-      {/* Brand & Market Ticker */}
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
-            AG
-          </div>
-          <div>
-            <div className="text-sm font-bold tracking-wider text-slate-100 uppercase">
-              Antigravity <span className="text-blue-400 font-mono">FX Terminal</span>
-            </div>
-            <div className="text-[11px] text-slate-400 font-mono">.NET 10 LTS · CQRS Engine</div>
-          </div>
-        </div>
+    <header className="h-13 min-h-[52px] bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 select-none flex-shrink-0 z-10">
+      {/* Left: Page Title & Current Pair */}
+      <div className="flex items-center gap-3 min-w-0">
+        <h1 className="text-sm font-bold text-slate-100 tracking-wide font-sans truncate">
+          {pageTitle}
+        </h1>
 
-        {/* Selected Pair & Live Price */}
-        <div className="flex items-center gap-3 bg-slate-950/60 border border-slate-800 px-3 py-1.5 rounded-lg">
-          <span className="font-bold text-sm text-slate-200 tracking-wide">{selectedSymbol}</span>
-          <span className="font-mono text-base font-semibold text-emerald-400">
+        <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-md text-xs font-mono">
+          <span className="font-bold text-slate-300">{selectedSymbol}</span>
+          <span className="font-semibold text-emerald-400">
             {currentPrice.toFixed(5)}
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono">
+          <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded font-mono hidden sm:inline">
             +0.18%
           </span>
         </div>
       </div>
 
-      {/* Broker Connection Status Pills */}
-      <div className="hidden lg:flex items-center gap-3 font-mono text-xs">
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/60 border border-slate-700/50">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span className="text-slate-300 font-medium">Oanda v20</span>
-          <span className="text-[10px] text-slate-400">STREAMING</span>
-        </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/60 border border-slate-700/50">
-          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span className="text-slate-300 font-medium">MT5 ZeroMQ</span>
-          <span className="text-[10px] text-slate-400">PUB/SUB</span>
-        </div>
-      </div>
-
-      {/* Account Telemetry & Drawdown Gauge */}
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-4 font-mono text-xs">
+      {/* Right: Essential Account Figures & Emergency Stop */}
+      <div className="flex items-center gap-3 sm:gap-5 font-mono text-xs flex-shrink-0">
+        <div className="flex items-center gap-3 sm:gap-4">
           <div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider">Equity</div>
-            <div className="text-sm font-semibold text-slate-100">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Equity</span>
+            <span className="font-semibold text-slate-100">
               ${account?.equity ? account.equity.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '100,000.00'}
-            </div>
+            </span>
           </div>
-          <div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider">Balance</div>
-            <div className="text-slate-300">
+
+          <div className="hidden sm:block">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Balance</span>
+            <span className="text-slate-300">
               ${account?.balance ? account.balance.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '100,000.00'}
-            </div>
+            </span>
           </div>
+
           <div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider">Daily Drawdown</div>
-            <div className={`font-bold ${ddColor}`}>
-              {currentDrawdown.toFixed(2)}%{' '}
-              <span className="text-[10px] text-slate-500 font-normal">/ {maxDrawdown.toFixed(1)}% Max</span>
-            </div>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Drawdown</span>
+            <span className={`font-bold ${ddColor}`}>
+              {currentDrawdown.toFixed(2)}%
+            </span>
           </div>
         </div>
 
-        {/* Emergency Kill Switch */}
+        {/* Emergency Kill Switch Button */}
         <button
           onClick={onOpenKillSwitch}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all shadow-md ${
+          className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-md ${
             isKillSwitchEngaged
-              ? 'bg-red-600 text-white animate-bounce shadow-red-600/40 ring-2 ring-red-400'
-              : 'bg-red-950/60 border border-red-800/60 text-red-300 hover:bg-red-900/80 hover:text-white'
+              ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-400'
+              : 'bg-red-950/70 border border-red-800/80 text-red-300 hover:bg-red-900/80 hover:text-white'
           }`}
         >
-          <span className="w-2.5 h-2.5 rounded-full bg-red-400"></span>
-          {isKillSwitchEngaged ? 'KILL SWITCH ENGAGED' : 'EMERGENCY KILL SWITCH'}
+          <span className="w-2 h-2 rounded-full bg-red-400" />
+          <span>{isKillSwitchEngaged ? 'HALTED' : 'KILL SWITCH'}</span>
         </button>
       </div>
     </header>

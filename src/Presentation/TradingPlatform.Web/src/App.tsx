@@ -143,32 +143,40 @@ export function App() {
     return res;
   };
 
+  const pageTitles: Record<PageId, string> = {
+    dashboard: '🤖 Bot Operations & Health',
+    strategies: '⚡ Dynamic Strategy Studio',
+    radar: '🎯 Near-Miss & Forensic Radar',
+    positions: '💼 Positions & Risk Management',
+    sandbox: '🔬 Ingestion & Simulation Sandbox',
+    chart: '📈 Market Chart & Technical Inspector',
+  };
+
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#080c15] text-slate-100 overflow-hidden font-sans">
-      {/* Top Header & Telemetry */}
-      <Header
-        account={account}
-        risk={risk}
-        onOpenKillSwitch={() => setIsKillSwitchOpen(true)}
-        selectedSymbol={selectedSymbol}
-        currentPrice={currentPrice}
+    <div className="flex h-screen w-screen bg-[#080c15] text-slate-100 overflow-hidden font-sans">
+      {/* Robotic Navigation Sidebar - Full Screen Height on Left */}
+      <NavigationSidebar
+        activePage={activePage}
+        onSelectPage={setActivePage}
+        activeStrategiesCount={strategies.filter((s) => s.isActive && s.autoTradingEnabled).length}
+        openPositionsCount={positions.filter((p) => p.status === 'Open').length}
+        auditLogsCount={auditLogs.length}
+        isKillSwitchEngaged={risk?.isKillSwitchEngaged ?? false}
       />
 
-      {/* Main Terminal Workspace: Left Sidebar + Dedicated Page Viewport */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Robotic Navigation Sidebar */}
-        <NavigationSidebar
-          activePage={activePage}
-          onSelectPage={setActivePage}
-          activeStrategiesCount={strategies.filter((s) => s.isActive && s.autoTradingEnabled).length}
-          openPositionsCount={positions.filter((p) => p.status === 'Open').length}
-          auditLogsCount={auditLogs.length}
-          isKillSwitchEngaged={risk?.isKillSwitchEngaged ?? false}
+      {/* Main Terminal Workspace: Top Header + Dedicated Page Viewport */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
+        <Header
+          pageTitle={pageTitles[activePage]}
+          account={account}
+          risk={risk}
           onOpenKillSwitch={() => setIsKillSwitchOpen(true)}
+          selectedSymbol={selectedSymbol}
+          currentPrice={currentPrice}
         />
 
         {/* Dedicated Page Viewport */}
-        <main className="flex-1 h-full overflow-hidden bg-[#090e1a] flex flex-col">
+        <main className="flex-1 h-full overflow-hidden bg-[#090e1a] flex flex-col min-w-0">
           {/* Page 1: Bot Operations & Mission Control */}
           {activePage === 'dashboard' && (
             <BotOverview
