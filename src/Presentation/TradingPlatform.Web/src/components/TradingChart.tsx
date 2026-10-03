@@ -47,6 +47,7 @@ import { DrawingCanvas } from './chart/DrawingCanvas';
 import { SymbolSearchModal } from './chart/SymbolSearchModal';
 import { IndicatorsModal } from './chart/IndicatorsModal';
 import { QuickOrderWidget } from './chart/QuickOrderWidget';
+import { HistoryOverlay } from './chart/HistoryOverlay';
 import { Clock, X } from 'lucide-react';
 
 interface TradingChartProps {
@@ -60,8 +61,21 @@ interface TradingChartProps {
   auditLogs?: SignalAuditLog[];
   onPlaceOrder?: (side: 'Buy' | 'Sell', lots: number, price: number) => Promise<void>;
   onClosePosition?: (ticket: number) => Promise<void>;
-  onLoadOlderCandles?: () => Promise<boolean>;
+  onLoadOlderCandles?: () => Promise<HistoryLoadResult>;
   isLoadingHistory?: boolean;
+}
+
+export interface HistoryLoadResult {
+  loaded: number; // bars added by this page (0 = provider has no older data)
+  total: number; // total bars now on the chart
+  boundaryTime: number; // unix seconds of the previously-oldest bar (where the new page joins)
+}
+
+interface HistoryLoadMark {
+  time: number;
+  loaded: number;
+  total: number;
+  batch: number;
 }
 
 export const TradingChart: React.FC<TradingChartProps> = ({
@@ -224,20 +238,25 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // Historical pagination & notice
   const [hasMoreHistory, setHasMoreHistory] = useState<boolean>(true);
   const [historyNotice, setHistoryNotice] = useState<string | null>(null);
+  const [historyMarks, setHistoryMarks] = useState<HistoryLoadMark[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
-  // Auto-dismiss notice after 4.5 seconds
+  // Auto-dismiss transient notice after 6 seconds (end-of-history state stays in the status badge)
   useEffect(() => {
     if (!historyNotice) return;
-    const timer = setTimeout(() => setHistoryNotice(null), 4500);
+    const timer = setTimeout(() => setHistoryNotice(null), 6000);
     return () => clearTimeout(timer);
   }, [historyNotice]);
 
   // Synchronizer & Pagination refs
-  const isSyncingRangeRef = useRef<boolean>(false);
   const lastFetchTimeRef = useRef<number>(0);
   const isLoadingHistoryRef = useRef<boolean>(isLoadingHistory);
   const hasMoreHistoryRef = useRef<boolean>(true);
-  const onLoadOlderCandlesRef = useRef<(() => Promise<boolean>) | undefined>(onLoadOlderCandles);
+  const onLoadOlderCandlesRef = useRef<(() => Promise<HistoryLoadResult>) | undefined>(onLoadOlderCandles);
+  const symbolRef = useRef(symbol);
+  const timeframeRef = useRef(timeframe);
+  symbolRef.current = symbol;
+  timeframeRef.current = timeframe;
 
   useEffect(() => {
     isLoadingHistoryRef.current = isLoadingHistory;
@@ -252,6 +271,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     hasMoreHistoryRef.current = true;
     setHasMoreHistory(true);
     setHistoryNotice(null);
+    setHistoryError(null);
+    setHistoryMarks([]);
   }, [symbol, timeframe]);
 
   // Track candles info across updates to lock zoom and scroll position
@@ -263,33 +284,44 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     timeframe: Timeframe;
   } | null>(null);
 
+  const runHistoryLoad = async () => {
+    if (isLoadingHistoryRef.current || !hasMoreHistoryRef.current || !onLoadOlderCandlesRef.current) return;
+    isLoadingHistoryRef.current = true;
+    const requestKey = `${symbolRef.current}|${timeframeRef.current}`;
+    try {
+      const result = await onLoadOlderCandlesRef.current();
+      if (requestKey !== `${symbolRef.current}|${timeframeRef.current}`) return;
+      setHistoryError(null);
+      if (result.loaded > 0) {
+        setHistoryMarks((prev) => [
+          ...prev,
+          { time: result.boundaryTime, loaded: result.loaded, total: result.total, batch: prev.length + 1 },
+        ]);
+        setHistoryNotice(`Loaded ${result.loaded} older bars · ${result.total} bars total`);
+      } else if (result.boundaryTime > 0) {
+        hasMoreHistoryRef.current = false;
+        setHasMoreHistory(false);
+        setHistoryNotice(
+          `No older data from provider before ${new Date(result.boundaryTime * 1000).toUTCString().slice(5, 22)} UTC · ${result.total} bars total`
+        );
+      }
+    } catch {
+      setHistoryError('Failed to load older bars (network/provider error). Scroll left again to retry.');
+    } finally {
+      isLoadingHistoryRef.current = false;
+    }
+  };
+
   const checkAndLoadOlderHistory = () => {
     const now = Date.now();
-    if (
-      now - lastFetchTimeRef.current > 1800 &&
-      !isLoadingHistoryRef.current &&
-      hasMoreHistoryRef.current &&
-      onLoadOlderCandlesRef.current
-    ) {
+    if (now - lastFetchTimeRef.current > 1200) {
       lastFetchTimeRef.current = now;
-      onLoadOlderCandlesRef.current().then((hasMore) => {
-        if (!hasMore) {
-          hasMoreHistoryRef.current = false;
-          setHasMoreHistory(false);
-          setHistoryNotice('Earliest chart history reached for this timeframe');
-        }
-      });
+      runHistoryLoad();
     }
   };
 
   const handleManualLoadHistory = async () => {
-    if (isLoadingHistoryRef.current || !hasMoreHistoryRef.current || !onLoadOlderCandlesRef.current) return;
-    const hasMore = await onLoadOlderCandlesRef.current();
-    if (!hasMore) {
-      hasMoreHistoryRef.current = false;
-      setHasMoreHistory(false);
-      setHistoryNotice('Earliest chart history reached for this timeframe');
-    }
+    await runHistoryLoad();
   };
 
   // ----------------------------------------------------
@@ -434,7 +466,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // ----------------------------------------------------
   useEffect(() => {
     const chart = mainChartRef.current;
-    if (!chart || cleanCandles.length === 0) return;
+    if (!chart) return;
+    if (cleanCandles.length === 0) {
+      // Series is being switched (App clears candles first): treat the next dataset as a fresh series
+      prevCandlesInfoRef.current = null;
+      return;
+    }
 
     const timeScale = chart.timeScale();
     const prevRange = timeScale.getVisibleLogicalRange();
@@ -622,12 +659,20 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     syncIndicatorLine('spanB', activeIndicators.ichimoku, '#f59e0b', 1, ichi.spanB, LineStyle.Dotted, 'Span B');
 
     // E. Viewport & Zoom Lock Synchronization
-    if (isNewSymbolOrTimeframe) {
-      setTimeout(() => {
-        try {
-          timeScale.fitContent();
-        } catch {}
-      }, 50);
+    // Detect a genuine series replacement (symbol/timeframe/provider switch) vs. an incremental update.
+    let isReplacement = isNewSymbolOrTimeframe;
+    if (!isReplacement && prevInfo) {
+      const times = new Set(cleanCandles.map((c) => getCandleTimeSeconds(c.timestamp)));
+      isReplacement = !times.has(prevInfo.latestTime) && !times.has(prevInfo.earliestTime);
+    }
+
+    if (isReplacement) {
+      // Open new series TradingView-style: fixed readable bar spacing anchored to the latest bar.
+      // (fitContent squeezed every bar onto screen, put range.from at 0 and instantly triggered history paging.)
+      try {
+        timeScale.applyOptions({ barSpacing: 8, rightOffset: 6 });
+        timeScale.scrollToRealTime();
+      } catch {}
     } else if (prevRange && prevInfo) {
       let prependedCount = 0;
       if (earliestTime < prevInfo.earliestTime) {
@@ -637,29 +682,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
 
       if (prependedCount > 0) {
-        // Shift visible range by prependedCount so the viewport stays locked on the exact same bars
+        // Older bars were inserted on the left: every existing bar's logical index grew by prependedCount.
+        // Shift by exactly that amount so the same candles stay under the cursor at the same zoom.
         try {
           timeScale.setVisibleLogicalRange({
             from: prevRange.from + prependedCount,
             to: prevRange.to + prependedCount,
           });
         } catch {}
-      } else {
-        const isTrackingLiveEdge = prevRange.to >= prevInfo.count - 2;
-        const appendedCount = cleanCandles.length - prevInfo.count;
-
-        if (isTrackingLiveEdge && appendedCount > 0) {
-          // Advance range smoothly to track live candle
-          try {
-            timeScale.setVisibleLogicalRange({
-              from: prevRange.from + appendedCount,
-              to: prevRange.to + appendedCount,
-            });
-          } catch {}
-        }
-        // When user has scrolled back to inspect history or zoom, DO NOT override visibleLogicalRange.
-        // Lightweight Charts maintains the exact scroll position and bar sizing naturally.
       }
+      // Live ticks / appended bars: do NOT touch the range. Lightweight Charts keeps bar spacing and
+      // auto-follows the newest bar only when it is already visible (shiftVisibleRangeOnNewBar).
     }
 
     prevCandlesInfoRef.current = {
@@ -764,6 +797,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         });
       });
 
+    // History page boundaries: placed on the bar that was the oldest before each page was loaded
+    historyMarks.forEach((m) => {
+      markers.push({
+        time: m.time as UTCTimestamp,
+        position: 'aboveBar',
+        color: '#a78bfa',
+        shape: 'arrowDown',
+        text: `#${m.batch} +${m.loaded} bars · total ${m.total}`,
+      });
+    });
+
     if (markers.length > 0) {
       markers.sort((a, b) => Number(a.time) - Number(b.time));
       try {
@@ -774,7 +818,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         series.setMarkers([]);
       } catch {}
     }
-  }, [positions, auditLogs, symbol]);
+  }, [positions, auditLogs, symbol, historyMarks, chartType, cleanCandles]);
 
   // ----------------------------------------------------
   // 3. RSI Oscillator Sub-Pane (Lifecycle & Data separated)
@@ -1208,6 +1252,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               chartDimensions={chartDimensions}
               priceRange={priceRange}
               candles={cleanCandles}
+            />
+
+            {/* History page boundaries + persistent history status */}
+            <HistoryOverlay
+              chart={mainChartRef.current}
+              boundaries={historyMarks}
+              totalBars={cleanCandles.length}
+              oldestTime={cleanCandles.length > 0 ? getCandleTimeSeconds(cleanCandles[0].timestamp) : null}
+              isLoading={isLoadingHistory}
+              hasMore={hasMoreHistory}
+              error={historyError}
+              onLoadMore={handleManualLoadHistory}
             />
           </div>
 

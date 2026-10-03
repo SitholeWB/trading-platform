@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Header } from './components/Header';
 import { NavigationSidebar, PageId } from './components/NavigationSidebar';
 import { BotOverview } from './components/BotOverview';
@@ -110,31 +110,40 @@ export function App() {
   }, []);
 
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+
+  // Identity of the currently displayed series. NOTE: the backend serializes the
+  // Timeframe enum as a number, so candle.timeframe can never be compared to 'M5'.
+  // Comparing it previously caused every 8s live poll to wipe all loaded history.
+  const seriesKey = `${selectedSymbol}|${timeframe}|${activeProvider}`;
+  const seriesKeyRef = useRef(seriesKey);
+  const candlesRef = useRef<Candle[]>(candles);
+  const isLoadingHistoryRef = useRef(false);
+  const hasMoreHistoryRef = useRef(true);
+
+  useEffect(() => {
+    candlesRef.current = candles;
+  }, [candles]);
+
+  const mergeCandles = (a: Candle[], b: Candle[]): Candle[] => {
+    const map = new Map<number, Candle>();
+    a.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
+    b.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
+    return Array.from(map.entries())
+      .sort((x, y) => x[0] - y[0])
+      .map((e) => e[1]);
+  };
 
   // Fetch real-time / public multi-timeframe candles from active provider
-  const fetchLiveCandles = async (isInitial = false) => {
+  const fetchLiveCandles = async (isInitial = false, key?: string) => {
     try {
-      const countToFetch = isInitial ? 150 : 60;
+      const targetKey = key || seriesKeyRef.current;
+      const countToFetch = isInitial ? 300 : 30;
       const realCandles = await tradingApi.getCandles(selectedSymbol, timeframe, countToFetch);
+      // Drop responses for a symbol/timeframe the user has already navigated away from
+      if (targetKey !== seriesKeyRef.current) return;
       if (realCandles && realCandles.length > 0) {
-        setCandles((prev) => {
-          if (
-            isInitial ||
-            prev.length === 0 ||
-            prev[0].symbol !== selectedSymbol ||
-            prev[0].timeframe !== timeframe
-          ) {
-            return realCandles;
-          }
-          // Merge incoming live ticks with existing historical candles by timestamp
-          const map = new Map<number, Candle>();
-          prev.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
-          realCandles.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
-          return Array.from(map.values()).sort(
-            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-          );
-        });
+        // Initial load replaces; live polls only merge (never discard loaded history)
+        setCandles((prev) => (isInitial ? mergeCandles([], realCandles) : mergeCandles(prev, realCandles)));
       }
     } catch (err) {
       console.warn('Live candles fetch warning:', err);
@@ -142,82 +151,53 @@ export function App() {
   };
 
   useEffect(() => {
-    setHasMoreHistory(true);
-    fetchLiveCandles(true);
-    const interval = setInterval(() => fetchLiveCandles(false), 8000);
+    seriesKeyRef.current = seriesKey;
+    hasMoreHistoryRef.current = true;
+    isLoadingHistoryRef.current = false;
+    candlesRef.current = [];
+    setCandles([]);
+    fetchLiveCandles(true, seriesKey);
+    const interval = setInterval(() => fetchLiveCandles(false, seriesKey), 8000);
     return () => clearInterval(interval);
-  }, [selectedSymbol, timeframe, activeProvider]);
+  }, [seriesKey]);
 
-  const handleLoadOlderCandles = async (): Promise<boolean> => {
-    if (isLoadingHistory || !hasMoreHistory || candles.length === 0) return false;
+  /**
+   * Loads one page of real older bars from the provider.
+   * Returns how many bars were added (0 = provider has no more history) and the new total.
+   * No bars are fabricated: when the provider runs out, the chart reports the end of history.
+   */
+  const handleLoadOlderCandles = async (): Promise<{ loaded: number; total: number; boundaryTime: number }> => {
+    const current = candlesRef.current;
+    const key = seriesKeyRef.current;
+    if (isLoadingHistoryRef.current || !hasMoreHistoryRef.current || current.length === 0) {
+      return { loaded: 0, total: current.length, boundaryTime: 0 };
+    }
+    isLoadingHistoryRef.current = true;
     setIsLoadingHistory(true);
     try {
-      const oldest = candles[0];
-      const oldestSec = Math.floor(new Date(oldest.timestamp).getTime() / 1000);
-      let olderCandles: Candle[] = [];
+      const oldestSec = getCandleTimeSeconds(current[0].timestamp);
+      const olderCandles = await tradingApi.getCandles(selectedSymbol, timeframe, 300, oldestSec);
+      if (key !== seriesKeyRef.current) return { loaded: 0, total: candlesRef.current.length, boundaryTime: 0 };
 
-      try {
-        olderCandles = await tradingApi.getCandles(selectedSymbol, timeframe, 150, oldestSec);
-      } catch (e) {
-        console.warn('Backend older candles fetch warning, using local extension:', e);
-      }
-
-      let strictlyOlder = (olderCandles || []).filter(
-        (c) => Math.floor(new Date(c.timestamp).getTime() / 1000) < oldestSec
+      const strictlyOlder = (olderCandles || []).filter(
+        (c) => getCandleTimeSeconds(c.timestamp) < oldestSec
       );
 
-      // If remote provider had 0 older bars (e.g. weekend or API limit reached), generate continuous older history
       if (strictlyOlder.length === 0) {
-        const tfSecMap: Record<string, number> = {
-          M1: 60,
-          M5: 300,
-          M15: 900,
-          M30: 1800,
-          H1: 3600,
-          H4: 14400,
-          D1: 86400,
-          W1: 604800,
-          MN1: 2592000,
-        };
-        const stepSec = tfSecMap[timeframe] || 300;
-        const synth: Candle[] = [];
-        let p = oldest.open;
-        for (let i = 1; i <= 60; i++) {
-          const tIso = new Date((oldestSec - i * stepSec) * 1000).toISOString();
-          const delta = (Math.random() - 0.49) * (selectedSymbol.includes('JPY') ? 0.12 : 0.001);
-          const open = p - delta;
-          const close = p;
-          const high = Math.max(open, close) + Math.random() * (selectedSymbol.includes('JPY') ? 0.06 : 0.0005);
-          const low = Math.min(open, close) - Math.random() * (selectedSymbol.includes('JPY') ? 0.06 : 0.0005);
-          synth.push({
-            symbol: selectedSymbol,
-            timeframe,
-            timestamp: tIso,
-            open: Number(open.toFixed(5)),
-            high: Number(high.toFixed(5)),
-            low: Number(low.toFixed(5)),
-            close: Number(close.toFixed(5)),
-            volume: Math.floor(Math.random() * 1200 + 200),
-            isComplete: true,
-          });
-          p = open;
-        }
-        strictlyOlder = synth.reverse();
+        hasMoreHistoryRef.current = false;
+        return { loaded: 0, total: current.length, boundaryTime: oldestSec };
       }
 
-      setCandles((prev) => {
-        const map = new Map<number, Candle>();
-        strictlyOlder.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
-        prev.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
-        return Array.from(map.values()).sort(
-          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
-      });
-      return true;
+      const merged = mergeCandles(strictlyOlder, candlesRef.current);
+      candlesRef.current = merged;
+      setCandles(merged);
+      return { loaded: merged.length - current.length, total: merged.length, boundaryTime: oldestSec };
     } catch (err) {
+      // A network error is not "end of history" - allow retrying
       console.warn('Load older candles error:', err);
-      return false;
+      throw err;
     } finally {
+      isLoadingHistoryRef.current = false;
       setIsLoadingHistory(false);
     }
   };
@@ -463,7 +443,6 @@ export function App() {
         onClose={() => setIsSettingsOpen(false)}
         onProviderChanged={(newProvider) => {
           setActiveProvider(newProvider);
-          fetchLiveCandles();
         }}
       />
     </div>
