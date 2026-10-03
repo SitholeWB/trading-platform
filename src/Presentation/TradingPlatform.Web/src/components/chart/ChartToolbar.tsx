@@ -88,6 +88,30 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
 
   const isPos = priceChange.pct >= 0;
 
+  const getCategoryBadge = (sym: string): { label: string; color: string } => {
+    const s = sym.toUpperCase();
+    if (['US500', 'NAS100', 'US30', 'GER40', 'UK100', 'JP225', 'US2000', 'SPX'].includes(s) || s.startsWith('^')) {
+      return { label: 'INDEX', color: 'bg-purple-500/15 text-purple-400 border-purple-500/30' };
+    }
+    if (['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT'].includes(s) || s.endsWith('USDT')) {
+      return { label: 'CRYPTO', color: 'bg-amber-500/15 text-amber-400 border-amber-500/30' };
+    }
+    if (['XAUUSD', 'XAGUSD', 'USOIL', 'UKOIL', 'NATGAS', 'COPPER', 'GOLD', 'SILVER', 'OIL'].includes(s)) {
+      return { label: 'COMM', color: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' };
+    }
+    if (['AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'GOOGL', 'META', 'AMD'].includes(s)) {
+      return { label: 'STOCK', color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' };
+    }
+    return { label: 'FX', color: 'bg-blue-500/15 text-blue-400 border-blue-500/30' };
+  };
+
+  const badge = getCategoryBadge(symbol);
+  const formattedPrice = currentPrice >= 100
+    ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : currentPrice > 10
+    ? currentPrice.toFixed(3)
+    : currentPrice.toFixed(5);
+
   return (
     <div className="relative">
       <div className="h-10 px-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs select-none flex-shrink-0 z-20">
@@ -97,18 +121,19 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           <button
             onClick={onOpenSymbolSearch}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800/80 border border-slate-800 text-slate-100 font-bold transition-all group flex-shrink-0"
+            title="Search or Browse Symbol / Pair (Shortcut: /)"
           >
             <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-400" />
             <span className="font-mono text-sm tracking-wide">{symbol}</span>
-            <span className="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.2 rounded border border-blue-500/20 font-mono hidden sm:inline">
-              FX
+            <span className={`text-[10px] px-1.5 py-0.2 rounded border font-mono hidden sm:inline ${badge.color}`}>
+              {badge.label}
             </span>
             <ChevronDown className="w-3 h-3 text-slate-400" />
           </button>
 
           {/* Live Ticker Price & % Change */}
           <div className="hidden lg:flex items-center gap-1.5 font-mono text-xs px-2 border-r border-slate-800/80 flex-shrink-0">
-            <span className="font-bold text-slate-200">{currentPrice.toFixed(5)}</span>
+            <span className="font-bold text-slate-200">{formattedPrice}</span>
             <span className={`text-[11px] font-semibold ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>
               {isPos ? `+${priceChange.pct.toFixed(2)}%` : `${priceChange.pct.toFixed(2)}%`}
             </span>

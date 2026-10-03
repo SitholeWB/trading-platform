@@ -200,18 +200,94 @@ public class YahooFinanceGateway : IHistoricalDataProvider
 
     private static string NormalizeYahooSymbol(string symbol)
     {
-        var clean = symbol.Trim().ToUpperInvariant();
+        var clean = symbol.Trim().ToUpperInvariant().Replace("/", "").Replace("_", "").Replace(" ", "");
         if (clean.Contains("=") || clean.Contains("^")) return clean;
 
-        if (clean == "EURUSD" || clean == "GBPUSD" || clean == "USDJPY" || clean == "AUDUSD" ||
-            clean == "USDCAD" || clean == "USDCHF" || clean == "NZDUSD" || clean == "EURGBP")
+        // 1. Major Indices
+        switch (clean)
         {
-            return $"{clean}=X";
+            case "US500":
+            case "SPX":
+            case "SPX500":
+            case "S&P500":
+            case "SP500":
+                return "^GSPC";
+            case "NAS100":
+            case "NDX":
+            case "US100":
+            case "NASDAQ":
+            case "NASDAQ100":
+                return "^IXIC";
+            case "US30":
+            case "DJI":
+            case "DOW":
+            case "DOWJONES":
+                return "^DJI";
+            case "US2000":
+            case "RUT":
+            case "RUSSELL2000":
+                return "^RUT";
+            case "GER40":
+            case "DAX":
+            case "DE30":
+            case "DE40":
+                return "^GDAXI";
+            case "UK100":
+            case "FTSE":
+            case "FTSE100":
+                return "^FTSE";
+            case "JP225":
+            case "NIKKEI":
+            case "NIKKEI225":
+                return "^N225";
+            case "VIX":
+                return "^VIX";
         }
 
-        if (clean == "XAUUSD" || clean == "GOLD") return "GC=F";
-        if (clean == "XTIUSD" || clean == "OIL" || clean == "USOIL") return "CL=F";
+        // 2. Commodities
+        switch (clean)
+        {
+            case "XAUUSD":
+            case "GOLD":
+                return "GC=F";
+            case "XAGUSD":
+            case "SILVER":
+                return "SI=F";
+            case "USOIL":
+            case "WTI":
+            case "CRUDE":
+            case "OIL":
+            case "XTIUSD":
+                return "CL=F";
+            case "UKOIL":
+            case "BRENT":
+            case "XBRUSD":
+                return "BZ=F";
+            case "NATGAS":
+            case "NG":
+                return "NG=F";
+            case "COPPER":
+            case "HG":
+                return "HG=F";
+        }
 
+        // 3. Prominent Stocks & ETFs (Do not append =X)
+        var commonEquities = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL", "GOOG", "META", "AMD",
+            "NFLX", "COIN", "PLTR", "INTC", "SPY", "QQQ", "IWM", "DIA", "BABA"
+        };
+        if (commonEquities.Contains(clean))
+        {
+            return clean;
+        }
+
+        // 4. Crypto pairs in Yahoo format
+        if (clean.StartsWith("BTC") && (clean.EndsWith("USD") || clean.EndsWith("USDT"))) return "BTC-USD";
+        if (clean.StartsWith("ETH") && (clean.EndsWith("USD") || clean.EndsWith("USDT"))) return "ETH-USD";
+        if (clean.StartsWith("SOL") && (clean.EndsWith("USD") || clean.EndsWith("USDT"))) return "SOL-USD";
+
+        // 5. Default Forex pairs (e.g. EURUSD, GBPJPY)
         return $"{clean}=X";
     }
 
@@ -229,28 +305,57 @@ public class YahooFinanceGateway : IHistoricalDataProvider
         _ => ("5m", "5d")
     };
 
+    private static decimal GetBaselinePrice(string symbol)
+    {
+        var s = symbol.ToUpperInvariant();
+        if (s.Contains("GSPC") || s.Contains("500") || s.Contains("SPX")) return 5780.00m;
+        if (s.Contains("IXIC") || s.Contains("NAS") || s.Contains("NDX") || s.Contains("QQQ")) return 20150.00m;
+        if (s.Contains("DJI") || s.Contains("US30") || s.Contains("DOW")) return 42350.00m;
+        if (s.Contains("DAX") || s.Contains("GDAXI") || s.Contains("GER40")) return 19450.00m;
+        if (s.Contains("FTSE") || s.Contains("UK100")) return 8320.00m;
+        if (s.Contains("N225") || s.Contains("JP225")) return 38650.00m;
+        if (s.Contains("GC=F") || s.Contains("GOLD") || s.Contains("XAU")) return 2655.00m;
+        if (s.Contains("SI=F") || s.Contains("SILVER") || s.Contains("XAG")) return 31.85m;
+        if (s.Contains("CL=F") || s.Contains("OIL") || s.Contains("WTI")) return 71.50m;
+        if (s.Contains("BZ=F") || s.Contains("BRENT")) return 75.20m;
+        if (s.Contains("BTC")) return 68500.00m;
+        if (s.Contains("ETH")) return 3520.00m;
+        if (s.Contains("SOL")) return 178.00m;
+        if (s.Contains("AAPL")) return 232.00m;
+        if (s.Contains("MSFT")) return 428.00m;
+        if (s.Contains("NVDA")) return 126.00m;
+        if (s.Contains("TSLA")) return 254.00m;
+        if (s.Contains("JPY")) return 154.20m;
+        if (s.Contains("GBP")) return 1.2640m;
+        return 1.0850m;
+    }
+
     private static List<Candle> FallbackCandles(string symbol, Timeframe tf, int count)
     {
         var list = new List<Candle>();
-        decimal currentClose = symbol.Contains("JPY") ? 154.50m : 1.0850m;
+        decimal currentClose = GetBaselinePrice(symbol);
         var now = DateTime.UtcNow;
+
+        double volatility = (double)currentClose * (symbol.Contains("JPY") || currentClose > 100 ? 0.0015 : 0.0008);
 
         for (int i = count; i >= 0; i--)
         {
             decimal open = currentClose;
-            decimal change = (decimal)((Random.Shared.NextDouble() - 0.49) * (symbol.Contains("JPY") ? 0.15 : 0.0012));
+            decimal change = (decimal)((Random.Shared.NextDouble() - 0.49) * volatility);
             decimal close = open + change;
-            decimal high = Math.Max(open, close) + (decimal)(Random.Shared.NextDouble() * (symbol.Contains("JPY") ? 0.08 : 0.0006));
-            decimal low = Math.Min(open, close) - (decimal)(Random.Shared.NextDouble() * (symbol.Contains("JPY") ? 0.08 : 0.0006));
+            decimal high = Math.Max(open, close) + (decimal)(Random.Shared.NextDouble() * volatility * 0.5);
+            decimal low = Math.Min(open, close) - (decimal)(Random.Shared.NextDouble() * volatility * 0.5);
+
+            int decimals = currentClose >= 100 ? 2 : (symbol.Contains("JPY") ? 3 : 5);
 
             list.Add(new Candle(
                 symbol,
                 tf,
                 now.AddMinutes(-5 * i),
-                Math.Round(open, 5),
-                Math.Round(high, 5),
-                Math.Round(low, 5),
-                Math.Round(close, 5),
+                Math.Round(open, decimals),
+                Math.Round(high, decimals),
+                Math.Round(low, decimals),
+                Math.Round(close, decimals),
                 Random.Shared.Next(200, 2000),
                 isComplete: true));
 

@@ -192,3 +192,28 @@ export interface BrokerConfig {
   twelveDataApiKey: string;
   updatedAtUtc: string;
 }
+
+export type MarketCategory = 'all' | 'forex' | 'crypto' | 'indices' | 'commodities' | 'stocks';
+
+export interface SymbolCatalogItem {
+  symbol: string;
+  name: string;
+  aliases: string[];
+  category: 'forex' | 'crypto' | 'indices' | 'commodities' | 'stocks';
+  exchange: string;
+  price: string;
+  change: string;
+  isPositive: boolean;
+  spreadPips: string;
+  tradingHours: string;
+  supportedProviders: string[];
+  providerSymbols: Record<string, string>;
+  description: string;
+}
+
+export interface SymbolsCatalogResponse {
+  activeProvider: string;
+  total: number;
+  symbols: SymbolCatalogItem[];
+}
+

@@ -338,6 +338,829 @@ marketDataGroup.MapGet("/providers", async (IBrokerConfigurationRepository repo,
     });
 });
 
+marketDataGroup.MapGet("/symbols", async (
+    [FromQuery] string? provider,
+    [FromQuery] string? category,
+    [FromQuery] string? search,
+    IBrokerConfigurationRepository repo,
+    CancellationToken ct) =>
+{
+    var config = await repo.GetConfigurationAsync(ct);
+    string activeProv = config.ActiveProvider ?? "KeylessPublic";
+
+    var allSymbols = new[]
+    {
+        // ---------------- Indices ----------------
+        new {
+            Symbol = "US500",
+            Name = "S&P 500 Index",
+            Aliases = new[] { "SPX", "S&P 500", "SP500", "^GSPC" },
+            Category = "indices",
+            Exchange = "CBOE / NYSE",
+            Price = "5,782.40",
+            Change = "+0.52%",
+            IsPositive = true,
+            SpreadPips = "0.5",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "^GSPC (Yahoo Finance)",
+                ["Oanda"] = "SPX500_USD",
+                ["ZeroMQ"] = "US500",
+                ["Synthetic"] = "US500"
+            },
+            Description = "Standard & Poor's 500 benchmark index of 500 top US corporations."
+        },
+        new {
+            Symbol = "NAS100",
+            Name = "Nasdaq 100 Index",
+            Aliases = new[] { "NDX", "NASDAQ", "US100", "^IXIC", "QQQ" },
+            Category = "indices",
+            Exchange = "NASDAQ",
+            Price = "20,140.50",
+            Change = "+0.88%",
+            IsPositive = true,
+            SpreadPips = "1.0",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "^IXIC (Yahoo Finance)",
+                ["Oanda"] = "NAS100_USD",
+                ["ZeroMQ"] = "NAS100",
+                ["Synthetic"] = "NAS100"
+            },
+            Description = "Top 100 non-financial tech, biotechnology, and growth innovators."
+        },
+        new {
+            Symbol = "US30",
+            Name = "Dow Jones Industrial Average",
+            Aliases = new[] { "DJI", "DOW", "WALL STREET 30", "^DJI" },
+            Category = "indices",
+            Exchange = "NYSE",
+            Price = "42,352.00",
+            Change = "+0.35%",
+            IsPositive = true,
+            SpreadPips = "1.5",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "^DJI (Yahoo Finance)",
+                ["Oanda"] = "US30_USD",
+                ["ZeroMQ"] = "US30",
+                ["Synthetic"] = "US30"
+            },
+            Description = "Price-weighted benchmark of 30 blue-chip American industry giants."
+        },
+        new {
+            Symbol = "GER40",
+            Name = "DAX 40 Index",
+            Aliases = new[] { "DAX", "DE40", "GERMANY 40", "^GDAXI" },
+            Category = "indices",
+            Exchange = "XETRA",
+            Price = "19,450.20",
+            Change = "+0.28%",
+            IsPositive = true,
+            SpreadPips = "1.2",
+            TradingHours = "European Market (09:00 - 17:30 CET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "^GDAXI (Yahoo Finance)",
+                ["Oanda"] = "DE30_EUR",
+                ["ZeroMQ"] = "GER40",
+                ["Synthetic"] = "GER40"
+            },
+            Description = "The 40 major German blue chip companies trading on the Frankfurt Stock Exchange."
+        },
+        new {
+            Symbol = "UK100",
+            Name = "FTSE 100 Index",
+            Aliases = new[] { "FTSE", "UK100_GBP", "^FTSE" },
+            Category = "indices",
+            Exchange = "LSE",
+            Price = "8,324.50",
+            Change = "-0.15%",
+            IsPositive = false,
+            SpreadPips = "1.0",
+            TradingHours = "London Market (08:00 - 16:30 GMT)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "^FTSE (Yahoo Finance)",
+                ["Oanda"] = "UK100_GBP",
+                ["ZeroMQ"] = "UK100",
+                ["Synthetic"] = "UK100"
+            },
+            Description = "100 highest market capitalization companies listed on the London Stock Exchange."
+        },
+        new {
+            Symbol = "JP225",
+            Name = "Nikkei 225 Index",
+            Aliases = new[] { "NIKKEI", "JP225_USD", "^N225" },
+            Category = "indices",
+            Exchange = "JPX",
+            Price = "38,650.00",
+            Change = "+1.12%",
+            IsPositive = true,
+            SpreadPips = "3.0",
+            TradingHours = "Tokyo Market (09:00 - 15:00 JST)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "^N225 (Yahoo Finance)",
+                ["Oanda"] = "JP225_USD",
+                ["ZeroMQ"] = "JP225",
+                ["Synthetic"] = "JP225"
+            },
+            Description = "Price-weighted index for the Tokyo Stock Exchange."
+        },
+        new {
+            Symbol = "US2000",
+            Name = "Russell 2000 Index",
+            Aliases = new[] { "RUT", "RUSSELL", "^RUT" },
+            Category = "indices",
+            Exchange = "CBOE",
+            Price = "2,215.40",
+            Change = "+0.42%",
+            IsPositive = true,
+            SpreadPips = "0.8",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "^RUT (Yahoo Finance)",
+                ["Oanda"] = "US2000_USD",
+                ["Synthetic"] = "US2000"
+            },
+            Description = "Small-cap benchmark tracking approximately 2,000 small US companies."
+        },
+
+        // ---------------- Commodities ----------------
+        new {
+            Symbol = "XAUUSD",
+            Name = "Gold / US Dollar",
+            Aliases = new[] { "GOLD", "XAU_USD", "GC=F" },
+            Category = "commodities",
+            Exchange = "COMEX / Spot",
+            Price = "2,654.80",
+            Change = "+0.74%",
+            IsPositive = true,
+            SpreadPips = "2.0",
+            TradingHours = "24/5 (Mon-Fri)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "GC=F (Yahoo Finance)",
+                ["Oanda"] = "XAU_USD",
+                ["ZeroMQ"] = "GOLD",
+                ["Synthetic"] = "XAUUSD"
+            },
+            Description = "Physical Gold spot commodity priced in US Dollars per troy ounce."
+        },
+        new {
+            Symbol = "XAGUSD",
+            Name = "Silver / US Dollar",
+            Aliases = new[] { "SILVER", "XAG_USD", "SI=F" },
+            Category = "commodities",
+            Exchange = "COMEX / Spot",
+            Price = "31.85",
+            Change = "+1.15%",
+            IsPositive = true,
+            SpreadPips = "1.8",
+            TradingHours = "24/5 (Mon-Fri)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "SI=F (Yahoo Finance)",
+                ["Oanda"] = "XAG_USD",
+                ["ZeroMQ"] = "SILVER",
+                ["Synthetic"] = "XAGUSD"
+            },
+            Description = "Physical Silver spot commodity priced in US Dollars per troy ounce."
+        },
+        new {
+            Symbol = "USOIL",
+            Name = "WTI Crude Oil",
+            Aliases = new[] { "WTI", "CRUDE", "OIL", "CL=F", "WTICO_USD" },
+            Category = "commodities",
+            Exchange = "NYMEX",
+            Price = "71.50",
+            Change = "-1.40%",
+            IsPositive = false,
+            SpreadPips = "2.5",
+            TradingHours = "24/5 (Mon-Fri)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "CL=F (Yahoo Finance)",
+                ["Oanda"] = "WTICO_USD",
+                ["ZeroMQ"] = "USOIL",
+                ["Synthetic"] = "USOIL"
+            },
+            Description = "West Texas Intermediate light sweet crude oil futures."
+        },
+        new {
+            Symbol = "UKOIL",
+            Name = "Brent Crude Oil",
+            Aliases = new[] { "BRENT", "BCO_USD", "BZ=F" },
+            Category = "commodities",
+            Exchange = "ICE",
+            Price = "75.20",
+            Change = "-1.10%",
+            IsPositive = false,
+            SpreadPips = "2.5",
+            TradingHours = "24/5 (Mon-Fri)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "BZ=F (Yahoo Finance)",
+                ["Oanda"] = "BCO_USD",
+                ["ZeroMQ"] = "UKOIL",
+                ["Synthetic"] = "UKOIL"
+            },
+            Description = "North Sea Brent blend crude oil global pricing standard."
+        },
+        new {
+            Symbol = "NATGAS",
+            Name = "Natural Gas",
+            Aliases = new[] { "NG", "NATGAS_USD", "NG=F" },
+            Category = "commodities",
+            Exchange = "NYMEX",
+            Price = "2.85",
+            Change = "+2.10%",
+            IsPositive = true,
+            SpreadPips = "3.0",
+            TradingHours = "24/5 (Mon-Fri)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "NG=F (Yahoo Finance)",
+                ["Oanda"] = "NATGAS_USD",
+                ["Synthetic"] = "NATGAS"
+            },
+            Description = "Henry Hub Louisiana natural gas futures."
+        },
+        new {
+            Symbol = "COPPER",
+            Name = "High Grade Copper",
+            Aliases = new[] { "HG", "COPPER_USD", "HG=F" },
+            Category = "commodities",
+            Exchange = "COMEX",
+            Price = "4.32",
+            Change = "+0.65%",
+            IsPositive = true,
+            SpreadPips = "2.0",
+            TradingHours = "24/5 (Mon-Fri)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "HG=F (Yahoo Finance)",
+                ["Oanda"] = "COPPER_USD",
+                ["Synthetic"] = "COPPER"
+            },
+            Description = "Industrial copper futures benchmark contract."
+        },
+
+        // ---------------- Forex ----------------
+        new {
+            Symbol = "EURUSD",
+            Name = "Euro / US Dollar",
+            Aliases = new[] { "EUR_USD", "EUR/USD" },
+            Category = "forex",
+            Exchange = "FX Interbank",
+            Price = "1.08520",
+            Change = "+0.18%",
+            IsPositive = true,
+            SpreadPips = "0.6",
+            TradingHours = "24/5 (Sun 17:00 - Fri 17:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "EURUSD=X (Yahoo)",
+                ["Oanda"] = "EUR_USD",
+                ["ZeroMQ"] = "EURUSD",
+                ["Synthetic"] = "EURUSD"
+            },
+            Description = "World's most actively traded currency pair with highest market liquidity."
+        },
+        new {
+            Symbol = "GBPUSD",
+            Name = "British Pound / US Dollar",
+            Aliases = new[] { "GBP_USD", "GBP/USD", "CABLE" },
+            Category = "forex",
+            Exchange = "FX Interbank",
+            Price = "1.26420",
+            Change = "-0.12%",
+            IsPositive = false,
+            SpreadPips = "0.8",
+            TradingHours = "24/5 (Sun 17:00 - Fri 17:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "GBPUSD=X (Yahoo)",
+                ["Oanda"] = "GBP_USD",
+                ["ZeroMQ"] = "GBPUSD",
+                ["Synthetic"] = "GBPUSD"
+            },
+            Description = "The Cable: historical liquidity benchmark between London and New York."
+        },
+        new {
+            Symbol = "USDJPY",
+            Name = "US Dollar / Japanese Yen",
+            Aliases = new[] { "USD_JPY", "USD/JPY" },
+            Category = "forex",
+            Exchange = "FX Interbank",
+            Price = "154.210",
+            Change = "+0.45%",
+            IsPositive = true,
+            SpreadPips = "0.7",
+            TradingHours = "24/5 (Sun 17:00 - Fri 17:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "USDJPY=X (Yahoo)",
+                ["Oanda"] = "USD_JPY",
+                ["ZeroMQ"] = "USDJPY",
+                ["Synthetic"] = "USDJPY"
+            },
+            Description = "Primary Asian session liquidity hub and safe haven currency pair."
+        },
+        new {
+            Symbol = "AUDUSD",
+            Name = "Australian Dollar / US Dollar",
+            Aliases = new[] { "AUD_USD", "AUD/USD", "AUSSIE" },
+            Category = "forex",
+            Exchange = "FX Interbank",
+            Price = "0.65340",
+            Change = "+0.04%",
+            IsPositive = true,
+            SpreadPips = "0.9",
+            TradingHours = "24/5 (Sun 17:00 - Fri 17:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "AUDUSD=X (Yahoo)",
+                ["Oanda"] = "AUD_USD",
+                ["ZeroMQ"] = "AUDUSD",
+                ["Synthetic"] = "AUDUSD"
+            },
+            Description = "Key commodity currency influenced heavily by mining and Asia-Pacific trade."
+        },
+        new {
+            Symbol = "USDCAD",
+            Name = "US Dollar / Canadian Dollar",
+            Aliases = new[] { "USD_CAD", "USD/CAD", "LOONIE" },
+            Category = "forex",
+            Exchange = "FX Interbank",
+            Price = "1.38120",
+            Change = "-0.22%",
+            IsPositive = false,
+            SpreadPips = "1.1",
+            TradingHours = "24/5 (Sun 17:00 - Fri 17:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "USDCAD=X (Yahoo)",
+                ["Oanda"] = "USD_CAD",
+                ["ZeroMQ"] = "USDCAD",
+                ["Synthetic"] = "USDCAD"
+            },
+            Description = "Cross-border North American trade proxy strongly correlated with oil prices."
+        },
+        new {
+            Symbol = "USDCHF",
+            Name = "US Dollar / Swiss Franc",
+            Aliases = new[] { "USD_CHF", "USD/CHF", "SWISSIE" },
+            Category = "forex",
+            Exchange = "FX Interbank",
+            Price = "0.90230",
+            Change = "+0.10%",
+            IsPositive = true,
+            SpreadPips = "1.0",
+            TradingHours = "24/5 (Sun 17:00 - Fri 17:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "USDCHF=X (Yahoo)",
+                ["Oanda"] = "USD_CHF",
+                ["ZeroMQ"] = "USDCHF",
+                ["Synthetic"] = "USDCHF"
+            },
+            Description = "Classic safe haven and banking reserve currency pair."
+        },
+        new {
+            Symbol = "NZDUSD",
+            Name = "New Zealand Dollar / US Dollar",
+            Aliases = new[] { "NZD_USD", "NZD/USD", "KIWI" },
+            Category = "forex",
+            Exchange = "FX Interbank",
+            Price = "0.59840",
+            Change = "-0.08%",
+            IsPositive = false,
+            SpreadPips = "1.2",
+            TradingHours = "24/5 (Sun 17:00 - Fri 17:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "NZDUSD=X (Yahoo)",
+                ["Oanda"] = "NZD_USD",
+                ["ZeroMQ"] = "NZDUSD",
+                ["Synthetic"] = "NZDUSD"
+            },
+            Description = "The Kiwi: dairy export driven Pacific currency pair."
+        },
+        new {
+            Symbol = "EURGBP",
+            Name = "Euro / British Pound",
+            Aliases = new[] { "EUR_GBP", "EUR/GBP" },
+            Category = "forex",
+            Exchange = "FX Interbank",
+            Price = "0.85840",
+            Change = "+0.25%",
+            IsPositive = true,
+            SpreadPips = "0.9",
+            TradingHours = "24/5 (Sun 17:00 - Fri 17:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "EURGBP=X (Yahoo)",
+                ["Oanda"] = "EUR_GBP",
+                ["ZeroMQ"] = "EURGBP",
+                ["Synthetic"] = "EURGBP"
+            },
+            Description = "Major European cross pair capturing policy divergence between ECB and BOE."
+        },
+        new {
+            Symbol = "EURJPY",
+            Name = "Euro / Japanese Yen",
+            Aliases = new[] { "EUR_JPY", "EUR/JPY" },
+            Category = "forex",
+            Exchange = "FX Interbank",
+            Price = "167.350",
+            Change = "+0.62%",
+            IsPositive = true,
+            SpreadPips = "1.2",
+            TradingHours = "24/5 (Sun 17:00 - Fri 17:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "EURJPY=X (Yahoo)",
+                ["Oanda"] = "EUR_JPY",
+                ["ZeroMQ"] = "EURJPY",
+                ["Synthetic"] = "EURJPY"
+            },
+            Description = "High-beta carry trade pair with rapid volatility swings."
+        },
+        new {
+            Symbol = "GBPJPY",
+            Name = "British Pound / Japanese Yen",
+            Aliases = new[] { "GBP_JPY", "GBP/JPY", "THE BEAST", "GEPPY" },
+            Category = "forex",
+            Exchange = "FX Interbank",
+            Price = "194.920",
+            Change = "+0.33%",
+            IsPositive = true,
+            SpreadPips = "1.4",
+            TradingHours = "24/5 (Sun 17:00 - Fri 17:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Oanda", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "GBPJPY=X (Yahoo)",
+                ["Oanda"] = "GBP_JPY",
+                ["ZeroMQ"] = "GBPJPY",
+                ["Synthetic"] = "GBPJPY"
+            },
+            Description = "Known as The Dragon / The Beast for massive intraday momentum swings."
+        },
+
+        // ---------------- Crypto (24/7 Keyless Binance Public) ----------------
+        new {
+            Symbol = "BTCUSDT",
+            Name = "Bitcoin / Tether USD",
+            Aliases = new[] { "BTC", "BITCOIN", "BTC-USD", "BTCUSD" },
+            Category = "crypto",
+            Exchange = "Binance / 24/7",
+            Price = "68,450.00",
+            Change = "+1.85%",
+            IsPositive = true,
+            SpreadPips = "0.1",
+            TradingHours = "24/7 Continuous",
+            SupportedProviders = new[] { "KeylessPublic", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "BTCUSDT (Binance 24/7)",
+                ["ZeroMQ"] = "BTCUSD",
+                ["Synthetic"] = "BTCUSDT"
+            },
+            Description = "The premier decentralized digital asset and store-of-value crypto."
+        },
+        new {
+            Symbol = "ETHUSDT",
+            Name = "Ethereum / Tether USD",
+            Aliases = new[] { "ETH", "ETHEREUM", "ETH-USD", "ETHUSD" },
+            Category = "crypto",
+            Exchange = "Binance / 24/7",
+            Price = "3,520.50",
+            Change = "+0.95%",
+            IsPositive = true,
+            SpreadPips = "0.2",
+            TradingHours = "24/7 Continuous",
+            SupportedProviders = new[] { "KeylessPublic", "ZeroMQ", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "ETHUSDT (Binance 24/7)",
+                ["ZeroMQ"] = "ETHUSD",
+                ["Synthetic"] = "ETHUSDT"
+            },
+            Description = "Leading smart-contract blockchain powering decentralized finance."
+        },
+        new {
+            Symbol = "SOLUSDT",
+            Name = "Solana / Tether USD",
+            Aliases = new[] { "SOL", "SOLANA", "SOL-USD" },
+            Category = "crypto",
+            Exchange = "Binance / 24/7",
+            Price = "178.40",
+            Change = "+4.20%",
+            IsPositive = true,
+            SpreadPips = "0.2",
+            TradingHours = "24/7 Continuous",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "SOLUSDT (Binance 24/7)",
+                ["Synthetic"] = "SOLUSDT"
+            },
+            Description = "High-throughput Layer 1 blockchain optimized for sub-second settlement."
+        },
+        new {
+            Symbol = "BNBUSDT",
+            Name = "BNB / Tether USD",
+            Aliases = new[] { "BNB", "BINANCE COIN" },
+            Category = "crypto",
+            Exchange = "Binance / 24/7",
+            Price = "585.10",
+            Change = "-0.30%",
+            IsPositive = false,
+            SpreadPips = "0.3",
+            TradingHours = "24/7 Continuous",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "BNBUSDT (Binance 24/7)",
+                ["Synthetic"] = "BNBUSDT"
+            },
+            Description = "Native gas token of the BNB Chain ecosystem."
+        },
+        new {
+            Symbol = "XRPUSDT",
+            Name = "XRP / Tether USD",
+            Aliases = new[] { "XRP", "RIPPLE" },
+            Category = "crypto",
+            Exchange = "Binance / 24/7",
+            Price = "0.5840",
+            Change = "+0.80%",
+            IsPositive = true,
+            SpreadPips = "0.01",
+            TradingHours = "24/7 Continuous",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "XRPUSDT (Binance 24/7)",
+                ["Synthetic"] = "XRPUSDT"
+            },
+            Description = "Enterprise digital asset designed for global cross-border remittances."
+        },
+        new {
+            Symbol = "ADAUSDT",
+            Name = "Cardano / Tether USD",
+            Aliases = new[] { "ADA", "CARDANO" },
+            Category = "crypto",
+            Exchange = "Binance / 24/7",
+            Price = "0.3540",
+            Change = "+1.10%",
+            IsPositive = true,
+            SpreadPips = "0.01",
+            TradingHours = "24/7 Continuous",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "ADAUSDT (Binance 24/7)",
+                ["Synthetic"] = "ADAUSDT"
+            },
+            Description = "Proof-of-stake blockchain network based on peer-reviewed research."
+        },
+        new {
+            Symbol = "DOGEUSDT",
+            Name = "Dogecoin / Tether USD",
+            Aliases = new[] { "DOGE", "DOGECOIN" },
+            Category = "crypto",
+            Exchange = "Binance / 24/7",
+            Price = "0.1140",
+            Change = "+2.45%",
+            IsPositive = true,
+            SpreadPips = "0.01",
+            TradingHours = "24/7 Continuous",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "DOGEUSDT (Binance 24/7)",
+                ["Synthetic"] = "DOGEUSDT"
+            },
+            Description = "Decentralized peer-to-peer digital currency popularized globally."
+        },
+        new {
+            Symbol = "AVAXUSDT",
+            Name = "Avalanche / Tether USD",
+            Aliases = new[] { "AVAX", "AVALANCHE" },
+            Category = "crypto",
+            Exchange = "Binance / 24/7",
+            Price = "28.60",
+            Change = "+1.75%",
+            IsPositive = true,
+            SpreadPips = "0.05",
+            TradingHours = "24/7 Continuous",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "AVAXUSDT (Binance 24/7)",
+                ["Synthetic"] = "AVAXUSDT"
+            },
+            Description = "High-speed smart contract platform built for scalable enterprise dApps."
+        },
+        new {
+            Symbol = "LINKUSDT",
+            Name = "Chainlink / Tether USD",
+            Aliases = new[] { "LINK", "CHAINLINK" },
+            Category = "crypto",
+            Exchange = "Binance / 24/7",
+            Price = "11.80",
+            Change = "+0.60%",
+            IsPositive = true,
+            SpreadPips = "0.02",
+            TradingHours = "24/7 Continuous",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "LINKUSDT (Binance 24/7)",
+                ["Synthetic"] = "LINKUSDT"
+            },
+            Description = "Decentralized oracle network connecting smart contracts to off-chain data."
+        },
+
+        // ---------------- Prominent Stocks (Keyless Yahoo Finance) ----------------
+        new {
+            Symbol = "AAPL",
+            Name = "Apple Inc.",
+            Aliases = new[] { "APPLE", "NASDAQ:AAPL" },
+            Category = "stocks",
+            Exchange = "NASDAQ",
+            Price = "232.50",
+            Change = "+0.65%",
+            IsPositive = true,
+            SpreadPips = "0.05",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "AAPL (Yahoo Finance)",
+                ["Synthetic"] = "AAPL"
+            },
+            Description = "Consumer electronics, personal computing, and digital services giant."
+        },
+        new {
+            Symbol = "MSFT",
+            Name = "Microsoft Corporation",
+            Aliases = new[] { "MICROSOFT", "NASDAQ:MSFT" },
+            Category = "stocks",
+            Exchange = "NASDAQ",
+            Price = "428.15",
+            Change = "+0.42%",
+            IsPositive = true,
+            SpreadPips = "0.08",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "MSFT (Yahoo Finance)",
+                ["Synthetic"] = "MSFT"
+            },
+            Description = "Global enterprise software, Azure cloud computing, and AI pioneer."
+        },
+        new {
+            Symbol = "NVDA",
+            Name = "NVIDIA Corporation",
+            Aliases = new[] { "NVIDIA", "NASDAQ:NVDA" },
+            Category = "stocks",
+            Exchange = "NASDAQ",
+            Price = "126.40",
+            Change = "+2.15%",
+            IsPositive = true,
+            SpreadPips = "0.04",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "NVDA (Yahoo Finance)",
+                ["Synthetic"] = "NVDA"
+            },
+            Description = "Leading accelerator and GPU hardware architecture powering generative AI."
+        },
+        new {
+            Symbol = "TSLA",
+            Name = "Tesla, Inc.",
+            Aliases = new[] { "TESLA", "NASDAQ:TSLA" },
+            Category = "stocks",
+            Exchange = "NASDAQ",
+            Price = "254.20",
+            Change = "-1.20%",
+            IsPositive = false,
+            SpreadPips = "0.10",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "TSLA (Yahoo Finance)",
+                ["Synthetic"] = "TSLA"
+            },
+            Description = "Electric vehicles, stationary battery energy storage, and robotics."
+        },
+        new {
+            Symbol = "AMZN",
+            Name = "Amazon.com, Inc.",
+            Aliases = new[] { "AMAZON", "NASDAQ:AMZN" },
+            Category = "stocks",
+            Exchange = "NASDAQ",
+            Price = "185.60",
+            Change = "+0.85%",
+            IsPositive = true,
+            SpreadPips = "0.06",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "AMZN (Yahoo Finance)",
+                ["Synthetic"] = "AMZN"
+            },
+            Description = "Global e-commerce marketplace and AWS cloud computing infrastructure."
+        },
+        new {
+            Symbol = "GOOGL",
+            Name = "Alphabet Inc. (Google)",
+            Aliases = new[] { "GOOGLE", "ALPHABET", "NASDAQ:GOOGL" },
+            Category = "stocks",
+            Exchange = "NASDAQ",
+            Price = "165.80",
+            Change = "+0.32%",
+            IsPositive = true,
+            SpreadPips = "0.05",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "GOOGL (Yahoo Finance)",
+                ["Synthetic"] = "GOOGL"
+            },
+            Description = "Online search, Android ecosystem, YouTube, and Gemini AI technologies."
+        },
+        new {
+            Symbol = "META",
+            Name = "Meta Platforms, Inc.",
+            Aliases = new[] { "FACEBOOK", "NASDAQ:META" },
+            Category = "stocks",
+            Exchange = "NASDAQ",
+            Price = "585.30",
+            Change = "+1.45%",
+            IsPositive = true,
+            SpreadPips = "0.12",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "META (Yahoo Finance)",
+                ["Synthetic"] = "META"
+            },
+            Description = "Social networking platforms including Instagram, WhatsApp, and Llama AI."
+        },
+        new {
+            Symbol = "AMD",
+            Name = "Advanced Micro Devices",
+            Aliases = new[] { "NASDAQ:AMD" },
+            Category = "stocks",
+            Exchange = "NASDAQ",
+            Price = "158.40",
+            Change = "+1.80%",
+            IsPositive = true,
+            SpreadPips = "0.08",
+            TradingHours = "US Market (09:30 - 16:00 ET)",
+            SupportedProviders = new[] { "KeylessPublic", "Synthetic" },
+            ProviderSymbols = new Dictionary<string, string> {
+                ["KeylessPublic"] = "AMD (Yahoo Finance)",
+                ["Synthetic"] = "AMD"
+            },
+            Description = "Semiconductor microprocessors, Radeon GPUs, and EPYC server CPUs."
+        }
+    };
+
+    var filtered = allSymbols.AsEnumerable();
+
+    // 1. Filter by requested provider (defaulting to activeProvider if specified or matching)
+    if (!string.IsNullOrWhiteSpace(provider) && !string.Equals(provider, "all", StringComparison.OrdinalIgnoreCase))
+    {
+        filtered = filtered.Where(s => s.SupportedProviders.Contains(provider, StringComparer.OrdinalIgnoreCase));
+    }
+
+    // 2. Filter by category
+    if (!string.IsNullOrWhiteSpace(category) && !string.Equals(category, "all", StringComparison.OrdinalIgnoreCase))
+    {
+        filtered = filtered.Where(s => string.Equals(s.Category, category, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // 3. Search query
+    if (!string.IsNullOrWhiteSpace(search))
+    {
+        string q = search.Trim();
+        filtered = filtered.Where(s =>
+            s.Symbol.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+            s.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+            s.Aliases.Any(a => a.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+            s.Category.Contains(q, StringComparison.OrdinalIgnoreCase));
+    }
+
+    var list = filtered.ToList();
+
+    return Results.Ok(new
+    {
+        ActiveProvider = activeProv,
+        Total = list.Count,
+        Symbols = list
+    });
+});
+
 // ----------------------------------------------------
 // 8. Broker Settings & Key Configuration
 // ----------------------------------------------------

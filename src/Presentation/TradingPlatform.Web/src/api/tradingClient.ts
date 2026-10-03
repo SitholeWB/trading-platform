@@ -6,6 +6,7 @@ import {
   RiskProfile,
   SignalAuditLog,
   StrategyDefinition,
+  SymbolsCatalogResponse,
 } from '../types/trading';
 
 const BASE_URL = '/api';
@@ -154,6 +155,15 @@ export const tradingApi = {
 
   getProviders: () =>
     request<{ activeProvider: string; providers: any[] }>('/market-data/providers'),
+
+  getSymbols: (provider?: string, category?: string, search?: string) => {
+    const params = new URLSearchParams();
+    if (provider && provider !== 'all') params.append('provider', provider);
+    if (category && category !== 'all') params.append('category', category);
+    if (search) params.append('search', search);
+    const qs = params.toString();
+    return request<SymbolsCatalogResponse>(`/market-data/symbols${qs ? `?${qs}` : ''}`);
+  },
 
   // Broker Settings & Key Configuration
   getBrokerConfig: () =>

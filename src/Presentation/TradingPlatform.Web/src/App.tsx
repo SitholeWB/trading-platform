@@ -10,6 +10,8 @@ import { RiskConsole } from './components/RiskConsole';
 import { SimulatorConsole } from './components/SimulatorConsole';
 import { KillSwitchModal } from './components/KillSwitchModal';
 import { BrokerSettingsModal } from './components/BrokerSettingsModal';
+import { SymbolSearchModal } from './components/chart/SymbolSearchModal';
+import { Search, Layers, Globe, Coins, TrendingUp, Flame, BarChart3 } from 'lucide-react';
 import { tradingApi } from './api/tradingClient';
 import {
   AccountSummary,
@@ -48,6 +50,21 @@ export function App() {
   const [isKillSwitchOpen, setIsKillSwitchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeProvider, setActiveProvider] = useState('KeylessPublic');
+  const [isSymbolSearchOpen, setIsSymbolSearchOpen] = useState(false);
+  const [watchlistCategory, setWatchlistCategory] = useState<'all' | 'forex' | 'indices' | 'commodities' | 'crypto' | 'stocks'>('all');
+
+  // Global keyboard shortcut to open symbol search (/ or Ctrl+K)
+  useEffect(() => {
+    const handleGlobalKey = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
+      if (e.key === '/' || (e.ctrlKey && e.key.toLowerCase() === 'k')) {
+        e.preventDefault();
+        setIsSymbolSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKey);
+    return () => window.removeEventListener('keydown', handleGlobalKey);
+  }, []);
 
   // Initial synthetic candlestick data for charting
   const [candles, setCandles] = useState<Candle[]>(() => {
@@ -291,6 +308,7 @@ export function App() {
           onOpenKillSwitch={() => setIsKillSwitchOpen(true)}
           selectedSymbol={selectedSymbol}
           currentPrice={currentPrice}
+          onOpenSymbolSearch={() => setIsSymbolSearchOpen(true)}
         />
 
         {/* Dedicated Page Viewport */}
@@ -363,47 +381,114 @@ export function App() {
           {/* Page 6: Dedicated Chart & Technical Inspector */}
           {activePage === 'chart' && (
             <div className="flex-1 h-full p-3 flex gap-3 overflow-hidden">
-              {/* Forex Pair Watchlist Sidebar */}
-              <aside className="w-56 bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col font-mono text-xs hidden md:flex flex-shrink-0">
-                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  Market Watchlist
+              {/* Market Watchlist Sidebar */}
+              <aside className="w-64 bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col font-mono text-xs hidden md:flex flex-shrink-0">
+                {/* Watchlist Header + Browse Button */}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    Watchlist
+                  </span>
+                  <button
+                    onClick={() => setIsSymbolSearchOpen(true)}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 text-[10px] font-sans font-medium transition-all"
+                    title="Search & Browse All Symbols (Shortcut: /)"
+                  >
+                    <Search className="w-3 h-3" />
+                    <span>Browse All</span>
+                  </button>
                 </div>
-                <div className="space-y-1.5 flex-1 overflow-y-auto">
+
+                {/* Category Pills on Watchlist */}
+                <div className="flex gap-1 mb-2 overflow-x-auto scrollbar-none text-[10px] font-sans pb-1">
                   {[
-                    { s: 'EURUSD', p: currentPrice.toFixed(5), chg: '+0.18%', up: true },
-                    { s: 'GBPUSD', p: '1.26420', chg: '-0.12%', up: false },
-                    { s: 'USDJPY', p: '154.210', chg: '+0.45%', up: true },
-                    { s: 'BTCUSDT', p: '68,450', chg: '+1.85%', up: true },
-                    { s: 'ETHUSDT', p: '3,520', chg: '+0.95%', up: true },
-                    { s: 'AUDUSD', p: '0.65340', chg: '+0.04%', up: true },
-                    { s: 'USDCAD', p: '1.38120', chg: '-0.22%', up: false },
-                  ].map((pair) => (
+                    { id: 'all', label: 'All' },
+                    { id: 'indices', label: 'Indices' },
+                    { id: 'commodities', label: 'Commodities' },
+                    { id: 'forex', label: 'Forex' },
+                    { id: 'crypto', label: 'Crypto' },
+                    { id: 'stocks', label: 'Stocks' },
+                  ].map((cat) => (
                     <button
-                      key={pair.s}
-                      onClick={() => setSelectedSymbol(pair.s)}
-                      className={`w-full p-2 rounded-lg flex items-center justify-between text-left transition-colors border ${
-                        selectedSymbol === pair.s
-                          ? 'bg-blue-600/20 border-blue-500/40 text-blue-300 font-bold'
-                          : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-800/60 text-slate-300'
+                      key={cat.id}
+                      onClick={() => setWatchlistCategory(cat.id as any)}
+                      className={`px-2 py-0.5 rounded transition-all whitespace-nowrap ${
+                        watchlistCategory === cat.id
+                          ? 'bg-blue-600 text-white font-bold'
+                          : 'bg-slate-950 text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      <div>
-                        <div className="font-bold">{pair.s}</div>
-                        <div className="text-[10px] text-slate-500">{pair.p}</div>
-                      </div>
-                      <div
-                        className={`text-[11px] font-bold ${
-                          pair.up ? 'text-emerald-400' : 'text-red-400'
-                        }`}
-                      >
-                        {pair.chg}
-                      </div>
+                      {cat.label}
                     </button>
                   ))}
                 </div>
 
-                <div className="pt-3 border-t border-slate-800 text-[10px] text-slate-500 text-center">
-                  NetMQ MT5 & Oanda Feeds
+                {/* Watchlist Items */}
+                <div className="space-y-1.5 flex-1 overflow-y-auto pr-0.5">
+                  {[
+                    // Indices
+                    { s: 'US500', name: 'S&P 500', cat: 'indices', p: '5,782.40', chg: '+0.52%', up: true },
+                    { s: 'NAS100', name: 'Nasdaq 100', cat: 'indices', p: '20,140.50', chg: '+0.88%', up: true },
+                    { s: 'US30', name: 'Dow Jones', cat: 'indices', p: '42,352.00', chg: '+0.35%', up: true },
+                    { s: 'GER40', name: 'DAX 40', cat: 'indices', p: '19,450.20', chg: '+0.28%', up: true },
+                    // Commodities
+                    { s: 'XAUUSD', name: 'Gold Spot', cat: 'commodities', p: '2,654.80', chg: '+0.74%', up: true },
+                    { s: 'USOIL', name: 'WTI Oil', cat: 'commodities', p: '71.50', chg: '-1.40%', up: false },
+                    // Forex
+                    { s: 'EURUSD', name: 'EUR/USD', cat: 'forex', p: currentPrice < 10 ? currentPrice.toFixed(5) : '1.08520', chg: '+0.18%', up: true },
+                    { s: 'GBPUSD', name: 'GBP/USD', cat: 'forex', p: '1.26420', chg: '-0.12%', up: false },
+                    { s: 'USDJPY', name: 'USD/JPY', cat: 'forex', p: '154.210', chg: '+0.45%', up: true },
+                    { s: 'AUDUSD', name: 'AUD/USD', cat: 'forex', p: '0.65340', chg: '+0.04%', up: true },
+                    { s: 'USDCAD', name: 'USD/CAD', cat: 'forex', p: '1.38120', chg: '-0.22%', up: false },
+                    // Crypto
+                    { s: 'BTCUSDT', name: 'Bitcoin', cat: 'crypto', p: '68,450.00', chg: '+1.85%', up: true },
+                    { s: 'ETHUSDT', name: 'Ethereum', cat: 'crypto', p: '3,520.50', chg: '+0.95%', up: true },
+                    { s: 'SOLUSDT', name: 'Solana', cat: 'crypto', p: '178.40', chg: '+4.20%', up: true },
+                    // Stocks
+                    { s: 'AAPL', name: 'Apple', cat: 'stocks', p: '232.50', chg: '+0.65%', up: true },
+                    { s: 'NVDA', name: 'NVIDIA', cat: 'stocks', p: '126.40', chg: '+2.15%', up: true },
+                    { s: 'TSLA', name: 'Tesla', cat: 'stocks', p: '254.20', chg: '-1.20%', up: false },
+                  ]
+                    .filter((item) => watchlistCategory === 'all' || item.cat === watchlistCategory)
+                    .map((item) => (
+                      <button
+                        key={item.s}
+                        onClick={() => setSelectedSymbol(item.s)}
+                        className={`w-full p-2 rounded-lg flex items-center justify-between text-left transition-colors border ${
+                          selectedSymbol === item.s
+                            ? 'bg-blue-600/20 border-blue-500/40 text-blue-300 font-bold'
+                            : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-800/60 text-slate-300'
+                        }`}
+                      >
+                        <div>
+                          <div className="font-bold flex items-center gap-1.5">
+                            <span>{item.s}</span>
+                            <span className="text-[9px] font-sans text-slate-500 font-normal">{item.name}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500">{item.p}</div>
+                        </div>
+                        <div
+                          className={`text-[11px] font-bold ${
+                            item.up ? 'text-emerald-400' : 'text-red-400'
+                          }`}
+                        >
+                          {item.chg}
+                        </div>
+                      </button>
+                    ))}
+                </div>
+
+                {/* Bottom Browse Full Catalog Link */}
+                <div className="pt-2.5 mt-2 border-t border-slate-800 space-y-1.5">
+                  <button
+                    onClick={() => setIsSymbolSearchOpen(true)}
+                    className="w-full py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800/90 border border-slate-800 text-slate-300 hover:text-white text-[11px] font-sans font-medium transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <Search className="w-3 h-3 text-blue-400" />
+                    <span>Browse All 45+ Symbols</span>
+                  </button>
+                  <div className="text-[10px] text-slate-500 text-center font-sans">
+                    Feed: <span className="text-slate-400">{activeProvider}</span>
+                  </div>
                 </div>
               </aside>
 
@@ -422,6 +507,7 @@ export function App() {
                   onClosePosition={handleClosePosition}
                   onLoadOlderCandles={handleLoadOlderCandles}
                   isLoadingHistory={isLoadingHistory}
+                  activeProvider={activeProvider}
                 />
               </div>
             </div>
@@ -444,6 +530,15 @@ export function App() {
         onProviderChanged={(newProvider) => {
           setActiveProvider(newProvider);
         }}
+      />
+
+      {/* Global Symbol Search & Browser Modal */}
+      <SymbolSearchModal
+        isOpen={isSymbolSearchOpen}
+        onClose={() => setIsSymbolSearchOpen(false)}
+        selectedSymbol={selectedSymbol}
+        onSelectSymbol={(newSym) => setSelectedSymbol(newSym)}
+        activeProvider={activeProvider}
       />
     </div>
   );

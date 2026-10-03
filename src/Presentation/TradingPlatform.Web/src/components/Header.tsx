@@ -1,5 +1,6 @@
 import React from 'react';
 import { AccountSummary, RiskProfile } from '../types/trading';
+import { Search } from 'lucide-react';
 
 interface HeaderProps {
   pageTitle: string;
@@ -8,6 +9,7 @@ interface HeaderProps {
   onOpenKillSwitch: () => void;
   selectedSymbol: string;
   currentPrice: number;
+  onOpenSymbolSearch?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenKillSwitch,
   selectedSymbol,
   currentPrice,
+  onOpenSymbolSearch,
 }) => {
   const isKillSwitchEngaged = risk?.isKillSwitchEngaged ?? false;
   const currentDrawdown = account?.currentDrawdownPercent ?? 0;
@@ -29,6 +32,12 @@ export const Header: React.FC<HeaderProps> = ({
       ? 'text-amber-400'
       : 'text-emerald-400';
 
+  const formattedPrice = currentPrice >= 100
+    ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : currentPrice > 10
+    ? currentPrice.toFixed(3)
+    : currentPrice.toFixed(5);
+
   return (
     <header className="h-13 min-h-[52px] bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 select-none flex-shrink-0 z-10">
       {/* Left: Page Title & Current Pair */}
@@ -37,15 +46,20 @@ export const Header: React.FC<HeaderProps> = ({
           {pageTitle}
         </h1>
 
-        <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-md text-xs font-mono">
-          <span className="font-bold text-slate-300">{selectedSymbol}</span>
+        <button
+          onClick={onOpenSymbolSearch}
+          className="flex items-center gap-2 bg-slate-950 hover:bg-slate-850 hover:border-blue-500/40 border border-slate-800 px-2.5 py-1 rounded-lg text-xs font-mono transition-all group cursor-pointer shadow-sm"
+          title="Search or Browse Symbol / Pair (Shortcut: /)"
+        >
+          <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-400 transition-colors" />
+          <span className="font-bold text-slate-200 group-hover:text-white">{selectedSymbol}</span>
           <span className="font-semibold text-emerald-400">
-            {currentPrice.toFixed(5)}
+            {formattedPrice}
           </span>
           <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded font-mono hidden sm:inline">
             +0.18%
           </span>
-        </div>
+        </button>
       </div>
 
       {/* Right: Essential Account Figures & Emergency Stop */}

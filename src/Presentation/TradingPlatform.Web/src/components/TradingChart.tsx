@@ -63,6 +63,7 @@ interface TradingChartProps {
   onClosePosition?: (ticket: number) => Promise<void>;
   onLoadOlderCandles?: () => Promise<HistoryLoadResult>;
   isLoadingHistory?: boolean;
+  activeProvider?: string;
 }
 
 export interface HistoryLoadResult {
@@ -91,6 +92,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   onClosePosition,
   onLoadOlderCandles,
   isLoadingHistory = false,
+  activeProvider = 'KeylessPublic',
 }) => {
   // Chart layout and state
   const [chartType, setChartType] = useState<ChartType>('candlestick');
@@ -99,6 +101,19 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [isSymbolSearchOpen, setIsSymbolSearchOpen] = useState(false);
   const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false);
   const [showOrderWidget, setShowOrderWidget] = useState(true);
+
+  // Global keyboard shortcut to open symbol search modal (/ or Ctrl+K)
+  useEffect(() => {
+    const handleGlobalKey = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
+      if (e.key === '/' || (e.ctrlKey && e.key.toLowerCase() === 'k')) {
+        e.preventDefault();
+        setIsSymbolSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKey);
+    return () => window.removeEventListener('keydown', handleGlobalKey);
+  }, []);
 
   // Drawing Tools state
   const [activeTool, setActiveTool] = useState<DrawingTool>('cursor');
@@ -1316,6 +1331,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         onSelectSymbol={(newSym) => {
           if (onSymbolChange) onSymbolChange(newSym);
         }}
+        activeProvider={activeProvider}
       />
 
       {/* Indicators Configuration Modal */}

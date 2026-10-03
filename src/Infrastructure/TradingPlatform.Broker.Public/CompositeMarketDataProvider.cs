@@ -88,6 +88,9 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
         return s.EndsWith("USDT") || s.EndsWith("BUSD") ||
                s.StartsWith("BTC") || s.StartsWith("ETH") ||
                s.StartsWith("SOL") || s.StartsWith("XRP") ||
+               s.StartsWith("BNB") || s.StartsWith("ADA") ||
+               s.StartsWith("DOGE") || s.StartsWith("AVAX") ||
+               s.StartsWith("LINK") || s.StartsWith("NEAR") ||
                s.Contains("CRYPTO");
     }
 }
