@@ -90,6 +90,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [activeTool, setActiveTool] = useState<DrawingTool>('cursor');
   const [drawings, setDrawings] = useState<DrawingItem[]>([]);
   const [showDrawings, setShowDrawings] = useState(true);
+  const [chartViewVersion, setChartViewVersion] = useState(0);
+
+  const handleDeleteDrawing = (id: string) => {
+    setDrawings((prev) => prev.filter((d) => d.id !== id));
+  };
 
   // Indicators toggle state
   const [activeIndicators, setActiveIndicators] = useState<ActiveIndicators>({
@@ -378,6 +383,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     const handleMainRangeChange = (range: LogicalRange | null) => {
       if (!range) return;
 
+      // Bump chartViewVersion so drawings canvas re-projects points to updated bar coordinates
+      setChartViewVersion((v) => v + 1);
+
       // 1. Synchronize to sub-charts (RSI, MACD)
       if (!isSyncingRangeRef.current) {
         isSyncingRangeRef.current = true;
@@ -408,6 +416,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       try {
         chart.applyOptions({ width: w, height: h });
         setChartDimensions({ width: w, height: h });
+        setChartViewVersion((v) => v + 1);
       } catch {}
     });
     resizeObserver.observe(container);
@@ -725,13 +734,24 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
 
       if (prependedCount > 0) {
-        // Shift visible range so viewport remains locked on the exact same bars
-        try {
-          timeScale.setVisibleLogicalRange({
-            from: prevRange.from + prependedCount,
-            to: prevRange.to + prependedCount,
-          });
-        } catch {}
+        // If user was scrolling left (at the beginning of chart), reveal the newly loaded bars
+        // smoothly without jumping forward to the right!
+        const rangeWidth = Math.max(25, prevRange.to - prevRange.from);
+        if (prevRange.from <= 8) {
+          try {
+            timeScale.setVisibleLogicalRange({
+              from: 0,
+              to: rangeWidth,
+            });
+          } catch {}
+        } else {
+          try {
+            timeScale.setVisibleLogicalRange({
+              from: prevRange.from + prependedCount,
+              to: prevRange.to + prependedCount,
+            });
+          } catch {}
+        }
       } else {
         const isTrackingLiveEdge = prevRange.to >= prevInfo.count - 2;
         const appendedCount = cleanCandles.length - prevInfo.count;
@@ -745,9 +765,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             });
           } catch {}
         } else {
-          // Lock view completely so live ticks do NOT reset scroll/zoom
+          // Lock view completely so live ticks do NOT reset scroll or zoom size
           try {
-            timeScale.setVisibleLogicalRange(prevRange);
+            const rangeWidth = Math.max(20, prevRange.to - prevRange.from);
+            const safeFrom = Math.max(0, prevRange.from);
+            timeScale.setVisibleLogicalRange({
+              from: safeFrom,
+              to: safeFrom + rangeWidth,
+            });
           } catch {}
         }
       }
@@ -1213,10 +1238,15 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               onUpdateDrawing={(d) =>
                 setDrawings(drawings.map((item) => (item.id === d.id ? d : item)))
               }
+              onDeleteDrawing={handleDeleteDrawing}
               showDrawings={showDrawings}
               symbol={symbol}
+              chart={mainChartRef.current}
+              series={mainSeriesRef.current}
               chartDimensions={chartDimensions}
               priceRange={priceRange}
+              candles={cleanCandles}
+              chartViewVersion={chartViewVersion}
             />
           </div>
 

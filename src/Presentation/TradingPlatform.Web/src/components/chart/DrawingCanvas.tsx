@@ -1,6 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
+import { Trash2, X } from 'lucide-react';
 import { DrawingItem, DrawingTool, Point } from './types';
-import { calculatePips, formatPrice } from '../../utils/indicators';
+import { Candle } from '../../types/trading';
+import { calculatePips, formatPrice, getCandleTimeSeconds } from '../../utils/indicators';
 
 interface DrawingCanvasProps {
   activeTool: DrawingTool;
@@ -8,10 +11,15 @@ interface DrawingCanvasProps {
   drawings: DrawingItem[];
   onAddDrawing: (drawing: DrawingItem) => void;
   onUpdateDrawing: (drawing: DrawingItem) => void;
+  onDeleteDrawing?: (id: string) => void;
   showDrawings: boolean;
   symbol: string;
+  chart: IChartApi | null;
+  series: ISeriesApi<any> | null;
   chartDimensions: { width: number; height: number };
   priceRange: { min: number; max: number };
+  candles: Candle[];
+  chartViewVersion?: number;
 }
 
 export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
@@ -19,49 +27,183 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   onToolComplete,
   drawings,
   onAddDrawing,
+  onUpdateDrawing,
+  onDeleteDrawing,
   showDrawings,
   symbol,
+  chart,
+  series,
   chartDimensions,
   priceRange,
+  candles,
+  chartViewVersion = 0,
 }) => {
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Dragging state for moving entire drawing or individual anchor handles
+  const [dragState, setDragState] = useState<{
+    drawingId: string;
+    handleIndex: number; // -1 for entire drawing body, 0 for point 1, 1 for point 2
+    startData: Point;
+    origPoints: Point[];
+  } | null>(null);
+
   const svgRef = useRef<SVGSVGElement | null>(null);
-
-  if (!showDrawings && activeTool === 'cursor') return null;
-
   const { width, height } = chartDimensions;
   const isInteracting = activeTool !== 'cursor';
 
-  // Helper to convert screen Y to estimated price
-  const screenYToPrice = (y: number) => {
-    if (height <= 0) return 0;
-    const range = priceRange.max - priceRange.min || 0.001;
-    return priceRange.max - (y / height) * range;
-  };
+  // ----------------------------------------------------
+  // Coordinate Conversion: Data { time, price } <-> Screen { x, y }
+  // ----------------------------------------------------
+  const toScreen = useCallback(
+    (pt: Point): { x: number; y: number } => {
+      let x: number | null = null;
+      let y: number | null = null;
 
-  const getCoordinates = (e: React.MouseEvent<SVGSVGElement>): Point => {
-    if (!svgRef.current) return { x: 0, y: 0 };
+      if (chart && pt.time) {
+        try {
+          x = chart.timeScale().timeToCoordinate(pt.time as UTCTimestamp);
+        } catch {}
+      }
+
+      if (series && pt.price !== undefined && pt.price !== null) {
+        try {
+          y = series.priceToCoordinate(pt.price);
+        } catch {}
+      }
+
+      // Fallbacks if coordinate is off-screen or chart has not yet computed
+      if (x === null) {
+        if (candles.length > 0) {
+          const firstTime = getCandleTimeSeconds(candles[0].timestamp);
+          const lastTime = getCandleTimeSeconds(candles[candles.length - 1].timestamp);
+          if (pt.time <= firstTime) x = 0;
+          else if (pt.time >= lastTime) x = width;
+          else {
+            const ratio = (pt.time - firstTime) / (lastTime - firstTime || 1);
+            x = ratio * width;
+          }
+        } else {
+          x = width / 2;
+        }
+      }
+
+      if (y === null) {
+        const minP = priceRange.min;
+        const maxP = priceRange.max;
+        const ratio = (maxP - (pt.price ?? minP)) / (maxP - minP || 0.001);
+        y = ratio * height;
+      }
+
+      return { x: Math.round(x), y: Math.round(y) };
+    },
+    [chart, series, candles, width, height, priceRange, chartViewVersion]
+  );
+
+  const toData = useCallback(
+    (pixelX: number, pixelY: number): Point => {
+      let time: number | null = null;
+      let price: number | null = null;
+
+      if (chart) {
+        try {
+          const t = chart.timeScale().coordinateToTime(pixelX);
+          if (t !== null && typeof t === 'number') {
+            time = t;
+          }
+        } catch {}
+      }
+
+      if (series) {
+        try {
+          const p = series.coordinateToPrice(pixelY);
+          if (p !== null && typeof p === 'number' && !isNaN(p)) {
+            price = p;
+          }
+        } catch {}
+      }
+
+      // Fallback approximations
+      if (time === null) {
+        if (candles.length > 0) {
+          const firstTime = getCandleTimeSeconds(candles[0].timestamp);
+          const lastTime = getCandleTimeSeconds(candles[candles.length - 1].timestamp);
+          const ratio = Math.max(0, Math.min(1, pixelX / (width || 1)));
+          time = Math.round(firstTime + ratio * (lastTime - firstTime));
+        } else {
+          time = Math.floor(Date.now() / 1000);
+        }
+      }
+
+      if (price === null) {
+        const minP = priceRange.min;
+        const maxP = priceRange.max;
+        const ratio = Math.max(0, Math.min(1, pixelY / (height || 1)));
+        price = Number((maxP - ratio * (maxP - minP)).toFixed(5));
+      }
+
+      return { time, price, x: pixelX, y: pixelY };
+    },
+    [chart, series, candles, width, height, priceRange]
+  );
+
+  const getCoordinatesFromEvent = (e: React.MouseEvent<any>): Point => {
+    if (!svgRef.current) return { time: Math.floor(Date.now() / 1000), price: 1.085 };
     const rect = svgRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    return { x, y, price: screenYToPrice(y) };
+    return toData(x, y);
   };
 
+  // ----------------------------------------------------
+  // Keyboard Deletion & Escape listener
+  // ----------------------------------------------------
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedId && (e.key === 'Delete' || e.key === 'Backspace')) {
+        if (onDeleteDrawing) onDeleteDrawing(selectedId);
+        setSelectedId(null);
+      } else if (e.key === 'Escape') {
+        setSelectedId(null);
+        setCurrentPoints([]);
+        setHoverPoint(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedId, onDeleteDrawing]);
+
+  if (!showDrawings && activeTool === 'cursor' && !selectedId) return null;
+
+  // ----------------------------------------------------
+  // Tool Creation & Canvas Pointer Events
+  // ----------------------------------------------------
   const handlePointerDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!isInteracting) return;
-    const point = getCoordinates(e);
+    if (activeTool === 'cursor') {
+      // Clicked on empty SVG canvas -> deselect
+      if (e.target === svgRef.current) {
+        setSelectedId(null);
+      }
+      return;
+    }
+
+    const point = getCoordinatesFromEvent(e);
 
     // Single-click tools: Horizontal line
     if (activeTool === 'horizontal_line') {
       const newDrawing: DrawingItem = {
         id: `draw_${Date.now()}`,
         tool: 'horizontal_line',
-        points: [{ x: 0, y: point.y, price: point.price }, { x: width, y: point.y, price: point.price }],
+        points: [point, { time: point.time + 3600, price: point.price }],
         color: '#38bdf8',
+        lineWidth: 2,
+        lineStyle: 'dashed',
         isComplete: true,
       };
       onAddDrawing(newDrawing);
+      setSelectedId(newDrawing.id);
       onToolComplete();
       return;
     }
@@ -76,10 +218,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       let extraData: DrawingItem['extraData'] = undefined;
 
       if (activeTool === 'long_position') {
-        const entry = startPoint.price || 0;
-        const target = Math.max(entry, endPoint.price || entry);
+        const entry = startPoint.price;
+        const target = Math.max(entry, endPoint.price);
         const stop = entry - (target - entry) * 0.5;
-        const rr = (target - entry) > 0 && (entry - stop) > 0 ? (target - entry) / (entry - stop) : 2;
+        const rr = target - entry > 0 && entry - stop > 0 ? (target - entry) / (entry - stop) : 2.0;
         extraData = {
           entryPrice: entry,
           takeProfitPrice: target,
@@ -87,10 +229,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           riskRewardRatio: Number(rr.toFixed(2)),
         };
       } else if (activeTool === 'short_position') {
-        const entry = startPoint.price || 0;
-        const target = Math.min(entry, endPoint.price || entry);
+        const entry = startPoint.price;
+        const target = Math.min(entry, endPoint.price);
         const stop = entry + (entry - target) * 0.5;
-        const rr = (entry - target) > 0 && (stop - entry) > 0 ? (entry - target) / (stop - entry) : 2;
+        const rr = entry - target > 0 && stop - entry > 0 ? (entry - target) / (stop - entry) : 2.0;
         extraData = {
           entryPrice: entry,
           takeProfitPrice: target,
@@ -114,12 +256,15 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             ? '#a855f7'
             : activeTool === 'ruler'
             ? '#06b6d4'
-            : '#3b82f6',
+            : '#38bdf8',
+        lineWidth: 2,
+        lineStyle: 'solid',
         isComplete: true,
         extraData,
       };
 
       onAddDrawing(newDrawing);
+      setSelectedId(newDrawing.id);
       setCurrentPoints([]);
       setHoverPoint(null);
       onToolComplete();
@@ -127,81 +272,271 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   };
 
   const handlePointerMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!isInteracting) return;
-    const pt = getCoordinates(e);
-    setHoverPoint(pt);
+    // 1. In-progress creation rubber-banding
+    if (isInteracting && currentPoints.length > 0) {
+      const pt = getCoordinatesFromEvent(e);
+      setHoverPoint(pt);
+      return;
+    }
+
+    // 2. Dragging existing drawing or anchor handle
+    if (dragState) {
+      const currentData = getCoordinatesFromEvent(e);
+      const targetDrawing = drawings.find((d) => d.id === dragState.drawingId);
+      if (!targetDrawing) return;
+
+      if (dragState.handleIndex >= 0) {
+        // Dragging specific handle
+        const newPts = [...targetDrawing.points];
+        newPts[dragState.handleIndex] = currentData;
+
+        let extraData = targetDrawing.extraData;
+        if (targetDrawing.tool === 'long_position') {
+          const entry = newPts[0].price;
+          const target = Math.max(entry, newPts[1].price);
+          const stop = entry - (target - entry) * 0.5;
+          const rr = target - entry > 0 && entry - stop > 0 ? (target - entry) / (entry - stop) : 2;
+          extraData = { ...extraData, entryPrice: entry, takeProfitPrice: target, stopLossPrice: stop, riskRewardRatio: Number(rr.toFixed(2)) };
+        } else if (targetDrawing.tool === 'short_position') {
+          const entry = newPts[0].price;
+          const target = Math.min(entry, newPts[1].price);
+          const stop = entry + (entry - target) * 0.5;
+          const rr = entry - target > 0 && stop - entry > 0 ? (entry - target) / (stop - entry) : 2;
+          extraData = { ...extraData, entryPrice: entry, takeProfitPrice: target, stopLossPrice: stop, riskRewardRatio: Number(rr.toFixed(2)) };
+        }
+
+        onUpdateDrawing({ ...targetDrawing, points: newPts, extraData });
+      } else {
+        // Dragging entire drawing body
+        const deltaTime = currentData.time - dragState.startData.time;
+        const deltaPrice = currentData.price - dragState.startData.price;
+
+        const shiftedPts = dragState.origPoints.map((p) => ({
+          time: p.time + deltaTime,
+          price: Number((p.price + deltaPrice).toFixed(5)),
+        }));
+
+        let extraData = targetDrawing.extraData;
+        if (extraData) {
+          extraData = {
+            ...extraData,
+            entryPrice: extraData.entryPrice !== undefined ? extraData.entryPrice + deltaPrice : undefined,
+            stopLossPrice: extraData.stopLossPrice !== undefined ? extraData.stopLossPrice + deltaPrice : undefined,
+            takeProfitPrice: extraData.takeProfitPrice !== undefined ? extraData.takeProfitPrice + deltaPrice : undefined,
+          };
+        }
+
+        onUpdateDrawing({ ...targetDrawing, points: shiftedPts, extraData });
+      }
+    }
   };
 
-  // Helper to render individual drawings
+  const handlePointerUp = () => {
+    if (dragState) {
+      setDragState(null);
+    }
+  };
+
+  // ----------------------------------------------------
+  // Selected Drawing Context / Floating Bar Helpers
+  // ----------------------------------------------------
+  const selectedDrawing = drawings.find((d) => d.id === selectedId);
+
+  const handleColorChange = (newColor: string) => {
+    if (!selectedDrawing) return;
+    onUpdateDrawing({ ...selectedDrawing, color: newColor });
+  };
+
+  const handleLineWidthChange = (w: number) => {
+    if (!selectedDrawing) return;
+    onUpdateDrawing({ ...selectedDrawing, lineWidth: w });
+  };
+
+  const handleLineStyleChange = (st: 'solid' | 'dashed' | 'dotted') => {
+    if (!selectedDrawing) return;
+    onUpdateDrawing({ ...selectedDrawing, lineStyle: st });
+  };
+
+  // ----------------------------------------------------
+  // SVG Graphic Renderers for Each Drawing Tool
+  // ----------------------------------------------------
   const renderDrawing = (drawing: DrawingItem, isDraft = false) => {
+    const isSelected = selectedId === drawing.id && !isDraft;
     const p1 = drawing.points[0];
     const p2 = drawing.points[1] || hoverPoint || p1;
     if (!p1) return null;
 
+    const s1 = toScreen(p1);
+    const s2 = toScreen(p2);
+
+    const strokeColor = drawing.color || '#38bdf8';
+    const strokeW = drawing.lineWidth || 2;
+    const strokeDash =
+      drawing.lineStyle === 'dashed' ? '5 5' : drawing.lineStyle === 'dotted' ? '2 2' : 'none';
+
+    const handleAnchorDragStart = (e: React.MouseEvent, handleIdx: number) => {
+      e.stopPropagation();
+      const currentPoint = getCoordinatesFromEvent(e);
+      setDragState({
+        drawingId: drawing.id,
+        handleIndex: handleIdx,
+        startData: currentPoint,
+        origPoints: drawing.points,
+      });
+    };
+
+    const handleBodyDragStart = (e: React.MouseEvent) => {
+      if (activeTool !== 'cursor') return;
+      e.stopPropagation();
+      setSelectedId(drawing.id);
+      const currentPoint = getCoordinatesFromEvent(e);
+      setDragState({
+        drawingId: drawing.id,
+        handleIndex: -1,
+        startData: currentPoint,
+        origPoints: drawing.points,
+      });
+    };
+
+    // Render interactive selection handles
+    const renderHandles = () => {
+      if (!isSelected) return null;
+      return (
+        <g className="pointer-events-auto">
+          <circle
+            cx={s1.x}
+            cy={s1.y}
+            r={5.5}
+            fill="#ffffff"
+            stroke="#2563eb"
+            strokeWidth={2}
+            className="cursor-move hover:scale-125 transition-transform"
+            onMouseDown={(e) => handleAnchorDragStart(e, 0)}
+          />
+          {drawing.tool !== 'horizontal_line' && (
+            <circle
+              cx={s2.x}
+              cy={s2.y}
+              r={5.5}
+              fill="#ffffff"
+              stroke="#2563eb"
+              strokeWidth={2}
+              className="cursor-move hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleAnchorDragStart(e, 1)}
+            />
+          )}
+        </g>
+      );
+    };
+
     switch (drawing.tool) {
       case 'horizontal_line': {
-        const y = p1.y;
-        const price = p1.price ?? screenYToPrice(y);
+        const y = s1.y;
         return (
-          <g key={drawing.id}>
-            <line x1={0} y1={y} x2={width} y2={y} stroke="#38bdf8" strokeWidth={1.5} strokeDasharray="3 3" />
+          <g
+            key={drawing.id}
+            className="group cursor-pointer pointer-events-auto"
+            onMouseDown={handleBodyDragStart}
+          >
+            {/* Wider transparent hit zone */}
+            <line x1={0} y1={y} x2={width} y2={y} stroke="transparent" strokeWidth={12} />
+            <line
+              x1={0}
+              y1={y}
+              x2={width}
+              y2={y}
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              strokeDasharray={strokeDash}
+            />
+            {/* Price Badge on Right Axis */}
             <rect x={width - 70} y={y - 10} width={65} height={20} fill="#0284c7" rx={4} />
-            <text x={width - 38} y={y + 4} fill="#ffffff" fontSize={10} fontFamily="monospace" textAnchor="middle" fontWeight="bold">
-              {formatPrice(price, symbol)}
+            <text
+              x={width - 38}
+              y={y + 4}
+              fill="#ffffff"
+              fontSize={10}
+              fontFamily="monospace"
+              textAnchor="middle"
+              fontWeight="bold"
+            >
+              {formatPrice(p1.price, symbol)}
             </text>
+            {renderHandles()}
           </g>
         );
       }
 
       case 'horizontal_ray': {
-        const y = p1.y;
+        const y = s1.y;
         return (
-          <g key={drawing.id}>
-            <line x1={p1.x} y1={y} x2={width} y2={y} stroke="#0ea5e9" strokeWidth={1.5} />
-            <circle cx={p1.x} cy={y} r={3} fill="#0ea5e9" />
+          <g
+            key={drawing.id}
+            className="group cursor-pointer pointer-events-auto"
+            onMouseDown={handleBodyDragStart}
+          >
+            <line x1={s1.x} y1={y} x2={width} y2={y} stroke="transparent" strokeWidth={12} />
+            <line
+              x1={s1.x}
+              y1={y}
+              x2={width}
+              y2={y}
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              strokeDasharray={strokeDash}
+            />
+            <circle cx={s1.x} cy={y} r={3.5} fill={strokeColor} />
+            {renderHandles()}
           </g>
         );
       }
 
       case 'trendline': {
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-        const pips = p1.price && p2.price ? calculatePips(Math.abs(p2.price - p1.price), symbol) : 0;
+        const pips = calculatePips(Math.abs(p2.price - p1.price), symbol);
+        const midX = (s1.x + s2.x) / 2;
+        const midY = (s1.y + s2.y) / 2;
+
         return (
-          <g key={drawing.id}>
-            <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#3b82f6" strokeWidth={2} />
-            <circle cx={p1.x} cy={p1.y} r={3.5} fill="#60a5fa" />
-            <circle cx={p2.x} cy={p2.y} r={3.5} fill="#60a5fa" />
-            {/* Midpoint tag with pips */}
-            <rect
-              x={(p1.x + p2.x) / 2 - 25}
-              y={(p1.y + p2.y) / 2 - 16}
-              width={50}
-              height={16}
-              fill="#1e293b"
-              rx={3}
-              stroke="#334155"
+          <g
+            key={drawing.id}
+            className="group cursor-pointer pointer-events-auto"
+            onMouseDown={handleBodyDragStart}
+          >
+            <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke="transparent" strokeWidth={14} />
+            <line
+              x1={s1.x}
+              y1={s1.y}
+              x2={s2.x}
+              y2={s2.y}
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              strokeDasharray={strokeDash}
             />
+            {/* Midpoint Info Pill */}
+            <rect x={midX - 25} y={midY - 18} width={50} height={16} fill="#0f172a" rx={3} stroke="#334155" />
             <text
-              x={(p1.x + p2.x) / 2}
-              y={(p1.y + p2.y) / 2 - 4}
-              fill="#93c5fd"
+              x={midX}
+              y={midY - 6}
+              fill={strokeColor}
               fontSize={9}
               fontFamily="monospace"
               textAnchor="middle"
+              fontWeight="bold"
             >
-              {pips} pips
+              {pips} p
             </text>
+            {renderHandles()}
           </g>
         );
       }
 
       case 'fibonacci': {
-        const topY = Math.min(p1.y, p2.y);
-        const botY = Math.max(p1.y, p2.y);
+        const topY = Math.min(s1.y, s2.y);
+        const botY = Math.max(s1.y, s2.y);
         const diffY = botY - topY;
+        const leftX = Math.min(s1.x, s2.x);
+        const rightX = Math.max(width, Math.max(s1.x, s2.x) + 100);
 
-        // TradingView Fibonacci Levels
         const fibs = [
           { level: 0.0, color: '#94a3b8', label: '0.0%' },
           { level: 0.236, color: '#f87171', label: '23.6%' },
@@ -213,38 +548,39 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         ];
 
         return (
-          <g key={drawing.id}>
+          <g
+            key={drawing.id}
+            className="group cursor-pointer pointer-events-auto"
+            onMouseDown={handleBodyDragStart}
+          >
             {fibs.map((fib, idx) => {
-              const y = p1.y < p2.y ? topY + diffY * fib.level : botY - diffY * fib.level;
+              const y = s1.y < s2.y ? topY + diffY * fib.level : botY - diffY * fib.level;
               const nextFib = fibs[idx + 1];
-              const nextY = nextFib ? (p1.y < p2.y ? topY + diffY * nextFib.level : botY - diffY * nextFib.level) : null;
+              const nextY = nextFib ? (s1.y < s2.y ? topY + diffY * nextFib.level : botY - diffY * nextFib.level) : null;
 
               return (
                 <g key={fib.level}>
-                  {/* Shaded ribbon between levels */}
                   {nextY !== null && (
                     <rect
-                      x={Math.min(p1.x, p2.x)}
+                      x={leftX}
                       y={Math.min(y, nextY)}
-                      width={Math.max(width - Math.min(p1.x, p2.x), 100)}
+                      width={Math.max(10, rightX - leftX)}
                       height={Math.abs(nextY - y)}
                       fill={fib.color}
                       opacity={0.08}
                     />
                   )}
-                  {/* Line */}
                   <line
-                    x1={Math.min(p1.x, p2.x)}
+                    x1={leftX}
                     y1={y}
-                    x2={width}
+                    x2={rightX}
                     y2={y}
                     stroke={fib.color}
                     strokeWidth={fib.level === 0.618 || fib.level === 0.5 ? 1.5 : 1}
                     strokeDasharray={fib.level === 0 || fib.level === 1 ? 'none' : '3 3'}
                   />
-                  {/* Label */}
                   <text
-                    x={Math.min(p1.x, p2.x) + 4}
+                    x={leftX + 4}
                     y={y - 3}
                     fill={fib.color}
                     fontSize={9}
@@ -256,19 +592,25 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
                 </g>
               );
             })}
+            {renderHandles()}
           </g>
         );
       }
 
       case 'long_position': {
-        const entryY = p1.y;
-        const targetY = Math.min(p1.y, p2.y);
-        const stopY = p1.y + (p1.y - targetY) * 0.5;
-        const boxWidth = Math.max(120, Math.abs(p2.x - p1.x));
-        const leftX = Math.min(p1.x, p2.x);
+        const entryY = s1.y;
+        const targetY = Math.min(s1.y, s2.y);
+        const stopY = s1.y + Math.max(20, (s1.y - targetY) * 0.5);
+        const boxWidth = Math.max(120, Math.abs(s2.x - s1.x));
+        const leftX = Math.min(s1.x, s2.x);
+        const rr = drawing.extraData?.riskRewardRatio ?? 2.0;
 
         return (
-          <g key={drawing.id}>
+          <g
+            key={drawing.id}
+            className="group cursor-pointer pointer-events-auto"
+            onMouseDown={handleBodyDragStart}
+          >
             {/* Target Green Profit Zone */}
             <rect
               x={leftX}
@@ -294,9 +636,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             {/* Central Entry Line */}
             <line x1={leftX} y1={entryY} x2={leftX + boxWidth} y2={entryY} stroke="#38bdf8" strokeWidth={2} />
             {/* Badge R:R */}
-            <rect x={leftX + 4} y={entryY - 12} width={75} height={18} fill="#0f172a" rx={3} stroke="#38bdf8" />
-            <text x={leftX + 41} y={entryY + 1} fill="#38bdf8" fontSize={10} fontFamily="monospace" textAnchor="middle" fontWeight="bold">
-              R:R 2.00
+            <rect x={leftX + 4} y={entryY - 11} width={80} height={18} fill="#0f172a" rx={3} stroke="#38bdf8" />
+            <text x={leftX + 44} y={entryY + 2} fill="#38bdf8" fontSize={10} fontFamily="monospace" textAnchor="middle" fontWeight="bold">
+              R:R {rr.toFixed(2)}
             </text>
             <text x={leftX + 6} y={targetY + 12} fill="#34d399" fontSize={9} fontFamily="monospace" fontWeight="bold">
               Target (TP)
@@ -304,19 +646,25 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             <text x={leftX + 6} y={stopY - 4} fill="#f87171" fontSize={9} fontFamily="monospace" fontWeight="bold">
               Stop Loss (SL)
             </text>
+            {renderHandles()}
           </g>
         );
       }
 
       case 'short_position': {
-        const entryY = p1.y;
-        const targetY = Math.max(p1.y, p2.y);
-        const stopY = p1.y - (targetY - p1.y) * 0.5;
-        const boxWidth = Math.max(120, Math.abs(p2.x - p1.x));
-        const leftX = Math.min(p1.x, p2.x);
+        const entryY = s1.y;
+        const targetY = Math.max(s1.y, s2.y);
+        const stopY = s1.y - Math.max(20, (targetY - s1.y) * 0.5);
+        const boxWidth = Math.max(120, Math.abs(s2.x - s1.x));
+        const leftX = Math.min(s1.x, s2.x);
+        const rr = drawing.extraData?.riskRewardRatio ?? 2.0;
 
         return (
-          <g key={drawing.id}>
+          <g
+            key={drawing.id}
+            className="group cursor-pointer pointer-events-auto"
+            onMouseDown={handleBodyDragStart}
+          >
             {/* Stop Red Loss Zone */}
             <rect
               x={leftX}
@@ -341,9 +689,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             />
             {/* Central Entry Line */}
             <line x1={leftX} y1={entryY} x2={leftX + boxWidth} y2={entryY} stroke="#38bdf8" strokeWidth={2} />
-            <rect x={leftX + 4} y={entryY - 12} width={75} height={18} fill="#0f172a" rx={3} stroke="#38bdf8" />
-            <text x={leftX + 41} y={entryY + 1} fill="#38bdf8" fontSize={10} fontFamily="monospace" textAnchor="middle" fontWeight="bold">
-              R:R 2.00
+            <rect x={leftX + 4} y={entryY - 11} width={80} height={18} fill="#0f172a" rx={3} stroke="#38bdf8" />
+            <text x={leftX + 44} y={entryY + 2} fill="#38bdf8" fontSize={10} fontFamily="monospace" textAnchor="middle" fontWeight="bold">
+              R:R {rr.toFixed(2)}
             </text>
             <text x={leftX + 6} y={stopY + 12} fill="#f87171" fontSize={9} fontFamily="monospace" fontWeight="bold">
               Stop Loss (SL)
@@ -351,40 +699,69 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             <text x={leftX + 6} y={targetY - 4} fill="#34d399" fontSize={9} fontFamily="monospace" fontWeight="bold">
               Target (TP)
             </text>
+            {renderHandles()}
           </g>
         );
       }
 
       case 'rectangle': {
-        const x = Math.min(p1.x, p2.x);
-        const y = Math.min(p1.y, p2.y);
-        const w = Math.abs(p2.x - p1.x);
-        const h = Math.abs(p2.y - p1.y);
+        const x = Math.min(s1.x, s2.x);
+        const y = Math.min(s1.y, s2.y);
+        const w = Math.max(10, Math.abs(s2.x - s1.x));
+        const h = Math.max(10, Math.abs(s2.y - s1.y));
+
         return (
-          <g key={drawing.id}>
-            <rect x={x} y={y} width={w} height={h} fill="#a855f7" opacity={0.15} stroke="#c084fc" strokeWidth={1.5} />
-            <text x={x + 5} y={y + 12} fill="#c084fc" fontSize={9} fontFamily="monospace" fontWeight="bold">
+          <g
+            key={drawing.id}
+            className="group cursor-pointer pointer-events-auto"
+            onMouseDown={handleBodyDragStart}
+          >
+            <rect
+              x={x}
+              y={y}
+              width={w}
+              height={h}
+              fill={strokeColor}
+              opacity={0.16}
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              strokeDasharray={strokeDash}
+            />
+            <text x={x + 6} y={y + 14} fill={strokeColor} fontSize={9} fontFamily="monospace" fontWeight="bold">
               Order Block / Zone
             </text>
+            {renderHandles()}
           </g>
         );
       }
 
       case 'ruler': {
-        const x = Math.min(p1.x, p2.x);
-        const y = Math.min(p1.y, p2.y);
-        const w = Math.abs(p2.x - p1.x);
-        const h = Math.abs(p2.y - p1.y);
-        const p1Price = p1.price ?? screenYToPrice(p1.y);
-        const p2Price = p2.price ?? screenYToPrice(p2.y);
-        const diffPrice = p2Price - p1Price;
+        const x = Math.min(s1.x, s2.x);
+        const y = Math.min(s1.y, s2.y);
+        const w = Math.max(10, Math.abs(s2.x - s1.x));
+        const h = Math.max(10, Math.abs(s2.y - s1.y));
+        const diffPrice = p2.price - p1.price;
         const pips = calculatePips(diffPrice, symbol);
-        const pct = p1Price ? ((diffPrice / p1Price) * 100).toFixed(2) : '0';
+        const pct = p1.price ? ((diffPrice / p1.price) * 100).toFixed(2) : '0';
 
         return (
-          <g key={drawing.id}>
-            <rect x={x} y={y} width={w} height={h} fill="#06b6d4" opacity={0.12} stroke="#06b6d4" strokeWidth={1} strokeDasharray="2 2" />
-            <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#06b6d4" strokeWidth={1.5} />
+          <g
+            key={drawing.id}
+            className="group cursor-pointer pointer-events-auto"
+            onMouseDown={handleBodyDragStart}
+          >
+            <rect
+              x={x}
+              y={y}
+              width={w}
+              height={h}
+              fill="#06b6d4"
+              opacity={0.12}
+              stroke="#06b6d4"
+              strokeWidth={1}
+              strokeDasharray="2 2"
+            />
+            <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke="#06b6d4" strokeWidth={1.5} />
             {/* Ruler Info Box */}
             <rect x={x + w / 2 - 45} y={y + h / 2 - 16} width={90} height={32} fill="#0f172a" rx={4} stroke="#06b6d4" />
             <text x={x + w / 2} y={y + h / 2 - 2} fill="#38bdf8" fontSize={9} fontFamily="monospace" textAnchor="middle" fontWeight="bold">
@@ -393,6 +770,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             <text x={x + w / 2} y={y + h / 2 + 10} fill="#94a3b8" fontSize={8} fontFamily="monospace" textAnchor="middle">
               Δ {Math.abs(diffPrice).toFixed(5)}
             </text>
+            {renderHandles()}
           </g>
         );
       }
@@ -403,28 +781,113 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   };
 
   return (
-    <svg
-      ref={svgRef}
-      className={`absolute inset-0 w-full h-full z-10 ${
-        isInteracting ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'
-      }`}
-      onMouseDown={handlePointerDown}
-      onMouseMove={handlePointerMove}
-    >
-      {/* Existing finalized drawings */}
-      {showDrawings && drawings.map((d) => renderDrawing(d, false))}
+    <div className="absolute inset-0 w-full h-full pointer-events-none select-none overflow-hidden">
+      {/* 1. Floating CRUD Action Bar for Selected Drawing */}
+      {selectedDrawing && (
+        <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-slate-900/95 border border-slate-700/80 px-3 py-1.5 rounded-xl shadow-2xl backdrop-blur-md text-xs font-mono pointer-events-auto animate-in fade-in zoom-in-95">
+          <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider border-r border-slate-800 pr-2">
+            {selectedDrawing.tool.replace('_', ' ')}
+          </span>
 
-      {/* In-progress active draft drawing */}
-      {currentPoints.length > 0 &&
-        renderDrawing(
-          {
-            id: 'draft',
-            tool: activeTool,
-            points: currentPoints,
-            isComplete: false,
-          },
-          true
-        )}
-    </svg>
+          {/* Color Palette (8 colors) */}
+          <div className="flex items-center gap-1">
+            {['#38bdf8', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4', '#f97316', '#ffffff'].map((c) => (
+              <button
+                key={c}
+                onClick={() => handleColorChange(c)}
+                style={{ backgroundColor: c }}
+                className={`w-4 h-4 rounded-full transition-transform ${
+                  (selectedDrawing.color || '#38bdf8') === c ? 'scale-125 ring-2 ring-white shadow-md' : 'hover:scale-110'
+                }`}
+                title={`Set color ${c}`}
+              />
+            ))}
+          </div>
+
+          {/* Line Width */}
+          <div className="flex items-center gap-0.5 border-l border-r border-slate-800 px-1.5">
+            {[1, 2, 3, 4].map((w) => (
+              <button
+                key={w}
+                onClick={() => handleLineWidthChange(w)}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                  (selectedDrawing.lineWidth || 2) === w ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'
+                }`}
+                title={`Stroke width ${w}px`}
+              >
+                {w}px
+              </button>
+            ))}
+          </div>
+
+          {/* Line Style */}
+          <div className="flex items-center gap-0.5 border-r border-slate-800 pr-1.5">
+            {(['solid', 'dashed', 'dotted'] as const).map((style) => (
+              <button
+                key={style}
+                onClick={() => handleLineStyleChange(style)}
+                className={`px-1.5 py-0.5 rounded text-[10px] ${
+                  (selectedDrawing.lineStyle || 'solid') === style
+                    ? 'bg-blue-600 text-white font-bold'
+                    : 'text-slate-400 hover:bg-slate-800'
+                }`}
+                title={`Line style ${style}`}
+              >
+                {style === 'solid' ? '—' : style === 'dashed' ? '--' : '···'}
+              </button>
+            ))}
+          </div>
+
+          {/* Delete Button */}
+          {onDeleteDrawing && (
+            <button
+              onClick={() => {
+                onDeleteDrawing(selectedDrawing.id);
+                setSelectedId(null);
+              }}
+              className="p-1 rounded hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"
+              title="Delete Drawing (Delete / Backspace)"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Deselect Button */}
+          <button
+            onClick={() => setSelectedId(null)}
+            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 ml-1"
+            title="Deselect (Escape)"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* 2. Interactive SVG Drawing Surface */}
+      <svg
+        ref={svgRef}
+        className={`absolute inset-0 w-full h-full z-10 ${
+          isInteracting ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'
+        }`}
+        onMouseDown={handlePointerDown}
+        onMouseMove={handlePointerMove}
+        onMouseUp={handlePointerUp}
+      >
+        {/* Render finalized drawings */}
+        {showDrawings && drawings.map((d) => renderDrawing(d, false))}
+
+        {/* Render live in-progress drawing preview */}
+        {currentPoints.length > 0 &&
+          renderDrawing(
+            {
+              id: 'draft',
+              tool: activeTool,
+              points: currentPoints,
+              isComplete: false,
+            },
+            true
+          )}
+      </svg>
+    </div>
   );
 };

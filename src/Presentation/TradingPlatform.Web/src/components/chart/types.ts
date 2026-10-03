@@ -14,10 +14,10 @@ export type DrawingTool =
   | 'ruler';
 
 export interface Point {
-  x: number; // pixel x on overlay
-  y: number; // pixel y on overlay
-  time?: number; // timestamp in seconds
-  price?: number; // price at point
+  time: number;  // timestamp in seconds (anchored to candlestick bar)
+  price: number; // price value on series scale
+  x?: number;    // screen pixel x (computed dynamically)
+  y?: number;    // screen pixel y (computed dynamically)
 }
 
 export interface DrawingItem {
@@ -25,6 +25,8 @@ export interface DrawingItem {
   tool: DrawingTool;
   points: Point[];
   color?: string;
+  lineWidth?: number;
+  lineStyle?: 'solid' | 'dashed' | 'dotted';
   isComplete: boolean;
   extraData?: {
     entryPrice?: number;
