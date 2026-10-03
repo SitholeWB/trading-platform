@@ -27,10 +27,103 @@ import {
 } from './types/trading';
 import { getCandleTimeSeconds } from './utils/indicators';
 
+const VALID_PAGES: PageId[] = ['dashboard', 'scanner', 'strategies', 'radar', 'positions', 'sandbox', 'chart'];
+
+function getPageFromUrl(): PageId {
+  if (typeof window === 'undefined') return 'dashboard';
+
+  // 1. Check Hash first (e.g. #/scanner or #scanner)
+  const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase().trim();
+  if (VALID_PAGES.includes(hash as PageId)) {
+    return hash as PageId;
+  }
+
+  // 2. Check Pathname (e.g. /scanner)
+  const path = window.location.pathname.replace(/^\//, '').toLowerCase().trim();
+  if (VALID_PAGES.includes(path as PageId)) {
+    return path as PageId;
+  }
+
+  // 3. Fallback to localStorage
+  try {
+    const saved = localStorage.getItem('tp_active_page') as PageId | null;
+    if (saved && VALID_PAGES.includes(saved)) {
+      return saved;
+    }
+  } catch {
+    // ignore
+  }
+
+  return 'dashboard';
+}
+
 export function App() {
-  const [activePage, setActivePage] = useState<PageId>('dashboard');
-  const [selectedSymbol, setSelectedSymbol] = useState('EURUSD');
-  const [timeframe, setTimeframe] = useState<Timeframe>('M5');
+  const [activePage, setActivePage] = useState<PageId>(() => getPageFromUrl());
+  const [selectedSymbol, setSelectedSymbol] = useState<string>(() => {
+    try {
+      return localStorage.getItem('tp_selected_symbol') || 'EURUSD';
+    } catch {
+      return 'EURUSD';
+    }
+  });
+  const [timeframe, setTimeframe] = useState<Timeframe>(() => {
+    try {
+      return (localStorage.getItem('tp_selected_timeframe') as Timeframe) || 'M5';
+    } catch {
+      return 'M5';
+    }
+  });
+
+  const handleNavigateTo = (page: PageId) => {
+    setActivePage(page);
+    try {
+      localStorage.setItem('tp_active_page', page);
+      const targetHash = page === 'dashboard' ? '#/' : `#/${page}`;
+      if (window.location.hash !== targetHash) {
+        window.location.hash = targetHash;
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tp_selected_symbol', selectedSymbol);
+    } catch {
+      // ignore
+    }
+  }, [selectedSymbol]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tp_selected_timeframe', timeframe);
+    } catch {
+      // ignore
+    }
+  }, [timeframe]);
+
+  // Synchronize on browser Back/Forward (popstate & hashchange)
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const page = getPageFromUrl();
+      setActivePage(page);
+    };
+
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+
+    // Initial URL sync: ensure hash reflects activePage if not set
+    const currentHash = window.location.hash.replace(/^#\/?/, '').toLowerCase().trim();
+    if (!currentHash && activePage !== 'dashboard') {
+      window.location.hash = `#/${activePage}`;
+    }
+
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
+  }, []);
 
   const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>({
     emas: [20, 50, 200],
@@ -310,7 +403,7 @@ export function App() {
       {/* Robotic Navigation Sidebar - Full Screen Height on Left */}
       <NavigationSidebar
         activePage={activePage}
-        onSelectPage={setActivePage}
+        onSelectPage={handleNavigateTo}
         activeStrategiesCount={strategies.filter((s) => s.isActive && s.autoTradingEnabled).length}
         openPositionsCount={positions.filter((p) => p.status === 'Open').length}
         auditLogsCount={auditLogs.length}
@@ -342,7 +435,7 @@ export function App() {
               positions={positions}
               auditLogs={auditLogs}
               onOpenKillSwitch={() => setIsKillSwitchOpen(true)}
-              onNavigateTo={setActivePage}
+              onNavigateTo={handleNavigateTo}
               selectedSymbol={selectedSymbol}
               currentPrice={currentPrice}
             />
@@ -354,7 +447,7 @@ export function App() {
               onOpenChart={(symbol, tf) => {
                 setSelectedSymbol(symbol);
                 if (tf) setTimeframe(tf);
-                setActivePage('chart');
+                handleNavigateTo('chart');
               }}
               onPlaceQuickOrder={handlePlaceQuickOrder}
               activeProvider={activeProvider}
