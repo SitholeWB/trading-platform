@@ -113,6 +113,56 @@ export const tradingApi = {
       method: 'POST',
       body: JSON.stringify(order),
     }),
+  modifyPosition: (ticket: number, stopLoss?: number, takeProfit?: number) =>
+    request<any>(`/positions/${ticket}/modify`, {
+      method: 'POST',
+      body: JSON.stringify({ stopLoss, takeProfit }),
+    }),
+
+  // Chart Drawings Persistence
+  getDrawings: async (symbol: string): Promise<any[]> => {
+    try {
+      return await request<any[]>(`/chart-drawings/${encodeURIComponent(symbol)}`);
+    } catch {
+      return [];
+    }
+  },
+  saveDrawings: async (symbol: string, drawings: any[]): Promise<void> => {
+    try {
+      await fetch(`${BASE_URL}/chart-drawings/${encodeURIComponent(symbol)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(drawings),
+      });
+    } catch (e) {
+      console.warn('Failed to save drawings to backend:', e);
+    }
+  },
+  clearDrawings: async (symbol: string): Promise<void> => {
+    try {
+      await fetch(`${BASE_URL}/chart-drawings/${encodeURIComponent(symbol)}`, { method: 'DELETE' });
+    } catch {}
+  },
+
+  // Chart Alerts Persistence
+  getAlerts: async (): Promise<any[]> => {
+    try {
+      return await request<any[]>('/chart-alerts');
+    } catch {
+      return [];
+    }
+  },
+  saveAlerts: async (alerts: any[]): Promise<void> => {
+    try {
+      await fetch(`${BASE_URL}/chart-alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(alerts),
+      });
+    } catch (e) {
+      console.warn('Failed to save alerts to backend:', e);
+    }
+  },
 
   // Risk & Kill Switch
   getRiskProfile: () => request<RiskProfile>('/risk'),

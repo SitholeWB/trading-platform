@@ -54,4 +54,10 @@ public class TradeOrder
         ExitReason = reason;
         ClosedAtUtc = DateTime.UtcNow;
     }
+
+    public void UpdateProtection(decimal? stopLoss, decimal? takeProfit)
+    {
+        StopLossPrice = stopLoss;
+        TakeProfitPrice = takeProfit;
+    }
 }

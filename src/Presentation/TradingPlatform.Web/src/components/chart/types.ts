@@ -74,3 +74,16 @@ export interface IndicatorSettings {
   supertrendPeriod: number;
   supertrendMultiplier: number;
 }
+
+export type ChartLayoutMode = 'single' | 'split-h' | 'split-v' | 'grid-4';
+
+export interface ChartAlert {
+  id: string;
+  symbol: string;
+  targetPrice: number;
+  condition: 'crosses_above' | 'crosses_below' | 'crosses_any';
+  label?: string;
+  createdAt: number;
+  triggered: boolean;
+  triggeredAt?: number;
+}

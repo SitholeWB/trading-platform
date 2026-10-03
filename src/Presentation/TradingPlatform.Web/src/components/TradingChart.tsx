@@ -37,6 +37,8 @@ import {
 import {
   ActiveIndicators,
   ChartType,
+  ChartLayoutMode,
+  ChartAlert,
   DrawingItem,
   DrawingTool,
   IndicatorSettings,
@@ -48,7 +50,12 @@ import { SymbolSearchModal } from './chart/SymbolSearchModal';
 import { IndicatorsModal } from './chart/IndicatorsModal';
 import { QuickOrderWidget } from './chart/QuickOrderWidget';
 import { HistoryOverlay } from './chart/HistoryOverlay';
-import { Clock, X } from 'lucide-react';
+import { ChartTradeOverlay } from './chart/ChartTradeOverlay';
+import { ChartAlertsModal } from './chart/ChartAlertsModal';
+import { SecondaryChartPane } from './chart/SecondaryChartPane';
+import { playAlertChime } from '../utils/audioAlert';
+import { tradingApi } from '../api/tradingClient';
+import { Clock, X, Bell } from 'lucide-react';
 
 interface TradingChartProps {
   candles: Candle[];
@@ -96,11 +103,27 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 }) => {
   // Chart layout and state
   const [chartType, setChartType] = useState<ChartType>('candlestick');
-  const [layoutMode, setLayoutMode] = useState<'single' | 'split-h' | 'split-v'>('single');
+  const [layoutMode, setLayoutMode] = useState<ChartLayoutMode>('single');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSymbolSearchOpen, setIsSymbolSearchOpen] = useState(false);
   const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false);
+  const [isAlertsModalOpen, setIsAlertsModalOpen] = useState(false);
   const [showOrderWidget, setShowOrderWidget] = useState(true);
+
+  // Active Alert Trigger Notice Banner
+  const [activeTriggerNotice, setActiveTriggerNotice] = useState<{
+    id: string;
+    symbol: string;
+    price: number;
+    label?: string;
+  } | null>(null);
+
+  // Auto-dismiss trigger notice after 7s
+  useEffect(() => {
+    if (!activeTriggerNotice) return;
+    const timer = setTimeout(() => setActiveTriggerNotice(null), 7000);
+    return () => clearTimeout(timer);
+  }, [activeTriggerNotice]);
 
   // Global keyboard shortcut to open symbol search modal (/ or Ctrl+K)
   useEffect(() => {
@@ -115,13 +138,121 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     return () => window.removeEventListener('keydown', handleGlobalKey);
   }, []);
 
-  // Drawing Tools state
+  // 1. Drawing Tools state - Persistent per symbol (CRUD across sessions)
   const [activeTool, setActiveTool] = useState<DrawingTool>('cursor');
-  const [drawings, setDrawings] = useState<DrawingItem[]>([]);
   const [showDrawings, setShowDrawings] = useState(true);
+  const [drawingsMap, setDrawingsMap] = useState<Record<string, DrawingItem[]>>(() => {
+    try {
+      const saved = localStorage.getItem('tradingview_drawings_v2');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Load drawings from backend when symbol changes
+  useEffect(() => {
+    let isSubscribed = true;
+    const loadRemoteDrawings = async () => {
+      try {
+        const remote = await tradingApi.getDrawings(symbol);
+        if (isSubscribed && Array.isArray(remote) && remote.length > 0) {
+          setDrawingsMap((prev) => {
+            const next = { ...prev, [symbol]: remote };
+            try {
+              localStorage.setItem('tradingview_drawings_v2', JSON.stringify(next));
+            } catch {}
+            return next;
+          });
+        }
+      } catch {}
+    };
+    loadRemoteDrawings();
+    return () => {
+      isSubscribed = false;
+    };
+  }, [symbol]);
+
+  const activeDrawings = drawingsMap[symbol] || [];
+
+  const saveDrawingsForSymbol = (sym: string, list: DrawingItem[]) => {
+    setDrawingsMap((prev) => {
+      const next = { ...prev, [sym]: list };
+      try {
+        localStorage.setItem('tradingview_drawings_v2', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    tradingApi.saveDrawings(sym, list);
+  };
+
+  const handleAddDrawing = (d: DrawingItem) => {
+    const updated = [...(drawingsMap[symbol] || []), d];
+    saveDrawingsForSymbol(symbol, updated);
+  };
+
+  const handleUpdateDrawing = (d: DrawingItem) => {
+    const updated = (drawingsMap[symbol] || []).map((item) => (item.id === d.id ? d : item));
+    saveDrawingsForSymbol(symbol, updated);
+  };
 
   const handleDeleteDrawing = (id: string) => {
-    setDrawings((prev) => prev.filter((d) => d.id !== id));
+    const updated = (drawingsMap[symbol] || []).filter((item) => item.id !== id);
+    saveDrawingsForSymbol(symbol, updated);
+  };
+
+  const handleClearDrawings = () => {
+    saveDrawingsForSymbol(symbol, []);
+    tradingApi.clearDrawings(symbol);
+  };
+
+  // 2. Chart Price Level Alerts State & Engine
+  const [alerts, setAlerts] = useState<ChartAlert[]>(() => {
+    try {
+      const saved = localStorage.getItem('tradingview_alerts_v1');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const syncAlerts = async () => {
+      try {
+        const remote = await tradingApi.getAlerts();
+        if (Array.isArray(remote) && remote.length > 0) {
+          setAlerts(remote);
+        }
+      } catch {}
+    };
+    syncAlerts();
+  }, []);
+
+  const saveAlerts = (newAlerts: ChartAlert[]) => {
+    setAlerts(newAlerts);
+    try {
+      localStorage.setItem('tradingview_alerts_v1', JSON.stringify(newAlerts));
+    } catch {}
+    tradingApi.saveAlerts(newAlerts);
+  };
+
+  const handleCreateAlert = (newAlert: ChartAlert) => {
+    const next = [...alerts, newAlert];
+    saveAlerts(next);
+  };
+
+  const handleDeleteAlert = (id: string) => {
+    const next = alerts.filter((a) => a.id !== id);
+    saveAlerts(next);
+  };
+
+  // 3. Trade Protection modification handler
+  const handleModifyPosition = async (ticket: number, stopLoss?: number, takeProfit?: number) => {
+    try {
+      await tradingApi.modifyPosition(ticket, stopLoss, takeProfit);
+    } catch (e) {
+      console.warn('Failed to modify position protection:', e);
+    }
   };
 
   // Indicators toggle state
@@ -217,6 +348,50 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     const lows = cleanCandles.map((c) => c.low);
     return { min: Math.min(...lows), max: Math.max(...highs) };
   }, [cleanCandles]);
+
+  // Monitor live price against active alerts
+  const prevPriceRef = useRef<number>(currentPrice);
+  useEffect(() => {
+    const prevP = prevPriceRef.current;
+    const curP = currentPrice;
+    prevPriceRef.current = curP;
+
+    if (!prevP || !curP || prevP === curP) return;
+
+    let anyTriggered = false;
+    const updatedAlerts = alerts.map((a) => {
+      if (a.symbol.toUpperCase() !== symbol.toUpperCase() || a.triggered) return a;
+
+      let triggered = false;
+      if (a.condition === 'crosses_above' && prevP < a.targetPrice && curP >= a.targetPrice) {
+        triggered = true;
+      } else if (a.condition === 'crosses_below' && prevP > a.targetPrice && curP <= a.targetPrice) {
+        triggered = true;
+      } else if (
+        a.condition === 'crosses_any' &&
+        ((prevP < a.targetPrice && curP >= a.targetPrice) || (prevP > a.targetPrice && curP <= a.targetPrice))
+      ) {
+        triggered = true;
+      }
+
+      if (triggered) {
+        anyTriggered = true;
+        playAlertChime();
+        setActiveTriggerNotice({
+          id: a.id,
+          symbol: a.symbol,
+          price: a.targetPrice,
+          label: a.label,
+        });
+        return { ...a, triggered: true, triggeredAt: Date.now() };
+      }
+      return a;
+    });
+
+    if (anyTriggered) {
+      saveAlerts(updatedAlerts);
+    }
+  }, [currentPrice, alerts, symbol]);
 
   // Countdown to next candle close
   const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
@@ -783,6 +958,23 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         } catch {}
       });
 
+    // Add Price Lines for Active Alerts for this symbol
+    alerts
+      .filter((a) => a.symbol.toUpperCase() === symbol.toUpperCase() && !a.triggered)
+      .forEach((alt) => {
+        try {
+          const alertLine = series.createPriceLine({
+            price: alt.targetPrice,
+            color: '#f59e0b',
+            lineWidth: 1,
+            lineStyle: LineStyle.Dotted,
+            axisLabelVisible: true,
+            title: `🔔 ALERT: ${formatPrice(alt.targetPrice, symbol)}`,
+          });
+          if (alertLine) priceLinesRef.current.push(alertLine);
+        } catch {}
+      });
+
     // Markers (Order executions & Near-miss audits)
     const markers: SeriesMarker<UTCTimestamp>[] = [];
     positions
@@ -833,7 +1025,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         series.setMarkers([]);
       } catch {}
     }
-  }, [positions, auditLogs, symbol, historyMarks, chartType, cleanCandles]);
+  }, [positions, auditLogs, symbol, historyMarks, chartType, cleanCandles, alerts]);
 
   // ----------------------------------------------------
   // 3. RSI Oscillator Sub-Pane (Lifecycle & Data separated)
@@ -1135,6 +1327,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         activeIndicatorsCount={
           Object.values(activeIndicators).filter(Boolean).length
         }
+        onOpenAlertsModal={() => setIsAlertsModalOpen(true)}
+        activeAlertsCount={
+          alerts.filter((a) => a.symbol.toUpperCase() === symbol.toUpperCase() && !a.triggered).length
+        }
         onFitContent={handleFitContent}
         onTakeSnapshot={handleTakeSnapshot}
         isFullscreen={isFullscreen}
@@ -1151,174 +1347,284 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         onDismissHistoryNotice={() => setHistoryNotice(null)}
       />
 
+      {/* Alert Trigger Toast Notification */}
+      {activeTriggerNotice && (
+        <div className="absolute top-12 right-6 z-50 bg-amber-500 text-slate-950 font-bold px-4 py-2 rounded-xl shadow-2xl flex items-center gap-3 animate-bounce border-2 border-amber-300 pointer-events-auto">
+          <Bell className="w-5 h-5 animate-pulse text-slate-950 flex-shrink-0" />
+          <div>
+            <div className="text-[10px] uppercase tracking-wider font-extrabold">Price Alert Triggered!</div>
+            <div className="text-xs font-mono">
+              {activeTriggerNotice.symbol} reached {formatPrice(activeTriggerNotice.price, activeTriggerNotice.symbol)}
+              {activeTriggerNotice.label ? ` · ${activeTriggerNotice.label}` : ''}
+            </div>
+          </div>
+          <button
+            onClick={() => setActiveTriggerNotice(null)}
+            className="p-1 hover:bg-black/20 rounded ml-2"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Main Chart Body (Sidebar + Chart Canvas + Overlay) */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Drawing Tools Sidebar */}
         <DrawingToolbar
           activeTool={activeTool}
           onSelectTool={setActiveTool}
-          onClearDrawings={() => setDrawings([])}
+          onClearDrawings={handleClearDrawings}
           showDrawings={showDrawings}
           onToggleShowDrawings={() => setShowDrawings(!showDrawings)}
-          drawingsCount={drawings.length}
+          drawingsCount={activeDrawings.length}
         />
 
-        {/* Center Viewport */}
-        <div className="flex-1 flex flex-col h-full relative overflow-hidden bg-[#0b0f19]">
-          {/* Quick One-Click Trading Dock */}
-          {showOrderWidget && (
-            <QuickOrderWidget
-              symbol={symbol}
-              currentPrice={currentPrice}
-              onPlaceOrder={onPlaceOrder}
-            />
-          )}
+        {/* Center Viewport / Multi-Chart Grid */}
+        <div
+          className={`flex-1 h-full relative overflow-hidden bg-[#0b0f19] ${
+            layoutMode === 'split-v'
+              ? 'flex flex-row gap-1 p-0.5'
+              : layoutMode === 'split-h'
+              ? 'flex flex-col gap-1 p-0.5'
+              : layoutMode === 'grid-4'
+              ? 'grid grid-cols-2 grid-rows-2 gap-1 p-0.5'
+              : 'flex flex-col'
+          }`}
+        >
+          {/* Slot 0: Primary Chart (Always mounted) */}
+          <div
+            className={`flex flex-col h-full relative overflow-hidden bg-[#0b0f19] ${
+              layoutMode === 'split-v'
+                ? 'w-1/2 border-r border-slate-800'
+                : layoutMode === 'split-h'
+                ? 'h-1/2 border-b border-slate-800'
+                : layoutMode === 'grid-4'
+                ? 'w-full h-full border-r border-b border-slate-800'
+                : 'w-full'
+            }`}
+          >
+            {/* Quick One-Click Trading Dock */}
+            {showOrderWidget && (
+              <QuickOrderWidget
+                symbol={symbol}
+                currentPrice={currentPrice}
+                onPlaceOrder={onPlaceOrder}
+              />
+            )}
 
-          {/* Interactive Inspection Bar / OHLCV Header */}
-          <div className="absolute top-2 left-3 right-3 z-10 flex flex-wrap items-center justify-between pointer-events-none text-xs font-mono">
-            {displayCandle && (
-              <div className="flex flex-wrap items-center gap-2.5 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800/80 pointer-events-auto">
-                <span className="font-bold text-slate-100">{symbol}</span>
-                <span className="text-slate-400 font-semibold">{timeframe}</span>
-                <span className="text-slate-500">|</span>
-                <span className="text-slate-400">
-                  O: <strong className="text-slate-200">{formatPrice(displayCandle.open, symbol)}</strong>
-                </span>
-                <span className="text-slate-400">
-                  H: <strong className="text-slate-200">{formatPrice(displayCandle.high, symbol)}</strong>
-                </span>
-                <span className="text-slate-400">
-                  L: <strong className="text-slate-200">{formatPrice(displayCandle.low, symbol)}</strong>
-                </span>
-                <span className="text-slate-400">
-                  C: <strong className={displayCandle.close >= displayCandle.open ? 'text-emerald-400' : 'text-red-400'}>
-                    {formatPrice(displayCandle.close, symbol)}
-                  </strong>
-                </span>
-                {displayCandle.volume > 0 && (
-                  <span className="text-slate-400 hidden sm:inline">
-                    Vol: <strong className="text-slate-300">{displayCandle.volume.toLocaleString()}</strong>
+            {/* Interactive Inspection Bar / OHLCV Header */}
+            <div className="absolute top-2 left-3 right-3 z-10 flex flex-wrap items-center justify-between pointer-events-none text-xs font-mono">
+              {displayCandle && (
+                <div className="flex flex-wrap items-center gap-2.5 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800/80 pointer-events-auto">
+                  <span className="font-bold text-slate-100">{symbol}</span>
+                  <span className="text-slate-400 font-semibold">{timeframe}</span>
+                  <span className="text-slate-500">|</span>
+                  <span className="text-slate-400">
+                    O: <strong className="text-slate-200">{formatPrice(displayCandle.open, symbol)}</strong>
                   </span>
-                )}
-                {/* Candle Close Countdown */}
-                <div className="flex items-center gap-1 pl-1 text-[11px] text-blue-400 font-bold border-l border-slate-800">
-                  <Clock className="w-3 h-3 text-blue-400 animate-pulse" />
-                  <span>{formatCountdown(secondsRemaining)}</span>
+                  <span className="text-slate-400">
+                    H: <strong className="text-slate-200">{formatPrice(displayCandle.high, symbol)}</strong>
+                  </span>
+                  <span className="text-slate-400">
+                    L: <strong className="text-slate-200">{formatPrice(displayCandle.low, symbol)}</strong>
+                  </span>
+                  <span className="text-slate-400">
+                    C: <strong className={displayCandle.close >= displayCandle.open ? 'text-emerald-400' : 'text-red-400'}>
+                      {formatPrice(displayCandle.close, symbol)}
+                    </strong>
+                  </span>
+                  {displayCandle.volume > 0 && (
+                    <span className="text-slate-400 hidden sm:inline">
+                      Vol: <strong className="text-slate-300">{displayCandle.volume.toLocaleString()}</strong>
+                    </span>
+                  )}
+                  {/* Candle Close Countdown */}
+                  <div className="flex items-center gap-1 pl-1 text-[11px] text-blue-400 font-bold border-l border-slate-800">
+                    <Clock className="w-3 h-3 text-blue-400 animate-pulse" />
+                    <span>{formatCountdown(secondsRemaining)}</span>
+                  </div>
                 </div>
+              )}
+
+              {/* Active Indicator Tags with quick toggle/remove */}
+              <div className="hidden xl:flex items-center gap-1.5 pointer-events-auto">
+                {activeIndicators.ema20 && (
+                  <div className="flex items-center gap-1 bg-slate-950/80 border border-cyan-500/30 text-cyan-400 px-2 py-0.5 rounded text-[10px]">
+                    <span>EMA 20</span>
+                    <button
+                      onClick={() => setActiveIndicators({ ...activeIndicators, ema20: false })}
+                      className="hover:text-cyan-200"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                )}
+                {activeIndicators.ema50 && (
+                  <div className="flex items-center gap-1 bg-slate-950/80 border border-orange-500/30 text-orange-400 px-2 py-0.5 rounded text-[10px]">
+                    <span>EMA 50</span>
+                    <button
+                      onClick={() => setActiveIndicators({ ...activeIndicators, ema50: false })}
+                      className="hover:text-orange-200"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                )}
+                {activeIndicators.bollinger && (
+                  <div className="flex items-center gap-1 bg-slate-950/80 border border-purple-500/30 text-purple-400 px-2 py-0.5 rounded text-[10px]">
+                    <span>BB (20,2)</span>
+                    <button
+                      onClick={() => setActiveIndicators({ ...activeIndicators, bollinger: false })}
+                      className="hover:text-purple-200"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Primary Candlestick Canvas Container */}
+            <div className="flex-1 w-full h-full relative overflow-hidden">
+              <div ref={mainChartContainerRef} className="w-full h-full" />
+
+              {/* Drawing Canvas Overlay */}
+              <DrawingCanvas
+                activeTool={activeTool}
+                onToolComplete={() => setActiveTool('cursor')}
+                drawings={activeDrawings}
+                onAddDrawing={handleAddDrawing}
+                onUpdateDrawing={handleUpdateDrawing}
+                onDeleteDrawing={handleDeleteDrawing}
+                showDrawings={showDrawings}
+                symbol={symbol}
+                chart={mainChartRef.current}
+                series={mainSeriesRef.current}
+                chartDimensions={chartDimensions}
+                priceRange={priceRange}
+                candles={cleanCandles}
+              />
+
+              {/* Interactive On-Chart Trade & Position Overlay */}
+              <ChartTradeOverlay
+                positions={positions}
+                symbol={symbol}
+                chart={mainChartRef.current}
+                series={mainSeriesRef.current}
+                currentPrice={currentPrice}
+                onClosePosition={onClosePosition}
+                onModifyPosition={handleModifyPosition}
+                onPlaceQuickOrder={onPlaceOrder}
+              />
+
+              {/* History page boundaries + persistent history status */}
+              <HistoryOverlay
+                chart={mainChartRef.current}
+                boundaries={historyMarks}
+                totalBars={cleanCandles.length}
+                oldestTime={cleanCandles.length > 0 ? getCandleTimeSeconds(cleanCandles[0].timestamp) : null}
+                isLoading={isLoadingHistory}
+                hasMore={hasMoreHistory}
+                error={historyError}
+                onLoadMore={handleManualLoadHistory}
+              />
+            </div>
+
+            {/* Sub-Pane 1: RSI Oscillator */}
+            {activeIndicators.rsi && (
+              <div className="h-24 border-t border-slate-800 bg-[#090d16] relative flex flex-col flex-shrink-0">
+                <div className="h-5 px-3 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <span className="font-bold text-amber-400">
+                    RSI ({indicatorSettings.rsiPeriod})
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500">OB: 70 | OS: 30</span>
+                    <button
+                      onClick={() => setActiveIndicators({ ...activeIndicators, rsi: false })}
+                      className="hover:text-red-400"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+                <div ref={rsiChartContainerRef} className="flex-1 w-full h-full" />
               </div>
             )}
 
-            {/* Active Indicator Tags with quick toggle/remove */}
-            <div className="hidden xl:flex items-center gap-1.5 pointer-events-auto">
-              {activeIndicators.ema20 && (
-                <div className="flex items-center gap-1 bg-slate-950/80 border border-cyan-500/30 text-cyan-400 px-2 py-0.5 rounded text-[10px]">
-                  <span>EMA 20</span>
+            {/* Sub-Pane 2: MACD Oscillator */}
+            {activeIndicators.macd && (
+              <div className="h-24 border-t border-slate-800 bg-[#090d16] relative flex flex-col flex-shrink-0">
+                <div className="h-5 px-3 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <span className="font-bold text-cyan-400">
+                    MACD ({indicatorSettings.macdFast},{indicatorSettings.macdSlow},{indicatorSettings.macdSignal})
+                  </span>
                   <button
-                    onClick={() => setActiveIndicators({ ...activeIndicators, ema20: false })}
-                    className="hover:text-cyan-200"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-              )}
-              {activeIndicators.ema50 && (
-                <div className="flex items-center gap-1 bg-slate-950/80 border border-orange-500/30 text-orange-400 px-2 py-0.5 rounded text-[10px]">
-                  <span>EMA 50</span>
-                  <button
-                    onClick={() => setActiveIndicators({ ...activeIndicators, ema50: false })}
-                    className="hover:text-orange-200"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-              )}
-              {activeIndicators.bollinger && (
-                <div className="flex items-center gap-1 bg-slate-950/80 border border-purple-500/30 text-purple-400 px-2 py-0.5 rounded text-[10px]">
-                  <span>BB (20,2)</span>
-                  <button
-                    onClick={() => setActiveIndicators({ ...activeIndicators, bollinger: false })}
-                    className="hover:text-purple-200"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Primary Candlestick Canvas Container */}
-          <div className="flex-1 w-full h-full relative overflow-hidden">
-            <div ref={mainChartContainerRef} className="w-full h-full" />
-
-            {/* Drawing Canvas Overlay */}
-            <DrawingCanvas
-              activeTool={activeTool}
-              onToolComplete={() => setActiveTool('cursor')}
-              drawings={drawings}
-              onAddDrawing={(d) => setDrawings([...drawings, d])}
-              onUpdateDrawing={(d) =>
-                setDrawings(drawings.map((item) => (item.id === d.id ? d : item)))
-              }
-              onDeleteDrawing={handleDeleteDrawing}
-              showDrawings={showDrawings}
-              symbol={symbol}
-              chart={mainChartRef.current}
-              series={mainSeriesRef.current}
-              chartDimensions={chartDimensions}
-              priceRange={priceRange}
-              candles={cleanCandles}
-            />
-
-            {/* History page boundaries + persistent history status */}
-            <HistoryOverlay
-              chart={mainChartRef.current}
-              boundaries={historyMarks}
-              totalBars={cleanCandles.length}
-              oldestTime={cleanCandles.length > 0 ? getCandleTimeSeconds(cleanCandles[0].timestamp) : null}
-              isLoading={isLoadingHistory}
-              hasMore={hasMoreHistory}
-              error={historyError}
-              onLoadMore={handleManualLoadHistory}
-            />
-          </div>
-
-          {/* Sub-Pane 1: RSI Oscillator */}
-          {activeIndicators.rsi && (
-            <div className="h-24 border-t border-slate-800 bg-[#090d16] relative flex flex-col flex-shrink-0">
-              <div className="h-5 px-3 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                <span className="font-bold text-amber-400">
-                  RSI ({indicatorSettings.rsiPeriod})
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500">OB: 70 | OS: 30</span>
-                  <button
-                    onClick={() => setActiveIndicators({ ...activeIndicators, rsi: false })}
+                    onClick={() => setActiveIndicators({ ...activeIndicators, macd: false })}
                     className="hover:text-red-400"
                   >
                     <X className="w-3 h-3" />
                   </button>
                 </div>
+                <div ref={macdChartContainerRef} className="flex-1 w-full h-full" />
               </div>
-              <div ref={rsiChartContainerRef} className="flex-1 w-full h-full" />
+            )}
+          </div>
+
+          {/* Secondary Panes when Split or Grid active */}
+          {layoutMode === 'split-v' && (
+            <div className="w-1/2 h-full">
+              <SecondaryChartPane
+                paneId="split-v-1"
+                defaultSymbol={symbol}
+                defaultTimeframe={timeframe === 'M5' ? 'H1' : 'M5'}
+                onMaximize={() => setLayoutMode('single')}
+                onClose={() => setLayoutMode('single')}
+              />
             </div>
           )}
 
-          {/* Sub-Pane 2: MACD Oscillator */}
-          {activeIndicators.macd && (
-            <div className="h-24 border-t border-slate-800 bg-[#090d16] relative flex flex-col flex-shrink-0">
-              <div className="h-5 px-3 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                <span className="font-bold text-cyan-400">
-                  MACD ({indicatorSettings.macdFast},{indicatorSettings.macdSlow},{indicatorSettings.macdSignal})
-                </span>
-                <button
-                  onClick={() => setActiveIndicators({ ...activeIndicators, macd: false })}
-                  className="hover:text-red-400"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-              <div ref={macdChartContainerRef} className="flex-1 w-full h-full" />
+          {layoutMode === 'split-h' && (
+            <div className="h-1/2 w-full">
+              <SecondaryChartPane
+                paneId="split-h-1"
+                defaultSymbol={symbol}
+                defaultTimeframe={timeframe === 'M5' ? 'H1' : 'M5'}
+                onMaximize={() => setLayoutMode('single')}
+                onClose={() => setLayoutMode('single')}
+              />
             </div>
+          )}
+
+          {layoutMode === 'grid-4' && (
+            <>
+              <div className="w-full h-full border-b border-slate-800">
+                <SecondaryChartPane
+                  paneId="grid-4-1"
+                  defaultSymbol={symbol}
+                  defaultTimeframe="H1"
+                  onMaximize={() => setLayoutMode('single')}
+                  onClose={() => setLayoutMode('single')}
+                />
+              </div>
+              <div className="w-full h-full border-r border-slate-800">
+                <SecondaryChartPane
+                  paneId="grid-4-2"
+                  defaultSymbol={symbol}
+                  defaultTimeframe="M15"
+                  onMaximize={() => setLayoutMode('single')}
+                  onClose={() => setLayoutMode('single')}
+                />
+              </div>
+              <div className="w-full h-full">
+                <SecondaryChartPane
+                  paneId="grid-4-3"
+                  defaultSymbol={symbol}
+                  defaultTimeframe="M1"
+                  onMaximize={() => setLayoutMode('single')}
+                  onClose={() => setLayoutMode('single')}
+                />
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -1344,6 +1650,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         }
         settings={indicatorSettings}
         onUpdateSettings={setIndicatorSettings}
+      />
+
+      {/* Price Alerts Modal */}
+      <ChartAlertsModal
+        isOpen={isAlertsModalOpen}
+        onClose={() => setIsAlertsModalOpen(false)}
+        symbol={symbol}
+        currentPrice={currentPrice}
+        alerts={alerts}
+        onCreateAlert={handleCreateAlert}
+        onDeleteAlert={handleDeleteAlert}
+        onTestSound={playAlertChime}
       />
     </div>
   );

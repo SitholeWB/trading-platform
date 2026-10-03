@@ -11,8 +11,9 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
-import { ChartType } from './types';
+import { ChartType, ChartLayoutMode } from './types';
 import { Timeframe } from '../../types/trading';
+import { Bell } from 'lucide-react';
 
 interface ChartToolbarProps {
   symbol: string;
@@ -23,12 +24,14 @@ interface ChartToolbarProps {
   onChartTypeChange: (type: ChartType) => void;
   onOpenIndicatorsModal: () => void;
   activeIndicatorsCount: number;
+  onOpenAlertsModal?: () => void;
+  activeAlertsCount?: number;
   onFitContent: () => void;
   onTakeSnapshot: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
-  layoutMode: 'single' | 'split-h' | 'split-v';
-  onLayoutModeChange: (mode: 'single' | 'split-h' | 'split-v') => void;
+  layoutMode: ChartLayoutMode;
+  onLayoutModeChange: (mode: ChartLayoutMode) => void;
   currentPrice: number;
   priceChange: { diff: number; pct: number };
   // Historical pagination
@@ -49,6 +52,8 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
   onChartTypeChange,
   onOpenIndicatorsModal,
   activeIndicatorsCount,
+  onOpenAlertsModal,
+  activeAlertsCount = 0,
   onFitContent,
   onTakeSnapshot,
   isFullscreen,
@@ -191,6 +196,23 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
               </span>
             )}
           </button>
+
+          {/* Price Level Alerts Dialog Trigger */}
+          {onOpenAlertsModal && (
+            <button
+              onClick={onOpenAlertsModal}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold transition-all flex-shrink-0"
+              title="Price Level Alerts & Chimes"
+            >
+              <Bell className="w-3.5 h-3.5 text-amber-400" />
+              <span>Alerts</span>
+              {activeAlertsCount !== undefined && activeAlertsCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold flex items-center justify-center font-mono">
+                  {activeAlertsCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Right Segment: Load History Button, Tools, Split View, Snapshot, Fullscreen, Reset */}
@@ -287,6 +309,20 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
                   >
                     <span>[ = ]</span>
                     <span>Dual Horizontal Split</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onLayoutModeChange('grid-4');
+                      setShowLayoutDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left ${
+                      layoutMode === 'grid-4'
+                        ? 'bg-blue-600 text-white font-bold'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>[ ⊞ ]</span>
+                    <span>Quad 2x2 Grid (4 Timeframes)</span>
                   </button>
                 </div>
               </>

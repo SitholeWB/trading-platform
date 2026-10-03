@@ -185,6 +185,28 @@ positionsGroup.MapPost("/order", async ([FromBody] PlaceManualOrderDto dto, IOrd
     return Results.Ok(result);
 });
 
+positionsGroup.MapPost("/{ticket:long}/modify", async (long ticket, [FromBody] ModifyPositionDto dto, IOrderExecutionService broker, ITradeRepository tradeRepo, CancellationToken ct) =>
+{
+    var result = await broker.ModifyOrderAsync(ticket, dto.StopLoss, dto.TakeProfit, ct);
+    if (!result.Success) return Results.BadRequest(result);
+
+    var pos = await tradeRepo.GetPositionByTicketAsync(ticket, ct);
+    if (pos != null)
+    {
+        pos.UpdateProtection(dto.StopLoss, dto.TakeProfit);
+        await tradeRepo.UpdatePositionAsync(pos, ct);
+    }
+
+    var order = await tradeRepo.GetOrderByTicketAsync(ticket, ct);
+    if (order != null)
+    {
+        order.UpdateProtection(dto.StopLoss, dto.TakeProfit);
+        await tradeRepo.UpdateOrderAsync(order, ct);
+    }
+
+    return Results.Ok(new { success = true, ticket, stopLoss = dto.StopLoss, takeProfit = dto.TakeProfit });
+});
+
 // ----------------------------------------------------
 // 4. Risk Profile & Kill Switch Endpoints
 // ----------------------------------------------------
@@ -1227,11 +1249,66 @@ settingsGroup.MapPost("/broker-config", async (
     });
 });
 
+// ----------------------------------------------------
+// 7. Chart Drawings & Level Alerts Persistence
+// ----------------------------------------------------
+var chartStorageDir = Path.Combine(AppContext.BaseDirectory, "Data", "Charts");
+Directory.CreateDirectory(chartStorageDir);
+
+var drawingsGroup = app.MapGroup("/api/chart-drawings").WithTags("Chart Drawings");
+
+drawingsGroup.MapGet("/{symbol}", async (string symbol, CancellationToken ct) =>
+{
+    string sym = symbol.Trim().ToUpperInvariant();
+    string filePath = Path.Combine(chartStorageDir, $"drawings_{sym}.json");
+    if (!File.Exists(filePath)) return Results.Content("[]", "application/json");
+
+    string json = await File.ReadAllTextAsync(filePath, ct);
+    return Results.Content(json, "application/json");
+});
+
+drawingsGroup.MapPost("/{symbol}", async (string symbol, HttpRequest request, CancellationToken ct) =>
+{
+    string sym = symbol.Trim().ToUpperInvariant();
+    string filePath = Path.Combine(chartStorageDir, $"drawings_{sym}.json");
+    using var reader = new StreamReader(request.Body);
+    string json = await reader.ReadToEndAsync(ct);
+    await File.WriteAllTextAsync(filePath, json, ct);
+    return Results.Ok(new { success = true, symbol = sym });
+});
+
+drawingsGroup.MapDelete("/{symbol}", (string symbol) =>
+{
+    string sym = symbol.Trim().ToUpperInvariant();
+    string filePath = Path.Combine(chartStorageDir, $"drawings_{sym}.json");
+    if (File.Exists(filePath)) File.Delete(filePath);
+    return Results.NoContent();
+});
+
+var alertsGroup = app.MapGroup("/api/chart-alerts").WithTags("Chart Alerts");
+string alertsFilePath = Path.Combine(chartStorageDir, "alerts.json");
+
+alertsGroup.MapGet("/", async (CancellationToken ct) =>
+{
+    if (!File.Exists(alertsFilePath)) return Results.Content("[]", "application/json");
+    string json = await File.ReadAllTextAsync(alertsFilePath, ct);
+    return Results.Content(json, "application/json");
+});
+
+alertsGroup.MapPost("/", async (HttpRequest request, CancellationToken ct) =>
+{
+    using var reader = new StreamReader(request.Body);
+    string json = await reader.ReadToEndAsync(ct);
+    await File.WriteAllTextAsync(alertsFilePath, json, ct);
+    return Results.Ok(new { success = true });
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
 
 // DTO records
+public record ModifyPositionDto(decimal? StopLoss, decimal? TakeProfit);
 public record CreateStrategyDto(
     string Name,
     string? Description,

@@ -58,4 +58,11 @@ public class Position
         Status = OrderStatus.Closed;
         UpdatedAtUtc = DateTime.UtcNow;
     }
+
+    public void UpdateProtection(decimal? stopLoss, decimal? takeProfit)
+    {
+        StopLossPrice = stopLoss;
+        TakeProfitPrice = takeProfit;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
 }
