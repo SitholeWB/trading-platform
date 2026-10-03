@@ -100,6 +100,18 @@ export const tradingApi = {
     request<any>(`/positions/${ticket}/close?reason=${encodeURIComponent(reason || 'ManualClose')}`, {
       method: 'POST',
     }),
+  placeOrder: (order: {
+    symbol: string;
+    orderType: string;
+    lots: number;
+    price: number;
+    stopLoss?: number;
+    takeProfit?: number;
+  }) =>
+    request<any>('/positions/order', {
+      method: 'POST',
+      body: JSON.stringify(order),
+    }),
 
   // Risk & Kill Switch
   getRiskProfile: () => request<RiskProfile>('/risk'),
@@ -133,8 +145,12 @@ export const tradingApi = {
     }),
 
   // Market Data & Public Multi-Timeframe Feeds
-  getCandles: (symbol: string, timeframe: string, count = 60) =>
-    request<Candle[]>(`/market-data/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&count=${count}`),
+  getCandles: (symbol: string, timeframe: string, count = 120, before?: number) =>
+    request<Candle[]>(
+      `/market-data/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&count=${count}${
+        before ? `&before=${before}` : ''
+      }`
+    ),
 
   getProviders: () =>
     request<{ activeProvider: string; providers: any[] }>('/market-data/providers'),

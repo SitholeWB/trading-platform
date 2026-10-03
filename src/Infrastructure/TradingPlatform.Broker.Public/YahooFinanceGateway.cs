@@ -48,61 +48,7 @@ public class YahooFinanceGateway : IHistoricalDataProvider
                 return FallbackCandles(symbol, parsedTimeframe, count);
             }
 
-            using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("chart", out var chart) ||
-                !chart.TryGetProperty("result", out var resultArr) ||
-                resultArr.GetArrayLength() == 0)
-            {
-                _logger.LogWarning("[YAHOO FINANCE] Empty chart result for {YahooSymbol}", yahooSymbol);
-                return FallbackCandles(symbol, parsedTimeframe, count);
-            }
-
-            var result = resultArr[0];
-            if (!result.TryGetProperty("timestamp", out var timestampArr))
-            {
-                return FallbackCandles(symbol, parsedTimeframe, count);
-            }
-
-            var indicators = result.GetProperty("indicators").GetProperty("quote")[0];
-            var opens = indicators.GetProperty("open");
-            var highs = indicators.GetProperty("high");
-            var lows = indicators.GetProperty("low");
-            var closes = indicators.GetProperty("close");
-            var volumes = indicators.GetProperty("volume");
-
-            int len = timestampArr.GetArrayLength();
-            for (int i = 0; i < len; i++)
-            {
-                if (opens[i].ValueKind == JsonValueKind.Null ||
-                    highs[i].ValueKind == JsonValueKind.Null ||
-                    lows[i].ValueKind == JsonValueKind.Null ||
-                    closes[i].ValueKind == JsonValueKind.Null)
-                {
-                    continue;
-                }
-
-                long unixSec = timestampArr[i].GetInt64();
-                var time = DateTimeOffset.FromUnixTimeSeconds(unixSec).UtcDateTime;
-                decimal o = opens[i].GetDecimal();
-                decimal h = highs[i].GetDecimal();
-                decimal l = lows[i].GetDecimal();
-                decimal c = closes[i].GetDecimal();
-                decimal vol = volumes[i].ValueKind != JsonValueKind.Null ? volumes[i].GetDecimal() : 100m;
-
-                candles.Add(new Candle(
-                    symbol,
-                    parsedTimeframe,
-                    time,
-                    o,
-                    h,
-                    l,
-                    c,
-                    vol,
-                    isComplete: true));
-            }
+            candles = await ParseYahooChartResponseAsync(response, symbol, parsedTimeframe, ct);
 
             if (candles.Count > count)
             {
@@ -118,6 +64,140 @@ public class YahooFinanceGateway : IHistoricalDataProvider
             return FallbackCandles(symbol, parsedTimeframe, count);
         }
     }
+
+    public async Task<IReadOnlyList<Candle>> GetHistoricalCandlesBeforeAsync(
+        string symbol,
+        string timeframe,
+        int count,
+        DateTime beforeUtc,
+        CancellationToken ct)
+    {
+        var parsedTimeframe = Enum.TryParse<Timeframe>(timeframe, true, out var tf) ? tf : Timeframe.M5;
+        string yahooSymbol = NormalizeYahooSymbol(symbol);
+        string interval = MapTimeframeToInterval(parsedTimeframe);
+
+        long p2 = ((DateTimeOffset)beforeUtc).ToUnixTimeSeconds();
+        long barSecs = GetTimeframeSeconds(parsedTimeframe);
+        long p1 = p2 - (Math.Max(count, 50) * barSecs * 2);
+
+        string url = $"https://query1.finance.yahoo.com/v8/finance/chart/{yahooSymbol}?interval={interval}&period1={p1}&period2={p2}";
+
+        try
+        {
+            _logger.LogInformation("[YAHOO FINANCE] Requesting older candles for {YahooSymbol} interval={Interval} period1={P1} period2={P2}...", yahooSymbol, interval, p1, p2);
+            using var response = await _httpClient.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return Array.Empty<Candle>();
+            }
+
+            var fetched = await ParseYahooChartResponseAsync(response, symbol, parsedTimeframe, ct);
+            var filtered = fetched.Where(c => c.Timestamp < beforeUtc).ToList();
+            if (filtered.Count > count)
+            {
+                filtered = filtered.TakeLast(count).ToList();
+            }
+            return filtered;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[YAHOO FINANCE] Exception fetching older candles for {Symbol}", symbol);
+            return Array.Empty<Candle>();
+        }
+    }
+
+    private static async Task<List<Candle>> ParseYahooChartResponseAsync(
+        HttpResponseMessage response,
+        string symbol,
+        Timeframe parsedTimeframe,
+        CancellationToken ct)
+    {
+        var candles = new List<Candle>();
+        using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+
+        var root = doc.RootElement;
+        if (!root.TryGetProperty("chart", out var chart) ||
+            !chart.TryGetProperty("result", out var resultArr) ||
+            resultArr.GetArrayLength() == 0)
+        {
+            return candles;
+        }
+
+        var result = resultArr[0];
+        if (!result.TryGetProperty("timestamp", out var timestampArr))
+        {
+            return candles;
+        }
+
+        var indicators = result.GetProperty("indicators").GetProperty("quote")[0];
+        var opens = indicators.GetProperty("open");
+        var highs = indicators.GetProperty("high");
+        var lows = indicators.GetProperty("low");
+        var closes = indicators.GetProperty("close");
+        var volumes = indicators.GetProperty("volume");
+
+        int len = timestampArr.GetArrayLength();
+        for (int i = 0; i < len; i++)
+        {
+            if (opens[i].ValueKind == JsonValueKind.Null ||
+                highs[i].ValueKind == JsonValueKind.Null ||
+                lows[i].ValueKind == JsonValueKind.Null ||
+                closes[i].ValueKind == JsonValueKind.Null)
+            {
+                continue;
+            }
+
+            long unixSec = timestampArr[i].GetInt64();
+            var time = DateTimeOffset.FromUnixTimeSeconds(unixSec).UtcDateTime;
+            decimal o = opens[i].GetDecimal();
+            decimal h = highs[i].GetDecimal();
+            decimal l = lows[i].GetDecimal();
+            decimal c = closes[i].GetDecimal();
+            decimal vol = volumes[i].ValueKind != JsonValueKind.Null ? volumes[i].GetDecimal() : 100m;
+
+            candles.Add(new Candle(
+                symbol,
+                parsedTimeframe,
+                time,
+                o,
+                h,
+                l,
+                c,
+                vol,
+                isComplete: true));
+        }
+
+        return candles;
+    }
+
+    private static long GetTimeframeSeconds(Timeframe tf) => tf switch
+    {
+        Timeframe.M1 => 60,
+        Timeframe.M5 => 300,
+        Timeframe.M15 => 900,
+        Timeframe.M30 => 1800,
+        Timeframe.H1 => 3600,
+        Timeframe.H4 => 14400,
+        Timeframe.D1 => 86400,
+        Timeframe.W1 => 604800,
+        Timeframe.MN1 => 2592000,
+        _ => 300
+    };
+
+    private static string MapTimeframeToInterval(Timeframe tf) => tf switch
+    {
+        Timeframe.M1 => "1m",
+        Timeframe.M5 => "5m",
+        Timeframe.M15 => "15m",
+        Timeframe.M30 => "30m",
+        Timeframe.H1 => "60m",
+        Timeframe.H4 => "60m",
+        Timeframe.D1 => "1d",
+        Timeframe.W1 => "1wk",
+        Timeframe.MN1 => "1mo",
+        _ => "5m"
+    };
 
     private static string NormalizeYahooSymbol(string symbol)
     {

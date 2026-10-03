@@ -21,6 +21,7 @@ import {
   StrategyDefinition,
   Timeframe,
 } from './types/trading';
+import { getCandleTimeSeconds } from './utils/indicators';
 
 export function App() {
   const [activePage, setActivePage] = useState<PageId>('dashboard');
@@ -108,12 +109,32 @@ export function App() {
     return () => clearInterval(interval);
   }, []);
 
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+
   // Fetch real-time / public multi-timeframe candles from active provider
-  const fetchLiveCandles = async () => {
+  const fetchLiveCandles = async (isInitial = false) => {
     try {
-      const realCandles = await tradingApi.getCandles(selectedSymbol, timeframe, 60);
+      const countToFetch = isInitial ? 150 : 60;
+      const realCandles = await tradingApi.getCandles(selectedSymbol, timeframe, countToFetch);
       if (realCandles && realCandles.length > 0) {
-        setCandles(realCandles);
+        setCandles((prev) => {
+          if (
+            isInitial ||
+            prev.length === 0 ||
+            prev[0].symbol !== selectedSymbol ||
+            prev[0].timeframe !== timeframe
+          ) {
+            return realCandles;
+          }
+          // Merge incoming live ticks with existing historical candles by timestamp
+          const map = new Map<number, Candle>();
+          prev.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
+          realCandles.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          );
+        });
       }
     } catch (err) {
       console.warn('Live candles fetch warning:', err);
@@ -121,10 +142,48 @@ export function App() {
   };
 
   useEffect(() => {
-    fetchLiveCandles();
-    const interval = setInterval(fetchLiveCandles, 8000);
+    setHasMoreHistory(true);
+    fetchLiveCandles(true);
+    const interval = setInterval(() => fetchLiveCandles(false), 8000);
     return () => clearInterval(interval);
   }, [selectedSymbol, timeframe, activeProvider]);
+
+  const handleLoadOlderCandles = async (): Promise<boolean> => {
+    if (isLoadingHistory || !hasMoreHistory || candles.length === 0) return false;
+    setIsLoadingHistory(true);
+    try {
+      const oldest = candles[0];
+      const oldestSec = Math.floor(new Date(oldest.timestamp).getTime() / 1000);
+      const olderCandles = await tradingApi.getCandles(selectedSymbol, timeframe, 150, oldestSec);
+
+      if (olderCandles && olderCandles.length > 0) {
+        const strictlyOlder = olderCandles.filter(
+          (c) => Math.floor(new Date(c.timestamp).getTime() / 1000) < oldestSec
+        );
+
+        if (strictlyOlder.length > 0) {
+          setCandles((prev) => {
+            const map = new Map<number, Candle>();
+            strictlyOlder.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
+            prev.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
+            return Array.from(map.values()).sort(
+              (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            );
+          });
+          return true;
+        }
+      }
+
+      setHasMoreHistory(false);
+      return false;
+    } catch (err) {
+      console.warn('Load older candles error:', err);
+      setHasMoreHistory(false);
+      return false;
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   const handleSaveStrategy = async (strategyDto: any) => {
     if (strategyDto.id) {
@@ -146,6 +205,21 @@ export function App() {
     await tradingApi.closePosition(ticket, 'ManualTerminalClose');
     const updated = await tradingApi.getPositions();
     setPositions(updated);
+  };
+
+  const handlePlaceOrder = async (side: 'Buy' | 'Sell', lots: number, price: number) => {
+    try {
+      await tradingApi.placeOrder({
+        symbol: selectedSymbol,
+        orderType: side,
+        lots,
+        price,
+      });
+      const updated = await tradingApi.getPositions();
+      setPositions(updated);
+    } catch (err) {
+      console.warn('Manual order placement fallback:', err);
+    }
   };
 
   const handleToggleKillSwitch = async (engage: boolean, reason?: string) => {
@@ -323,7 +397,14 @@ export function App() {
                   symbol={selectedSymbol}
                   timeframe={timeframe}
                   onTimeframeChange={setTimeframe}
+                  onSymbolChange={setSelectedSymbol}
                   indicatorConfig={indicatorConfig}
+                  positions={positions}
+                  auditLogs={auditLogs}
+                  onPlaceOrder={handlePlaceOrder}
+                  onClosePosition={handleClosePosition}
+                  onLoadOlderCandles={handleLoadOlderCandles}
+                  isLoadingHistory={isLoadingHistory}
                 />
               </div>
             </div>

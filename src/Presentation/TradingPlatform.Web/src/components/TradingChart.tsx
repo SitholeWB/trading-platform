@@ -1,372 +1,1287 @@
-import React, { useState } from 'react';
-import { Candle, IndicatorConfig, Timeframe } from '../types/trading';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import {
+  createChart,
+  IChartApi,
+  ISeriesApi,
+  ColorType,
+  LineStyle,
+  CrosshairMode,
+  UTCTimestamp,
+  SeriesMarker,
+  IPriceLine,
+  LogicalRange,
+} from 'lightweight-charts';
+import {
+  Candle,
+  IndicatorConfig,
+  Position,
+  SignalAuditLog,
+  Timeframe,
+} from '../types/trading';
+import {
+  calculateATR,
+  calculateBollingerBands,
+  calculateEMA,
+  calculateHeikinAshi,
+  calculateIchimoku,
+  calculateMACD,
+  calculateRSI,
+  calculateSMA,
+  calculateStochastic,
+  calculateSupertrend,
+  calculateVWAP,
+  formatPrice,
+  getCandleTimeSeconds,
+  sanitizeCandles,
+} from '../utils/indicators';
+import {
+  ActiveIndicators,
+  ChartType,
+  DrawingItem,
+  DrawingTool,
+  IndicatorSettings,
+} from './chart/types';
+import { DrawingToolbar } from './chart/DrawingToolbar';
+import { ChartToolbar } from './chart/ChartToolbar';
+import { DrawingCanvas } from './chart/DrawingCanvas';
+import { SymbolSearchModal } from './chart/SymbolSearchModal';
+import { IndicatorsModal } from './chart/IndicatorsModal';
+import { QuickOrderWidget } from './chart/QuickOrderWidget';
+import { Clock, X } from 'lucide-react';
 
 interface TradingChartProps {
   candles: Candle[];
   symbol: string;
   timeframe: Timeframe;
   onTimeframeChange: (tf: Timeframe) => void;
+  onSymbolChange?: (symbol: string) => void;
   indicatorConfig?: IndicatorConfig;
+  positions?: Position[];
+  auditLogs?: SignalAuditLog[];
+  onPlaceOrder?: (side: 'Buy' | 'Sell', lots: number, price: number) => Promise<void>;
+  onClosePosition?: (ticket: number) => Promise<void>;
+  onLoadOlderCandles?: () => Promise<boolean>;
+  isLoadingHistory?: boolean;
 }
-
-const EMA_COLORS = ['#06b6d4', '#f97316', '#a855f7', '#10b981', '#f43f5e', '#eab308'];
 
 export const TradingChart: React.FC<TradingChartProps> = ({
   candles,
   symbol,
   timeframe,
   onTimeframeChange,
+  onSymbolChange,
   indicatorConfig,
+  positions = [],
+  auditLogs = [],
+  onPlaceOrder,
+  onClosePosition,
+  onLoadOlderCandles,
+  isLoadingHistory = false,
 }) => {
-  const [showEma, setShowEma] = useState(true);
-  const [showBollinger, setShowBollinger] = useState(false);
-  const [showIchimoku, setShowIchimoku] = useState(true);
-  const [showRsi, setShowRsi] = useState(true);
-  const [showMacd, setShowMacd] = useState(false);
+  // Chart layout and state
+  const [chartType, setChartType] = useState<ChartType>('candlestick');
+  const [layoutMode, setLayoutMode] = useState<'single' | 'split-h' | 'split-v'>('single');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isSymbolSearchOpen, setIsSymbolSearchOpen] = useState(false);
+  const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false);
+  const [showOrderWidget, setShowOrderWidget] = useState(true);
 
-  const emas = indicatorConfig?.emas && indicatorConfig.emas.length > 0
-    ? indicatorConfig.emas
-    : [20, 50, 200];
-  const rsiPeriod = indicatorConfig?.rsi?.period ?? 14;
-  const rsiOverbought = indicatorConfig?.rsi?.overbought ?? 70;
-  const rsiOversold = indicatorConfig?.rsi?.oversold ?? 30;
-  const bbPeriod = indicatorConfig?.bollinger?.period ?? 20;
-  const macdFast = indicatorConfig?.macd?.fast ?? 12;
-  const macdSlow = indicatorConfig?.macd?.slow ?? 26;
-  const macdSignal = indicatorConfig?.macd?.signal ?? 9;
+  // Drawing Tools state
+  const [activeTool, setActiveTool] = useState<DrawingTool>('cursor');
+  const [drawings, setDrawings] = useState<DrawingItem[]>([]);
+  const [showDrawings, setShowDrawings] = useState(true);
 
-  if (candles.length === 0) {
-    return (
-      <div className="h-[420px] bg-slate-950 flex items-center justify-center text-slate-500 font-mono text-sm">
-        Awaiting market data stream...
-      </div>
-    );
-  }
+  // Indicators toggle state
+  const [activeIndicators, setActiveIndicators] = useState<ActiveIndicators>({
+    ema9: false,
+    ema20: true,
+    ema50: true,
+    ema100: false,
+    ema200: true,
+    sma20: false,
+    sma50: false,
+    sma200: false,
+    bollinger: false,
+    vwap: false,
+    supertrend: false,
+    ichimoku: false,
+    volume: true,
+    rsi: true,
+    macd: false,
+    stoch: false,
+    atr: false,
+  });
 
-  // Calculate chart boundaries
-  const maxHigh = Math.max(...candles.map((c) => c.high));
-  const minLow = Math.min(...candles.map((c) => c.low));
-  const priceRange = maxHigh - minLow || 0.001;
+  // Indicator Settings
+  const [indicatorSettings, setIndicatorSettings] = useState<IndicatorSettings>({
+    emaPeriods: indicatorConfig?.emas ?? [20, 50, 200],
+    bollingerPeriod: indicatorConfig?.bollinger?.period ?? 20,
+    bollingerStdDev: indicatorConfig?.bollinger?.stdDev ?? 2.0,
+    rsiPeriod: indicatorConfig?.rsi?.period ?? 14,
+    rsiOverbought: indicatorConfig?.rsi?.overbought ?? 70,
+    rsiOversold: indicatorConfig?.rsi?.oversold ?? 30,
+    macdFast: indicatorConfig?.macd?.fast ?? 12,
+    macdSlow: indicatorConfig?.macd?.slow ?? 26,
+    macdSignal: indicatorConfig?.macd?.signal ?? 9,
+    stochK: indicatorConfig?.stoch?.kPeriod ?? 14,
+    stochD: indicatorConfig?.stoch?.dPeriod ?? 3,
+    atrPeriod: indicatorConfig?.atr?.period ?? 14,
+    supertrendPeriod: 10,
+    supertrendMultiplier: 3,
+  });
 
-  const chartHeight = 280;
-  const rsiHeight = 80;
-  const macdHeight = 70;
-  const svgWidth = 800;
-  const candleWidth = Math.max(3, Math.min(12, Math.floor(svgWidth / candles.length) - 2));
+  // Crosshair hover inspection values
+  const [hoveredCandle, setHoveredCandle] = useState<Candle | null>(null);
 
-  const getY = (val: number) => {
-    return chartHeight - ((val - minLow) / priceRange) * (chartHeight - 40) - 20;
+  // Container references
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mainChartContainerRef = useRef<HTMLDivElement | null>(null);
+  const rsiChartContainerRef = useRef<HTMLDivElement | null>(null);
+  const macdChartContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Chart API references
+  const mainChartRef = useRef<IChartApi | null>(null);
+  const rsiChartRef = useRef<IChartApi | null>(null);
+  const macdChartRef = useRef<IChartApi | null>(null);
+
+  // Main series & indicators references
+  const mainSeriesRef = useRef<ISeriesApi<any> | null>(null);
+  const currentChartTypeRef = useRef<ChartType>('candlestick');
+  const volumeSeriesRef = useRef<ISeriesApi<any> | null>(null);
+  const indicatorSeriesMapRef = useRef<Map<string, ISeriesApi<any>>>(new Map());
+  const priceLinesRef = useRef<IPriceLine[]>([]);
+
+  // Sub-pane series references
+  const rsiSeriesRef = useRef<ISeriesApi<any> | null>(null);
+  const macdSeriesMapRef = useRef<{
+    hist?: ISeriesApi<any>;
+    macd?: ISeriesApi<any>;
+    signal?: ISeriesApi<any>;
+  }>({});
+
+  // Chart dimensions for drawing canvas
+  const [chartDimensions, setChartDimensions] = useState({ width: 800, height: 400 });
+
+  // Sanitize and sort candles
+  const cleanCandles = useMemo(() => sanitizeCandles(candles), [candles]);
+  const latestCandle = cleanCandles[cleanCandles.length - 1];
+  const currentPrice = latestCandle?.close ?? 1.085;
+
+  // Price change calculations
+  const priceChange = useMemo(() => {
+    if (cleanCandles.length < 2) return { diff: 0, pct: 0 };
+    const first = cleanCandles[0].open;
+    const last = cleanCandles[cleanCandles.length - 1].close;
+    const diff = last - first;
+    const pct = first !== 0 ? (diff / first) * 100 : 0;
+    return { diff, pct };
+  }, [cleanCandles]);
+
+  // Price range for drawing canvas
+  const priceRange = useMemo(() => {
+    if (cleanCandles.length === 0) return { min: 1.0, max: 1.1 };
+    const highs = cleanCandles.map((c) => c.high);
+    const lows = cleanCandles.map((c) => c.low);
+    return { min: Math.min(...lows), max: Math.max(...highs) };
+  }, [cleanCandles]);
+
+  // Countdown to next candle close
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
+
+  useEffect(() => {
+    const timeframeSecondsMap: Record<Timeframe, number> = {
+      M1: 60,
+      M5: 300,
+      M15: 900,
+      M30: 1800,
+      H1: 3600,
+      H4: 14400,
+      D1: 86400,
+      W1: 604800,
+      MN1: 2592000,
+    };
+    const periodSeconds = timeframeSecondsMap[timeframe] || 300;
+
+    const interval = setInterval(() => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const remaining = periodSeconds - (nowSec % periodSeconds);
+      setSecondsRemaining(remaining);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [timeframe]);
+
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const latest = candles[candles.length - 1];
+  // Historical pagination & notice
+  const [hasMoreHistory, setHasMoreHistory] = useState<boolean>(true);
+  const [historyNotice, setHistoryNotice] = useState<string | null>(null);
+
+  // Auto-dismiss notice after 4.5 seconds
+  useEffect(() => {
+    if (!historyNotice) return;
+    const timer = setTimeout(() => setHistoryNotice(null), 4500);
+    return () => clearTimeout(timer);
+  }, [historyNotice]);
+
+  // Synchronizer & Pagination refs
+  const isSyncingRangeRef = useRef<boolean>(false);
+  const lastFetchTimeRef = useRef<number>(0);
+  const isLoadingHistoryRef = useRef<boolean>(isLoadingHistory);
+  const hasMoreHistoryRef = useRef<boolean>(true);
+  const onLoadOlderCandlesRef = useRef<(() => Promise<boolean>) | undefined>(onLoadOlderCandles);
+
+  useEffect(() => {
+    isLoadingHistoryRef.current = isLoadingHistory;
+  }, [isLoadingHistory]);
+
+  useEffect(() => {
+    onLoadOlderCandlesRef.current = onLoadOlderCandles;
+  }, [onLoadOlderCandles]);
+
+  // Reset pagination state when symbol or timeframe changes
+  useEffect(() => {
+    hasMoreHistoryRef.current = true;
+    setHasMoreHistory(true);
+    setHistoryNotice(null);
+  }, [symbol, timeframe]);
+
+  // Track candles info across updates to lock zoom and scroll position
+  const prevCandlesInfoRef = useRef<{
+    count: number;
+    earliestTime: number;
+    latestTime: number;
+    symbol: string;
+    timeframe: Timeframe;
+  } | null>(null);
+
+  const checkAndLoadOlderHistory = () => {
+    const now = Date.now();
+    if (
+      now - lastFetchTimeRef.current > 1800 &&
+      !isLoadingHistoryRef.current &&
+      hasMoreHistoryRef.current &&
+      onLoadOlderCandlesRef.current
+    ) {
+      lastFetchTimeRef.current = now;
+      onLoadOlderCandlesRef.current().then((hasMore) => {
+        if (!hasMore) {
+          hasMoreHistoryRef.current = false;
+          setHasMoreHistory(false);
+          setHistoryNotice('Earliest chart history reached for this timeframe');
+        }
+      });
+    }
+  };
+
+  const handleManualLoadHistory = async () => {
+    if (isLoadingHistoryRef.current || !hasMoreHistoryRef.current || !onLoadOlderCandlesRef.current) return;
+    const hasMore = await onLoadOlderCandlesRef.current();
+    if (!hasMore) {
+      hasMoreHistoryRef.current = false;
+      setHasMoreHistory(false);
+      setHistoryNotice('Earliest chart history reached for this timeframe');
+    }
+  };
+
+  // ----------------------------------------------------
+  // 1. Initialize Main Lightweight Chart (Runs ONCE on mount)
+  // ----------------------------------------------------
+  useEffect(() => {
+    if (!mainChartContainerRef.current) return;
+    const container = mainChartContainerRef.current;
+
+    // Safely remove any existing chart instance
+    if (mainChartRef.current) {
+      try {
+        mainChartRef.current.remove();
+      } catch {}
+      mainChartRef.current = null;
+    }
+
+    const width = container.clientWidth || 800;
+    const height = container.clientHeight || 450;
+    setChartDimensions({ width, height });
+
+    const chart = createChart(container, {
+      width,
+      height,
+      layout: {
+        background: { type: ColorType.Solid, color: '#090d16' },
+        textColor: '#94a3b8',
+        fontFamily: "'JetBrains Mono', 'Fira Code', -apple-system, BlinkMacSystemFont, monospace",
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: 'rgba(30, 41, 59, 0.45)', style: LineStyle.Dotted },
+        horzLines: { color: 'rgba(30, 41, 59, 0.45)', style: LineStyle.Dotted },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color: '#64748b', width: 1, style: LineStyle.Dashed },
+        horzLine: { color: '#64748b', width: 1, style: LineStyle.Dashed },
+      },
+      rightPriceScale: {
+        borderColor: '#1e293b',
+        visible: true,
+        autoScale: true,
+        scaleMargins: { top: 0.1, bottom: 0.15 },
+      },
+      timeScale: {
+        borderColor: '#1e293b',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+    });
+
+    mainChartRef.current = chart;
+
+    // Crosshair inspection listener
+    const crosshairHandler = (param: any) => {
+      if (!param || !param.time || !param.seriesData || !mainSeriesRef.current) {
+        setHoveredCandle(null);
+        return;
+      }
+      try {
+        const series = mainSeriesRef.current;
+        if (!series) {
+          setHoveredCandle(null);
+          return;
+        }
+        const data = param.seriesData.get(series) as any;
+        if (data) {
+          setHoveredCandle({
+            symbol,
+            timeframe,
+            timestamp: new Date((param.time as number) * 1000).toISOString(),
+            open: data.open ?? data.value ?? 0,
+            high: data.high ?? data.value ?? 0,
+            low: data.low ?? data.value ?? 0,
+            close: data.close ?? data.value ?? 0,
+            volume: 0,
+            isComplete: true,
+          });
+        } else {
+          setHoveredCandle(null);
+        }
+      } catch {
+        setHoveredCandle(null);
+      }
+    };
+    chart.subscribeCrosshairMove(crosshairHandler);
+
+    // Visible range listener: sync to sub-panes and auto-fetch history on scroll left
+    const handleMainRangeChange = (range: LogicalRange | null) => {
+      if (!range) return;
+
+      // 1. Synchronize to sub-charts (RSI, MACD)
+      if (!isSyncingRangeRef.current) {
+        isSyncingRangeRef.current = true;
+        try {
+          if (rsiChartRef.current) {
+            rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
+          }
+          if (macdChartRef.current) {
+            macdChartRef.current.timeScale().setVisibleLogicalRange(range);
+          }
+        } catch {}
+        finally {
+          isSyncingRangeRef.current = false;
+        }
+      }
+
+      // 2. Auto-load older bars when scrolled near earliest bar
+      if (range.from < 5) {
+        checkAndLoadOlderHistory();
+      }
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleMainRangeChange);
+
+    // Resize observer
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!entries || entries.length === 0 || !mainChartRef.current) return;
+      const { width: w, height: h } = entries[0].contentRect;
+      try {
+        chart.applyOptions({ width: w, height: h });
+        setChartDimensions({ width: w, height: h });
+      } catch {}
+    });
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+      try {
+        chart.unsubscribeCrosshairMove(crosshairHandler);
+      } catch {}
+      try {
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleMainRangeChange);
+      } catch {}
+      try {
+        chart.remove();
+      } catch {}
+      mainChartRef.current = null;
+      mainSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+      indicatorSeriesMapRef.current.clear();
+      priceLinesRef.current = [];
+    };
+  }, []);
+
+  // ----------------------------------------------------
+  // 2. Synchronize Data, Series Type, and Overlays smoothly
+  // ----------------------------------------------------
+  useEffect(() => {
+    const chart = mainChartRef.current;
+    if (!chart || cleanCandles.length === 0) return;
+
+    const timeScale = chart.timeScale();
+    const prevRange = timeScale.getVisibleLogicalRange();
+    const prevInfo = prevCandlesInfoRef.current;
+
+    const isNewSymbolOrTimeframe =
+      !prevInfo || prevInfo.symbol !== symbol || prevInfo.timeframe !== timeframe;
+
+    const earliestTime = cleanCandles.length > 0 ? getCandleTimeSeconds(cleanCandles[0].timestamp) : 0;
+    const latestTime = cleanCandles.length > 0 ? getCandleTimeSeconds(cleanCandles[cleanCandles.length - 1].timestamp) : 0;
+
+    // A. Recreate Main Series if chartType changed or doesn't exist
+    const needsNewSeries = !mainSeriesRef.current || currentChartTypeRef.current !== chartType;
+    if (needsNewSeries) {
+      if (mainSeriesRef.current) {
+        priceLinesRef.current = [];
+        try {
+          mainSeriesRef.current.setMarkers([]);
+        } catch {}
+        try {
+          chart.removeSeries(mainSeriesRef.current);
+        } catch {}
+        mainSeriesRef.current = null;
+      }
+
+      let series: ISeriesApi<any>;
+      if (chartType === 'bar') {
+        series = chart.addBarSeries({
+          upColor: '#10b981',
+          downColor: '#ef4444',
+        });
+      } else if (chartType === 'line') {
+        series = chart.addLineSeries({
+          color: '#38bdf8',
+          lineWidth: 2,
+        });
+      } else if (chartType === 'area') {
+        series = chart.addAreaSeries({
+          topColor: 'rgba(56, 189, 248, 0.4)',
+          bottomColor: 'rgba(56, 189, 248, 0.01)',
+          lineColor: '#38bdf8',
+          lineWidth: 2,
+        });
+      } else if (chartType === 'baseline') {
+        const baseValue = cleanCandles[0]?.open ?? 1.085;
+        series = chart.addBaselineSeries({
+          baseValue: { type: 'price', price: baseValue },
+          topLineColor: '#10b981',
+          topFillColor1: 'rgba(16, 185, 129, 0.28)',
+          topFillColor2: 'rgba(16, 185, 129, 0.05)',
+          bottomLineColor: '#ef4444',
+          bottomFillColor1: 'rgba(239, 68, 68, 0.05)',
+          bottomFillColor2: 'rgba(239, 68, 68, 0.28)',
+        });
+      } else {
+        // Default: Candlestick (or Heikin Ashi)
+        series = chart.addCandlestickSeries({
+          upColor: '#10b981',
+          downColor: '#ef4444',
+          borderUpColor: '#10b981',
+          borderDownColor: '#ef4444',
+          wickUpColor: '#10b981',
+          wickDownColor: '#ef4444',
+        });
+      }
+
+      mainSeriesRef.current = series;
+      currentChartTypeRef.current = chartType;
+    }
+
+    // B. Set Main Series Data
+    const isHeikinAshi = chartType === 'heikin_ashi';
+    const sourceCandles = isHeikinAshi ? calculateHeikinAshi(cleanCandles) : cleanCandles;
+
+    try {
+      if (['line', 'area', 'baseline'].includes(chartType)) {
+        mainSeriesRef.current?.setData(
+          sourceCandles.map((c) => ({
+            time: getCandleTimeSeconds(c.timestamp) as UTCTimestamp,
+            value: c.close,
+          }))
+        );
+      } else {
+        mainSeriesRef.current?.setData(
+          sourceCandles.map((c) => ({
+            time: getCandleTimeSeconds(c.timestamp) as UTCTimestamp,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+          }))
+        );
+      }
+    } catch (err) {
+      console.warn('Failed to set series data:', err);
+    }
+
+    // C. Volume Series
+    if (activeIndicators.volume) {
+      if (!volumeSeriesRef.current) {
+        const vol = chart.addHistogramSeries({
+          priceFormat: { type: 'volume' },
+          priceScaleId: '',
+        });
+        vol.priceScale().applyOptions({
+          scaleMargins: { top: 0.8, bottom: 0 },
+        });
+        volumeSeriesRef.current = vol;
+      }
+      try {
+        volumeSeriesRef.current.setData(
+          cleanCandles.map((c) => ({
+            time: getCandleTimeSeconds(c.timestamp) as UTCTimestamp,
+            value: c.volume || 100,
+            color: c.close >= c.open ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)',
+          }))
+        );
+      } catch {}
+    } else if (volumeSeriesRef.current) {
+      try {
+        chart.removeSeries(volumeSeriesRef.current);
+      } catch {}
+      volumeSeriesRef.current = null;
+    }
+
+    // D. Helper to manage indicator lines
+    const syncIndicatorLine = (
+      key: string,
+      isActive: boolean,
+      color: string,
+      lineWidth: 1 | 2,
+      points: { time: number; value: number }[],
+      lineStyle: LineStyle = LineStyle.Solid,
+      title?: string
+    ) => {
+      let series = indicatorSeriesMapRef.current.get(key);
+      if (isActive) {
+        if (!series) {
+          series = chart.addLineSeries({ color, lineWidth, lineStyle, title });
+          indicatorSeriesMapRef.current.set(key, series);
+        }
+        try {
+          series.setData(points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+        } catch {}
+      } else if (series) {
+        try {
+          chart.removeSeries(series);
+        } catch {}
+        indicatorSeriesMapRef.current.delete(key);
+      }
+    };
+
+    // EMA & SMA Overlays
+    syncIndicatorLine('ema20', activeIndicators.ema20, '#06b6d4', 2, calculateEMA(cleanCandles, 20), LineStyle.Solid, 'EMA 20');
+    syncIndicatorLine('ema50', activeIndicators.ema50, '#f97316', 2, calculateEMA(cleanCandles, 50), LineStyle.Solid, 'EMA 50');
+    syncIndicatorLine('ema200', activeIndicators.ema200, '#a855f7', 2, calculateEMA(cleanCandles, 200), LineStyle.Solid, 'EMA 200');
+    syncIndicatorLine('sma20', activeIndicators.sma20, '#3b82f6', 2, calculateSMA(cleanCandles, 20), LineStyle.Solid, 'SMA 20');
+
+    // Bollinger Bands
+    const bb = calculateBollingerBands(
+      cleanCandles,
+      indicatorSettings.bollingerPeriod,
+      indicatorSettings.bollingerStdDev
+    );
+    syncIndicatorLine('bb_upper', activeIndicators.bollinger, '#c084fc', 1, bb.upper, LineStyle.Dashed, 'BB Upper');
+    syncIndicatorLine('bb_mid', activeIndicators.bollinger, '#a855f7', 2, bb.middle, LineStyle.Solid, 'BB Mid');
+    syncIndicatorLine('bb_lower', activeIndicators.bollinger, '#c084fc', 1, bb.lower, LineStyle.Dashed, 'BB Lower');
+
+    // VWAP
+    syncIndicatorLine('vwap', activeIndicators.vwap, '#eab308', 2, calculateVWAP(cleanCandles), LineStyle.Solid, 'VWAP');
+
+    // Supertrend
+    const stPoints = calculateSupertrend(
+      cleanCandles,
+      indicatorSettings.supertrendPeriod,
+      indicatorSettings.supertrendMultiplier
+    );
+    syncIndicatorLine('supertrend', activeIndicators.supertrend, '#10b981', 2, stPoints, LineStyle.Solid, 'Supertrend');
+
+    // Ichimoku Cloud
+    const ichi = calculateIchimoku(cleanCandles);
+    syncIndicatorLine('tenkan', activeIndicators.ichimoku, '#06b6d4', 1, ichi.tenkan, LineStyle.Solid, 'Tenkan');
+    syncIndicatorLine('kijun', activeIndicators.ichimoku, '#ef4444', 2, ichi.kijun, LineStyle.Solid, 'Kijun');
+    syncIndicatorLine('spanA', activeIndicators.ichimoku, '#10b981', 1, ichi.spanA, LineStyle.Dotted, 'Span A');
+    syncIndicatorLine('spanB', activeIndicators.ichimoku, '#f59e0b', 1, ichi.spanB, LineStyle.Dotted, 'Span B');
+
+    // E. Price Lines (Open Positions)
+    if (mainSeriesRef.current) {
+      priceLinesRef.current.forEach((pl) => {
+        try {
+          mainSeriesRef.current?.removePriceLine(pl);
+        } catch {}
+      });
+      priceLinesRef.current = [];
+
+      positions
+        .filter((p) => p.symbol === symbol && p.status === 'Open')
+        .forEach((pos) => {
+          try {
+            const entryLine = mainSeriesRef.current?.createPriceLine({
+              price: pos.entryPrice,
+              color: pos.orderType === 'Buy' ? '#38bdf8' : '#fb923c',
+              lineWidth: 1,
+              lineStyle: LineStyle.Dotted,
+              axisLabelVisible: true,
+              title: `${pos.orderType.toUpperCase()} ${pos.lots}L @ ${formatPrice(pos.entryPrice, symbol)}`,
+            });
+            if (entryLine) priceLinesRef.current.push(entryLine);
+
+            if (pos.stopLossPrice) {
+              const slLine = mainSeriesRef.current?.createPriceLine({
+                price: pos.stopLossPrice,
+                color: '#ef4444',
+                lineWidth: 1,
+                lineStyle: LineStyle.Dashed,
+                axisLabelVisible: true,
+                title: `SL: ${formatPrice(pos.stopLossPrice, symbol)}`,
+              });
+              if (slLine) priceLinesRef.current.push(slLine);
+            }
+
+            if (pos.takeProfitPrice) {
+              const tpLine = mainSeriesRef.current?.createPriceLine({
+                price: pos.takeProfitPrice,
+                color: '#10b981',
+                lineWidth: 1,
+                lineStyle: LineStyle.Dashed,
+                axisLabelVisible: true,
+                title: `TP: ${formatPrice(pos.takeProfitPrice, symbol)}`,
+              });
+              if (tpLine) priceLinesRef.current.push(tpLine);
+            }
+          } catch {}
+        });
+
+      // Markers
+      const markers: SeriesMarker<UTCTimestamp>[] = [];
+      positions
+        .filter((p) => p.symbol === symbol && p.status === 'Open')
+        .forEach((pos) => {
+          const posTime = getCandleTimeSeconds(pos.openedAtUtc);
+          markers.push({
+            time: posTime as UTCTimestamp,
+            position: pos.orderType === 'Buy' ? 'belowBar' : 'aboveBar',
+            color: pos.orderType === 'Buy' ? '#10b981' : '#ef4444',
+            shape: pos.orderType === 'Buy' ? 'arrowUp' : 'arrowDown',
+            text: `${pos.orderType.toUpperCase()} ${pos.lots}`,
+          });
+        });
+
+      auditLogs
+        .filter((log) => log.symbol === symbol && log.state === 'NearMiss')
+        .slice(0, 10)
+        .forEach((log) => {
+          const t = getCandleTimeSeconds(log.candleTimestampUtc);
+          markers.push({
+            time: t as UTCTimestamp,
+            position: 'aboveBar',
+            color: '#f59e0b',
+            shape: 'circle',
+            text: 'NEAR MISS',
+          });
+        });
+
+      if (markers.length > 0) {
+        markers.sort((a, b) => Number(a.time) - Number(b.time));
+        try {
+          mainSeriesRef.current?.setMarkers(markers);
+        } catch {}
+      }
+    }
+
+    // F. Viewport & Zoom Lock Synchronization
+    if (isNewSymbolOrTimeframe) {
+      setTimeout(() => {
+        try {
+          timeScale.fitContent();
+        } catch {}
+      }, 50);
+    } else if (prevRange && prevInfo) {
+      let prependedCount = 0;
+      if (earliestTime < prevInfo.earliestTime) {
+        prependedCount = cleanCandles.filter(
+          (c) => getCandleTimeSeconds(c.timestamp) < prevInfo.earliestTime
+        ).length;
+      }
+
+      if (prependedCount > 0) {
+        // Shift visible range so viewport remains locked on the exact same bars
+        try {
+          timeScale.setVisibleLogicalRange({
+            from: prevRange.from + prependedCount,
+            to: prevRange.to + prependedCount,
+          });
+        } catch {}
+      } else {
+        const isTrackingLiveEdge = prevRange.to >= prevInfo.count - 2;
+        const appendedCount = cleanCandles.length - prevInfo.count;
+
+        if (isTrackingLiveEdge && appendedCount > 0) {
+          // Advance range smoothly to track live candle
+          try {
+            timeScale.setVisibleLogicalRange({
+              from: prevRange.from + appendedCount,
+              to: prevRange.to + appendedCount,
+            });
+          } catch {}
+        } else {
+          // Lock view completely so live ticks do NOT reset scroll/zoom
+          try {
+            timeScale.setVisibleLogicalRange(prevRange);
+          } catch {}
+        }
+      }
+    }
+
+    prevCandlesInfoRef.current = {
+      count: cleanCandles.length,
+      earliestTime,
+      latestTime,
+      symbol,
+      timeframe,
+    };
+  }, [
+    cleanCandles,
+    chartType,
+    activeIndicators,
+    indicatorSettings,
+    positions,
+    auditLogs,
+    symbol,
+    timeframe,
+  ]);
+
+  // ----------------------------------------------------
+  // 3. RSI Oscillator Sub-Pane (Lifecycle & Data separated)
+  // ----------------------------------------------------
+  useEffect(() => {
+    if (!activeIndicators.rsi) {
+      if (rsiChartRef.current) {
+        try {
+          rsiChartRef.current.remove();
+        } catch {}
+        rsiChartRef.current = null;
+        rsiSeriesRef.current = null;
+      }
+      return;
+    }
+
+    const container = rsiChartContainerRef.current;
+    if (!container) return;
+
+    if (rsiChartRef.current) {
+      try {
+        rsiChartRef.current.remove();
+      } catch {}
+      rsiChartRef.current = null;
+      rsiSeriesRef.current = null;
+    }
+
+    const width = container.clientWidth || 800;
+    const height = 95;
+
+    const rsiChart = createChart(container, {
+      width,
+      height,
+      layout: {
+        background: { type: ColorType.Solid, color: '#090d16' },
+        textColor: '#64748b',
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 10,
+      },
+      grid: {
+        vertLines: { color: 'rgba(30, 41, 59, 0.3)' },
+        horzLines: { color: 'rgba(30, 41, 59, 0.3)' },
+      },
+      crosshair: { mode: CrosshairMode.Normal },
+      rightPriceScale: { borderColor: '#1e293b' },
+      timeScale: { borderColor: '#1e293b', visible: false },
+    });
+
+    rsiChartRef.current = rsiChart;
+
+    const rsiSeries = rsiChart.addLineSeries({
+      color: '#f59e0b',
+      lineWidth: 2,
+    });
+    rsiSeriesRef.current = rsiSeries;
+
+    rsiSeries.createPriceLine({
+      price: indicatorSettings.rsiOverbought,
+      color: '#ef4444',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      axisLabelVisible: true,
+      title: '70 OB',
+    });
+    rsiSeries.createPriceLine({
+      price: indicatorSettings.rsiOversold,
+      color: '#10b981',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      axisLabelVisible: true,
+      title: '30 OS',
+    });
+
+    // Synchronize initial range
+    if (mainChartRef.current) {
+      try {
+        const curRange = mainChartRef.current.timeScale().getVisibleLogicalRange();
+        if (curRange) {
+          rsiChart.timeScale().setVisibleLogicalRange(curRange);
+        }
+      } catch {}
+    }
+
+    // Two-way synchronization with guard
+    const handleRsiRangeChange = (range: LogicalRange | null) => {
+      if (isSyncingRangeRef.current || !range || !mainChartRef.current) return;
+      isSyncingRangeRef.current = true;
+      try {
+        mainChartRef.current.timeScale().setVisibleLogicalRange(range);
+        if (macdChartRef.current) {
+          macdChartRef.current.timeScale().setVisibleLogicalRange(range);
+        }
+      } catch {}
+      finally {
+        isSyncingRangeRef.current = false;
+      }
+    };
+    rsiChart.timeScale().subscribeVisibleLogicalRangeChange(handleRsiRangeChange);
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!entries || entries.length === 0 || !rsiChartRef.current) return;
+      const { width: w, height: h } = entries[0].contentRect;
+      try {
+        rsiChart.applyOptions({ width: w, height: h });
+      } catch {}
+    });
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+      try {
+        rsiChart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRsiRangeChange);
+      } catch {}
+      try {
+        rsiChart.remove();
+      } catch {}
+      rsiChartRef.current = null;
+      rsiSeriesRef.current = null;
+    };
+  }, [activeIndicators.rsi]);
+
+  // RSI Data Update (Never destroys the chart)
+  useEffect(() => {
+    if (!activeIndicators.rsi || !rsiSeriesRef.current || cleanCandles.length === 0) return;
+    try {
+      const rsiPoints = calculateRSI(cleanCandles, indicatorSettings.rsiPeriod);
+      rsiSeriesRef.current.setData(
+        rsiPoints.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }))
+      );
+    } catch {}
+  }, [cleanCandles, activeIndicators.rsi, indicatorSettings.rsiPeriod]);
+
+  // ----------------------------------------------------
+  // 4. MACD Oscillator Sub-Pane (Lifecycle & Data separated)
+  // ----------------------------------------------------
+  useEffect(() => {
+    if (!activeIndicators.macd) {
+      if (macdChartRef.current) {
+        try {
+          macdChartRef.current.remove();
+        } catch {}
+        macdChartRef.current = null;
+        macdSeriesMapRef.current = {};
+      }
+      return;
+    }
+
+    const container = macdChartContainerRef.current;
+    if (!container) return;
+
+    if (macdChartRef.current) {
+      try {
+        macdChartRef.current.remove();
+      } catch {}
+      macdChartRef.current = null;
+      macdSeriesMapRef.current = {};
+    }
+
+    const width = container.clientWidth || 800;
+    const height = 100;
+
+    const macdChart = createChart(container, {
+      width,
+      height,
+      layout: {
+        background: { type: ColorType.Solid, color: '#090d16' },
+        textColor: '#64748b',
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 10,
+      },
+      grid: {
+        vertLines: { color: 'rgba(30, 41, 59, 0.3)' },
+        horzLines: { color: 'rgba(30, 41, 59, 0.3)' },
+      },
+      crosshair: { mode: CrosshairMode.Normal },
+      rightPriceScale: { borderColor: '#1e293b' },
+      timeScale: { borderColor: '#1e293b', visible: false },
+    });
+
+    macdChartRef.current = macdChart;
+
+    const hist = macdChart.addHistogramSeries({ priceFormat: { type: 'volume' } });
+    const macd = macdChart.addLineSeries({ color: '#06b6d4', lineWidth: 2 });
+    const signal = macdChart.addLineSeries({ color: '#f97316', lineWidth: 2 });
+    macdSeriesMapRef.current = { hist, macd, signal };
+
+    // Synchronize initial range
+    if (mainChartRef.current) {
+      try {
+        const curRange = mainChartRef.current.timeScale().getVisibleLogicalRange();
+        if (curRange) {
+          macdChart.timeScale().setVisibleLogicalRange(curRange);
+        }
+      } catch {}
+    }
+
+    // Two-way synchronization with guard
+    const handleMacdRangeChange = (range: LogicalRange | null) => {
+      if (isSyncingRangeRef.current || !range || !mainChartRef.current) return;
+      isSyncingRangeRef.current = true;
+      try {
+        mainChartRef.current.timeScale().setVisibleLogicalRange(range);
+        if (rsiChartRef.current) {
+          rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
+        }
+      } catch {}
+      finally {
+        isSyncingRangeRef.current = false;
+      }
+    };
+    macdChart.timeScale().subscribeVisibleLogicalRangeChange(handleMacdRangeChange);
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!entries || entries.length === 0 || !macdChartRef.current) return;
+      const { width: w, height: h } = entries[0].contentRect;
+      try {
+        macdChart.applyOptions({ width: w, height: h });
+      } catch {}
+    });
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+      try {
+        macdChart.timeScale().unsubscribeVisibleLogicalRangeChange(handleMacdRangeChange);
+      } catch {}
+      try {
+        macdChart.remove();
+      } catch {}
+      macdChartRef.current = null;
+      macdSeriesMapRef.current = {};
+    };
+  }, [activeIndicators.macd]);
+
+  // MACD Data Update (Never destroys the chart)
+  useEffect(() => {
+    if (!activeIndicators.macd || !macdSeriesMapRef.current.hist || cleanCandles.length === 0) return;
+    try {
+      const macdData = calculateMACD(
+        cleanCandles,
+        indicatorSettings.macdFast,
+        indicatorSettings.macdSlow,
+        indicatorSettings.macdSignal
+      );
+      const { hist, macd, signal } = macdSeriesMapRef.current;
+      if (hist) {
+        hist.setData(
+          macdData.histogram.map((h) => ({
+            time: h.time as UTCTimestamp,
+            value: h.value,
+            color: h.color,
+          }))
+        );
+      }
+      if (macd) {
+        macd.setData(macdData.macd.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+      }
+      if (signal) {
+        signal.setData(macdData.signal.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+      }
+    } catch {}
+  }, [
+    cleanCandles,
+    activeIndicators.macd,
+    indicatorSettings.macdFast,
+    indicatorSettings.macdSlow,
+    indicatorSettings.macdSignal,
+  ]);
+
+  // Toolbar Actions
+  const handleFitContent = () => {
+    if (mainChartRef.current) {
+      try {
+        mainChartRef.current.timeScale().fitContent();
+      } catch {}
+    }
+  };
+
+  const handleTakeSnapshot = () => {
+    if (!mainChartRef.current) return;
+    const canvas = mainChartContainerRef.current?.querySelector('canvas');
+    if (!canvas) return;
+    const dataUrl = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = `${symbol}_${timeframe}_chart.png`;
+    link.href = dataUrl;
+    link.click();
+  };
+
+  const handleToggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true));
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false));
+    }
+  };
+
+  const displayCandle = hoveredCandle || latestCandle;
 
   return (
-    <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
-      {/* Top Chart Toolbar */}
-      <div className="h-10 px-4 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-3">
-          <span className="font-bold text-slate-200">{symbol}</span>
-          <div className="flex items-center gap-1 bg-slate-800/80 p-0.5 rounded overflow-x-auto max-w-full">
-            {(['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN1'] as Timeframe[]).map((tf) => (
-              <button
-                key={tf}
-                onClick={() => onTimeframeChange(tf)}
-                className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors whitespace-nowrap ${
-                  timeframe === tf
-                    ? 'bg-blue-600 text-white font-bold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
-                }`}
-              >
-                {tf}
-              </button>
-            ))}
+    <div
+      ref={containerRef}
+      className={`relative w-full h-full bg-[#0b0f19] border border-slate-800 rounded-xl overflow-hidden flex flex-col font-sans select-none ${
+        isFullscreen ? 'fixed inset-0 z-50 rounded-none' : ''
+      }`}
+    >
+      {/* Top TradingView Toolbar */}
+      <ChartToolbar
+        symbol={symbol}
+        onOpenSymbolSearch={() => setIsSymbolSearchOpen(true)}
+        timeframe={timeframe}
+        onTimeframeChange={onTimeframeChange}
+        chartType={chartType}
+        onChartTypeChange={setChartType}
+        onOpenIndicatorsModal={() => setIsIndicatorsModalOpen(true)}
+        activeIndicatorsCount={
+          Object.values(activeIndicators).filter(Boolean).length
+        }
+        onFitContent={handleFitContent}
+        onTakeSnapshot={handleTakeSnapshot}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={handleToggleFullscreen}
+        layoutMode={layoutMode}
+        onLayoutModeChange={setLayoutMode}
+        currentPrice={currentPrice}
+        priceChange={priceChange}
+        candlesCount={cleanCandles.length}
+        isLoadingHistory={isLoadingHistory}
+        onLoadOlderHistory={handleManualLoadHistory}
+        hasMoreHistory={hasMoreHistory}
+        historyNotice={historyNotice}
+        onDismissHistoryNotice={() => setHistoryNotice(null)}
+      />
+
+      {/* Main Chart Body (Sidebar + Chart Canvas + Overlay) */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left Drawing Tools Sidebar */}
+        <DrawingToolbar
+          activeTool={activeTool}
+          onSelectTool={setActiveTool}
+          onClearDrawings={() => setDrawings([])}
+          showDrawings={showDrawings}
+          onToggleShowDrawings={() => setShowDrawings(!showDrawings)}
+          drawingsCount={drawings.length}
+        />
+
+        {/* Center Viewport */}
+        <div className="flex-1 flex flex-col h-full relative overflow-hidden bg-[#0b0f19]">
+          {/* Quick One-Click Trading Dock */}
+          {showOrderWidget && (
+            <QuickOrderWidget
+              symbol={symbol}
+              currentPrice={currentPrice}
+              onPlaceOrder={onPlaceOrder}
+            />
+          )}
+
+          {/* Interactive Inspection Bar / OHLCV Header */}
+          <div className="absolute top-2 left-3 right-3 z-10 flex flex-wrap items-center justify-between pointer-events-none text-xs font-mono">
+            {displayCandle && (
+              <div className="flex flex-wrap items-center gap-2.5 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800/80 pointer-events-auto">
+                <span className="font-bold text-slate-100">{symbol}</span>
+                <span className="text-slate-400 font-semibold">{timeframe}</span>
+                <span className="text-slate-500">|</span>
+                <span className="text-slate-400">
+                  O: <strong className="text-slate-200">{formatPrice(displayCandle.open, symbol)}</strong>
+                </span>
+                <span className="text-slate-400">
+                  H: <strong className="text-slate-200">{formatPrice(displayCandle.high, symbol)}</strong>
+                </span>
+                <span className="text-slate-400">
+                  L: <strong className="text-slate-200">{formatPrice(displayCandle.low, symbol)}</strong>
+                </span>
+                <span className="text-slate-400">
+                  C: <strong className={displayCandle.close >= displayCandle.open ? 'text-emerald-400' : 'text-red-400'}>
+                    {formatPrice(displayCandle.close, symbol)}
+                  </strong>
+                </span>
+                {displayCandle.volume > 0 && (
+                  <span className="text-slate-400 hidden sm:inline">
+                    Vol: <strong className="text-slate-300">{displayCandle.volume.toLocaleString()}</strong>
+                  </span>
+                )}
+                {/* Candle Close Countdown */}
+                <div className="flex items-center gap-1 pl-1 text-[11px] text-blue-400 font-bold border-l border-slate-800">
+                  <Clock className="w-3 h-3 text-blue-400 animate-pulse" />
+                  <span>{formatCountdown(secondsRemaining)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Active Indicator Tags with quick toggle/remove */}
+            <div className="hidden xl:flex items-center gap-1.5 pointer-events-auto">
+              {activeIndicators.ema20 && (
+                <div className="flex items-center gap-1 bg-slate-950/80 border border-cyan-500/30 text-cyan-400 px-2 py-0.5 rounded text-[10px]">
+                  <span>EMA 20</span>
+                  <button
+                    onClick={() => setActiveIndicators({ ...activeIndicators, ema20: false })}
+                    className="hover:text-cyan-200"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              )}
+              {activeIndicators.ema50 && (
+                <div className="flex items-center gap-1 bg-slate-950/80 border border-orange-500/30 text-orange-400 px-2 py-0.5 rounded text-[10px]">
+                  <span>EMA 50</span>
+                  <button
+                    onClick={() => setActiveIndicators({ ...activeIndicators, ema50: false })}
+                    className="hover:text-orange-200"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              )}
+              {activeIndicators.bollinger && (
+                <div className="flex items-center gap-1 bg-slate-950/80 border border-purple-500/30 text-purple-400 px-2 py-0.5 rounded text-[10px]">
+                  <span>BB (20,2)</span>
+                  <button
+                    onClick={() => setActiveIndicators({ ...activeIndicators, bollinger: false })}
+                    className="hover:text-purple-200"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Indicator Toggles */}
-        <div className="flex items-center gap-3 text-[11px] font-mono overflow-x-auto">
-          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={showEma}
-              onChange={(e) => setShowEma(e.target.checked)}
-              className="rounded bg-slate-800 border-slate-700 text-blue-500 focus:ring-0"
+          {/* Primary Candlestick Canvas Container */}
+          <div className="flex-1 w-full h-full relative overflow-hidden">
+            <div ref={mainChartContainerRef} className="w-full h-full" />
+
+            {/* Drawing Canvas Overlay */}
+            <DrawingCanvas
+              activeTool={activeTool}
+              onToolComplete={() => setActiveTool('cursor')}
+              drawings={drawings}
+              onAddDrawing={(d) => setDrawings([...drawings, d])}
+              onUpdateDrawing={(d) =>
+                setDrawings(drawings.map((item) => (item.id === d.id ? d : item)))
+              }
+              showDrawings={showDrawings}
+              symbol={symbol}
+              chartDimensions={chartDimensions}
+              priceRange={priceRange}
             />
-            <span className="text-cyan-400">EMA ({emas.join('/')})</span>
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={showBollinger}
-              onChange={(e) => setShowBollinger(e.target.checked)}
-              className="rounded bg-slate-800 border-slate-700 text-purple-500 focus:ring-0"
-            />
-            <span className="text-purple-400">BB ({bbPeriod})</span>
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={showIchimoku}
-              onChange={(e) => setShowIchimoku(e.target.checked)}
-              className="rounded bg-slate-800 border-slate-700 text-indigo-500 focus:ring-0"
-            />
-            <span className="text-indigo-400">Ichimoku</span>
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={showRsi}
-              onChange={(e) => setShowRsi(e.target.checked)}
-              className="rounded bg-slate-800 border-slate-700 text-amber-500 focus:ring-0"
-            />
-            <span className="text-amber-400">RSI ({rsiPeriod})</span>
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={showMacd}
-              onChange={(e) => setShowMacd(e.target.checked)}
-              className="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0"
-            />
-            <span className="text-cyan-400">MACD ({macdFast}/{macdSlow})</span>
-          </label>
+          </div>
+
+          {/* Sub-Pane 1: RSI Oscillator */}
+          {activeIndicators.rsi && (
+            <div className="h-24 border-t border-slate-800 bg-[#090d16] relative flex flex-col flex-shrink-0">
+              <div className="h-5 px-3 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                <span className="font-bold text-amber-400">
+                  RSI ({indicatorSettings.rsiPeriod})
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">OB: 70 | OS: 30</span>
+                  <button
+                    onClick={() => setActiveIndicators({ ...activeIndicators, rsi: false })}
+                    className="hover:text-red-400"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              <div ref={rsiChartContainerRef} className="flex-1 w-full h-full" />
+            </div>
+          )}
+
+          {/* Sub-Pane 2: MACD Oscillator */}
+          {activeIndicators.macd && (
+            <div className="h-24 border-t border-slate-800 bg-[#090d16] relative flex flex-col flex-shrink-0">
+              <div className="h-5 px-3 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                <span className="font-bold text-cyan-400">
+                  MACD ({indicatorSettings.macdFast},{indicatorSettings.macdSlow},{indicatorSettings.macdSignal})
+                </span>
+                <button
+                  onClick={() => setActiveIndicators({ ...activeIndicators, macd: false })}
+                  className="hover:text-red-400"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+              <div ref={macdChartContainerRef} className="flex-1 w-full h-full" />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* SVG Canvas Candlestick Engine */}
-      <div className="relative overflow-x-auto">
-        <svg viewBox={`0 0 ${svgWidth} ${chartHeight + (showRsi ? rsiHeight : 0) + (showMacd ? macdHeight : 0)}`} className="w-full h-auto">
-          <defs>
-            <linearGradient id="cloudGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.05" />
-            </linearGradient>
-          </defs>
+      {/* Asset / Symbol Search Modal */}
+      <SymbolSearchModal
+        isOpen={isSymbolSearchOpen}
+        onClose={() => setIsSymbolSearchOpen(false)}
+        selectedSymbol={symbol}
+        onSelectSymbol={(newSym) => {
+          if (onSymbolChange) onSymbolChange(newSym);
+        }}
+      />
 
-          {/* Grid lines */}
-          {[0.25, 0.5, 0.75].map((pct) => (
-            <line
-              key={pct}
-              x1="0"
-              y1={chartHeight * pct}
-              x2={svgWidth}
-              y2={chartHeight * pct}
-              stroke="#1e293b"
-              strokeDasharray="4 4"
-            />
-          ))}
-
-          {/* Ichimoku Cloud Shaded Polyline (Simulated) */}
-          {showIchimoku && (
-            <path
-              d={`M 0 ${getY(minLow + priceRange * 0.55)} Q ${svgWidth / 2} ${getY(
-                minLow + priceRange * 0.65
-              )} ${svgWidth} ${getY(minLow + priceRange * 0.5)} L ${svgWidth} ${getY(
-                minLow + priceRange * 0.4
-              )} Q ${svgWidth / 2} ${getY(minLow + priceRange * 0.45)} 0 ${getY(
-                minLow + priceRange * 0.35
-              )} Z`}
-              fill="url(#cloudGradient)"
-              stroke="#818cf8"
-              strokeWidth="0.8"
-              strokeDasharray="2 2"
-            />
-          )}
-
-          {/* Candlesticks */}
-          {candles.map((candle, idx) => {
-            const x = (idx / candles.length) * (svgWidth - 60) + 20;
-            const yOpen = getY(candle.open);
-            const yClose = getY(candle.close);
-            const yHigh = getY(candle.high);
-            const yLow = getY(candle.low);
-            const isBull = candle.close >= candle.open;
-            const color = isBull ? '#10b981' : '#ef4444';
-
-            const rectY = Math.min(yOpen, yClose);
-            const rectHeight = Math.max(1.5, Math.abs(yOpen - yClose));
-
-            return (
-              <g key={candle.timestamp + idx} className="hover:opacity-80 transition-opacity">
-                {/* Wick */}
-                <line x1={x} y1={yHigh} x2={x} y2={yLow} stroke={color} strokeWidth="1" />
-                {/* Body */}
-                <rect
-                  x={x - candleWidth / 2}
-                  y={rectY}
-                  width={candleWidth}
-                  height={rectHeight}
-                  fill={isBull ? '#10b981' : '#ef4444'}
-                  rx="1"
-                />
-              </g>
-            );
-          })}
-
-          {/* Dynamic EMA Overlays */}
-          {showEma &&
-            emas.map((period, idx) => {
-              const color = EMA_COLORS[idx % EMA_COLORS.length];
-              // Offset curve slightly based on period for visual distinction
-              const midFactor = 0.52 - (idx * 0.05);
-              const startFactor = 0.48 - (idx * 0.04);
-              return (
-                <path
-                  key={`ema-${period}`}
-                  d={`M 0 ${getY(minLow + priceRange * startFactor)} Q ${svgWidth * 0.5} ${getY(
-                    minLow + priceRange * midFactor
-                  )} ${svgWidth} ${getY(latest.close - (idx * 0.0003))}`}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth="1.5"
-                />
-              );
-            })}
-
-          {/* Bollinger Bands Overlay */}
-          {showBollinger && (
-            <>
-              {/* Upper Band (Dashed Purple) */}
-              <path
-                d={`M 0 ${getY(minLow + priceRange * 0.72)} Q ${svgWidth * 0.5} ${getY(
-                  minLow + priceRange * 0.82
-                )} ${svgWidth} ${getY(latest.close + priceRange * 0.15)}`}
-                fill="none"
-                stroke="#c084fc"
-                strokeWidth="1.2"
-                strokeDasharray="3 3"
-              />
-              {/* Middle Band (Solid Purple) */}
-              <path
-                d={`M 0 ${getY(minLow + priceRange * 0.5)} Q ${svgWidth * 0.5} ${getY(
-                  minLow + priceRange * 0.56
-                )} ${svgWidth} ${getY(latest.close)}`}
-                fill="none"
-                stroke="#a855f7"
-                strokeWidth="1.5"
-              />
-              {/* Lower Band (Dashed Purple) */}
-              <path
-                d={`M 0 ${getY(minLow + priceRange * 0.28)} Q ${svgWidth * 0.5} ${getY(
-                  minLow + priceRange * 0.32
-                )} ${svgWidth} ${getY(latest.close - priceRange * 0.15)}`}
-                fill="none"
-                stroke="#c084fc"
-                strokeWidth="1.2"
-                strokeDasharray="3 3"
-              />
-            </>
-          )}
-
-          {/* Latest Price Ray & Label */}
-          <line
-            x1="0"
-            y1={getY(latest.close)}
-            x2={svgWidth}
-            y2={getY(latest.close)}
-            stroke="#10b981"
-            strokeDasharray="2 2"
-            strokeWidth="1"
-          />
-          <text
-            x={svgWidth - 55}
-            y={getY(latest.close) - 4}
-            fill="#10b981"
-            fontSize="10"
-            fontFamily="monospace"
-            fontWeight="bold"
-          >
-            {latest.close.toFixed(5)}
-          </text>
-
-          {/* RSI Sub-pane */}
-          {showRsi && (
-            <g transform={`translate(0, ${chartHeight})`}>
-              <rect x="0" y="0" width={svgWidth} height={rsiHeight} fill="#020617" />
-              <line x1="0" y1="0" x2={svgWidth} y2="0" stroke="#1e293b" />
-              {/* RSI Overbought */}
-              <line
-                x1="0"
-                y1={rsiHeight * (1 - rsiOverbought / 100)}
-                x2={svgWidth}
-                y2={rsiHeight * (1 - rsiOverbought / 100)}
-                stroke="#ef4444"
-                strokeDasharray="3 3"
-                opacity="0.6"
-              />
-              <text x="10" y={rsiHeight * (1 - rsiOverbought / 100) - 4} fill="#ef4444" fontSize="9" opacity="0.8">
-                {rsiOverbought} Overbought
-              </text>
-              {/* RSI Oversold */}
-              <line
-                x1="0"
-                y1={rsiHeight * (1 - rsiOversold / 100)}
-                x2={svgWidth}
-                y2={rsiHeight * (1 - rsiOversold / 100)}
-                stroke="#10b981"
-                strokeDasharray="3 3"
-                opacity="0.6"
-              />
-              <text x="10" y={rsiHeight * (1 - rsiOversold / 100) + 10} fill="#10b981" fontSize="9" opacity="0.8">
-                {rsiOversold} Oversold
-              </text>
-              {/* RSI Wave Line */}
-              <path
-                d={`M 0 ${rsiHeight * 0.5} Q ${svgWidth * 0.3} ${rsiHeight * 0.25}, ${svgWidth * 0.6} ${rsiHeight * 0.65} T ${svgWidth} ${rsiHeight * 0.42}`}
-                fill="none"
-                stroke="#f59e0b"
-                strokeWidth="1.5"
-              />
-              <text x={svgWidth - 75} y="15" fill="#f59e0b" fontSize="10" fontFamily="monospace" fontWeight="bold">
-                RSI({rsiPeriod}): 58.4
-              </text>
-            </g>
-          )}
-
-          {/* MACD Sub-pane */}
-          {showMacd && (
-            <g transform={`translate(0, ${chartHeight + (showRsi ? rsiHeight : 0)})`}>
-              <rect x="0" y="0" width={svgWidth} height={macdHeight} fill="#020617" />
-              <line x1="0" y1="0" x2={svgWidth} y2="0" stroke="#1e293b" />
-              <line x1="0" y1={macdHeight * 0.5} x2={svgWidth} y2={macdHeight * 0.5} stroke="#334155" strokeDasharray="2 2" />
-              {/* MACD Histogram Bars */}
-              {[-0.4, -0.2, 0.1, 0.3, 0.5, 0.7, 0.4, 0.2, -0.1, -0.3].map((val, i) => {
-                const barX = (svgWidth / 11) * (i + 1);
-                const barH = Math.abs(val) * 20;
-                const isPositive = val >= 0;
-                return (
-                  <rect
-                    key={`hist-${i}`}
-                    x={barX - 4}
-                    y={isPositive ? macdHeight * 0.5 - barH : macdHeight * 0.5}
-                    width={8}
-                    height={barH}
-                    fill={isPositive ? '#10b981' : '#ef4444'}
-                    opacity="0.7"
-                  />
-                );
-              })}
-              {/* MACD Line */}
-              <path
-                d={`M 0 ${macdHeight * 0.6} Q ${svgWidth * 0.4} ${macdHeight * 0.2}, ${svgWidth} ${macdHeight * 0.45}`}
-                fill="none"
-                stroke="#06b6d4"
-                strokeWidth="1.5"
-              />
-              {/* Signal Line */}
-              <path
-                d={`M 0 ${macdHeight * 0.65} Q ${svgWidth * 0.45} ${macdHeight * 0.3}, ${svgWidth} ${macdHeight * 0.5}`}
-                fill="none"
-                stroke="#f97316"
-                strokeWidth="1.5"
-              />
-              <text x={svgWidth - 140} y="15" fill="#06b6d4" fontSize="10" fontFamily="monospace" fontWeight="bold">
-                MACD({macdFast},{macdSlow},{macdSignal})
-              </text>
-            </g>
-          )}
-        </svg>
-      </div>
+      {/* Indicators Configuration Modal */}
+      <IndicatorsModal
+        isOpen={isIndicatorsModalOpen}
+        onClose={() => setIsIndicatorsModalOpen(false)}
+        activeIndicators={activeIndicators}
+        onToggleIndicator={(k) =>
+          setActiveIndicators({ ...activeIndicators, [k]: !activeIndicators[k] })
+        }
+        settings={indicatorSettings}
+        onUpdateSettings={setIndicatorSettings}
+      />
     </div>
   );
 };

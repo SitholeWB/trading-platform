@@ -6,6 +6,7 @@ using TradingPlatform.Application.Common.CQRS;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Application.Queries;
 using TradingPlatform.Broker.Abstractions;
+using TradingPlatform.Broker.Abstractions.Models;
 using TradingPlatform.Broker.Oanda;
 using TradingPlatform.Broker.Public;
 using TradingPlatform.Domain.Entities;
@@ -156,6 +157,34 @@ positionsGroup.MapPost("/{ticket:long}/close", async (long ticket, [FromQuery] s
     return Results.Ok(result);
 });
 
+positionsGroup.MapPost("/order", async ([FromBody] PlaceManualOrderDto dto, IOrderExecutionService broker, ITradeRepository tradeRepo, CancellationToken ct) =>
+{
+    var orderRequest = new OrderRequest(
+        dto.Symbol,
+        dto.OrderType,
+        dto.Lots > 0 ? dto.Lots : 0.1m,
+        dto.Price,
+        dto.StopLoss,
+        dto.TakeProfit,
+        "ManualTradingView",
+        Guid.NewGuid().ToString("N"));
+
+    var result = await broker.OpenOrderAsync(orderRequest, ct);
+    if (!result.Success) return Results.BadRequest(result);
+
+    var position = new Position(
+        result.BrokerTicketId,
+        dto.Symbol,
+        dto.OrderType,
+        result.Lots,
+        result.ExecutedPrice,
+        dto.StopLoss,
+        dto.TakeProfit);
+
+    await tradeRepo.AddPositionAsync(position, ct);
+    return Results.Ok(result);
+});
+
 // ----------------------------------------------------
 // 4. Risk Profile & Kill Switch Endpoints
 // ----------------------------------------------------
@@ -240,12 +269,20 @@ marketDataGroup.MapGet("/candles", async (
     [FromQuery] string? symbol,
     [FromQuery] string? timeframe,
     [FromQuery] int? count,
+    [FromQuery] long? before,
     IHistoricalDataProvider dataProvider,
     CancellationToken ct) =>
 {
     string sym = string.IsNullOrWhiteSpace(symbol) ? "EURUSD" : symbol.Trim().ToUpperInvariant();
     string tf = string.IsNullOrWhiteSpace(timeframe) ? "M5" : timeframe.Trim().ToUpperInvariant();
-    int limit = count.HasValue && count.Value > 0 ? count.Value : 60;
+    int limit = count.HasValue && count.Value > 0 ? count.Value : 120;
+
+    if (before.HasValue && before.Value > 0)
+    {
+        var beforeUtc = DateTimeOffset.FromUnixTimeSeconds(before.Value).UtcDateTime;
+        var olderCandles = await dataProvider.GetHistoricalCandlesBeforeAsync(sym, tf, limit, beforeUtc, ct);
+        return Results.Ok(olderCandles);
+    }
 
     var candles = await dataProvider.GetHistoricalCandlesAsync(sym, tf, limit, ct);
     return Results.Ok(candles);
@@ -394,6 +431,14 @@ public record UpdateBrokerConfigDto(
     string? OandaAccountId,
     string? OandaEnvironment,
     string? TwelveDataApiKey);
+
+public record PlaceManualOrderDto(
+    string Symbol,
+    OrderType OrderType,
+    decimal Lots,
+    decimal Price,
+    decimal? StopLoss,
+    decimal? TakeProfit);
 
 public partial class Program
 {

@@ -67,6 +67,21 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
         return await _yahooGateway.GetHistoricalCandlesAsync(symbol, timeframe, count, ct);
     }
 
+    public async Task<IReadOnlyList<Candle>> GetHistoricalCandlesBeforeAsync(
+        string symbol,
+        string timeframe,
+        int count,
+        DateTime beforeUtc,
+        CancellationToken ct)
+    {
+        if (IsCryptoSymbol(symbol))
+        {
+            return await _binanceGateway.GetHistoricalCandlesBeforeAsync(symbol, timeframe, count, beforeUtc, ct);
+        }
+
+        return await _yahooGateway.GetHistoricalCandlesBeforeAsync(symbol, timeframe, count, beforeUtc, ct);
+    }
+
     private static bool IsCryptoSymbol(string symbol)
     {
         var s = symbol.ToUpperInvariant();

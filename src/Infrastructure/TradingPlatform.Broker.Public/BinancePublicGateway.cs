@@ -24,7 +24,6 @@ public class BinancePublicGateway : IHistoricalDataProvider
         int count,
         CancellationToken ct)
     {
-        var candles = new List<Candle>();
         var parsedTimeframe = Enum.TryParse<Timeframe>(timeframe, true, out var tf) ? tf : Timeframe.M5;
 
         string binanceSymbol = NormalizeBinanceSymbol(symbol);
@@ -32,16 +31,47 @@ public class BinancePublicGateway : IHistoricalDataProvider
         int limit = Math.Clamp(count, 10, 1000);
 
         string url = $"https://api.binance.com/api/v3/klines?symbol={binanceSymbol}&interval={interval}&limit={limit}";
+        var candles = await FetchBinanceCandlesAsync(url, symbol, parsedTimeframe, ct);
+        if (candles.Count == 0)
+        {
+            return FallbackCryptoCandles(symbol, parsedTimeframe, count);
+        }
+        return candles;
+    }
 
+    public async Task<IReadOnlyList<Candle>> GetHistoricalCandlesBeforeAsync(
+        string symbol,
+        string timeframe,
+        int count,
+        DateTime beforeUtc,
+        CancellationToken ct)
+    {
+        var parsedTimeframe = Enum.TryParse<Timeframe>(timeframe, true, out var tf) ? tf : Timeframe.M5;
+        string binanceSymbol = NormalizeBinanceSymbol(symbol);
+        string interval = MapTimeframeToBinanceInterval(parsedTimeframe);
+        int limit = Math.Clamp(count, 10, 1000);
+        long endTimeMs = ((DateTimeOffset)beforeUtc).ToUnixTimeMilliseconds();
+
+        string url = $"https://api.binance.com/api/v3/klines?symbol={binanceSymbol}&interval={interval}&limit={limit}&endTime={endTimeMs}";
+        return await FetchBinanceCandlesAsync(url, symbol, parsedTimeframe, ct);
+    }
+
+    private async Task<List<Candle>> FetchBinanceCandlesAsync(
+        string url,
+        string symbol,
+        Timeframe parsedTimeframe,
+        CancellationToken ct)
+    {
+        var candles = new List<Candle>();
         try
         {
-            _logger.LogInformation("[BINANCE PUBLIC] Requesting {BinanceSymbol} interval={Interval} limit={Limit}...", binanceSymbol, interval, limit);
+            _logger.LogInformation("[BINANCE PUBLIC] Requesting {Url}...", url);
 
             using var response = await _httpClient.GetAsync(url, ct);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("[BINANCE PUBLIC] HTTP {Status} received for {Url}", response.StatusCode, url);
-                return FallbackCryptoCandles(symbol, parsedTimeframe, count);
+                return candles;
             }
 
             using var stream = await response.Content.ReadAsStreamAsync(ct);
@@ -50,7 +80,7 @@ public class BinancePublicGateway : IHistoricalDataProvider
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Array)
             {
-                return FallbackCryptoCandles(symbol, parsedTimeframe, count);
+                return candles;
             }
 
             foreach (var kline in root.EnumerateArray())
@@ -82,7 +112,7 @@ public class BinancePublicGateway : IHistoricalDataProvider
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[BINANCE PUBLIC] Exception fetching crypto candles for {Symbol}", symbol);
-            return FallbackCryptoCandles(symbol, parsedTimeframe, count);
+            return candles;
         }
     }
 

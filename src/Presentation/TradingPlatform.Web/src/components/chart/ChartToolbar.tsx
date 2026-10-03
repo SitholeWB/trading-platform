@@ -1,0 +1,317 @@
+import React, { useState } from 'react';
+import {
+  Search,
+  Maximize2,
+  Minimize2,
+  Camera,
+  RefreshCw,
+  ChevronDown,
+  Split,
+  History,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react';
+import { ChartType } from './types';
+import { Timeframe } from '../../types/trading';
+
+interface ChartToolbarProps {
+  symbol: string;
+  onOpenSymbolSearch: () => void;
+  timeframe: Timeframe;
+  onTimeframeChange: (tf: Timeframe) => void;
+  chartType: ChartType;
+  onChartTypeChange: (type: ChartType) => void;
+  onOpenIndicatorsModal: () => void;
+  activeIndicatorsCount: number;
+  onFitContent: () => void;
+  onTakeSnapshot: () => void;
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
+  layoutMode: 'single' | 'split-h' | 'split-v';
+  onLayoutModeChange: (mode: 'single' | 'split-h' | 'split-v') => void;
+  currentPrice: number;
+  priceChange: { diff: number; pct: number };
+  // Historical pagination
+  candlesCount?: number;
+  isLoadingHistory?: boolean;
+  onLoadOlderHistory?: () => void;
+  hasMoreHistory?: boolean;
+  historyNotice?: string | null;
+  onDismissHistoryNotice?: () => void;
+}
+
+export const ChartToolbar: React.FC<ChartToolbarProps> = ({
+  symbol,
+  onOpenSymbolSearch,
+  timeframe,
+  onTimeframeChange,
+  chartType,
+  onChartTypeChange,
+  onOpenIndicatorsModal,
+  activeIndicatorsCount,
+  onFitContent,
+  onTakeSnapshot,
+  isFullscreen,
+  onToggleFullscreen,
+  layoutMode,
+  onLayoutModeChange,
+  currentPrice,
+  priceChange,
+  candlesCount = 0,
+  isLoadingHistory = false,
+  onLoadOlderHistory,
+  hasMoreHistory = true,
+  historyNotice,
+  onDismissHistoryNotice,
+}) => {
+  const [showLayoutDropdown, setShowLayoutDropdown] = useState(false);
+
+  const timeframes: { label: string; value: Timeframe }[] = [
+    { label: '1m', value: 'M1' },
+    { label: '5m', value: 'M5' },
+    { label: '15m', value: 'M15' },
+    { label: '30m', value: 'M30' },
+    { label: '1h', value: 'H1' },
+    { label: '4h', value: 'H4' },
+    { label: '1D', value: 'D1' },
+    { label: '1W', value: 'W1' },
+  ];
+
+  const chartTypes: { id: ChartType; label: string; icon: string; short: string }[] = [
+    { id: 'candlestick', label: 'Candles', icon: '🕯️', short: 'Candle' },
+    { id: 'heikin_ashi', label: 'Heikin Ashi', icon: '🏮', short: 'HA' },
+    { id: 'bar', label: 'Bars', icon: '📊', short: 'Bar' },
+    { id: 'line', label: 'Line', icon: '📈', short: 'Line' },
+    { id: 'area', label: 'Area', icon: '🏔️', short: 'Area' },
+    { id: 'baseline', label: 'Baseline', icon: '⚖️', short: 'Base' },
+  ];
+
+  const isPos = priceChange.pct >= 0;
+
+  return (
+    <div className="relative">
+      <div className="h-10 px-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs select-none flex-shrink-0 z-20">
+        {/* Left Segment: Symbol Picker, Price Stats, Timeframes, 1-Click Chart Type Selector */}
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1">
+          {/* Symbol Search Button */}
+          <button
+            onClick={onOpenSymbolSearch}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800/80 border border-slate-800 text-slate-100 font-bold transition-all group flex-shrink-0"
+          >
+            <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-400" />
+            <span className="font-mono text-sm tracking-wide">{symbol}</span>
+            <span className="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.2 rounded border border-blue-500/20 font-mono hidden sm:inline">
+              FX
+            </span>
+            <ChevronDown className="w-3 h-3 text-slate-400" />
+          </button>
+
+          {/* Live Ticker Price & % Change */}
+          <div className="hidden lg:flex items-center gap-1.5 font-mono text-xs px-2 border-r border-slate-800/80 flex-shrink-0">
+            <span className="font-bold text-slate-200">{currentPrice.toFixed(5)}</span>
+            <span className={`text-[11px] font-semibold ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>
+              {isPos ? `+${priceChange.pct.toFixed(2)}%` : `${priceChange.pct.toFixed(2)}%`}
+            </span>
+          </div>
+
+          {/* Timeframe Selector Bar */}
+          <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex-shrink-0">
+            {timeframes.map((tf) => (
+              <button
+                key={tf.value}
+                onClick={() => onTimeframeChange(tf.value)}
+                className={`px-2 py-0.5 rounded text-[11px] font-mono transition-all ${
+                  timeframe === tf.value
+                    ? 'bg-blue-600 text-white font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                {tf.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Direct 1-Click Chart Style Switcher Buttons */}
+          <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex-shrink-0">
+            {chartTypes.map((type) => {
+              const isActive = chartType === type.id;
+              return (
+                <button
+                  key={type.id}
+                  onClick={() => onChartTypeChange(type.id)}
+                  className={`px-2 py-0.5 rounded text-xs flex items-center gap-1 transition-all ${
+                    isActive
+                      ? 'bg-blue-600 text-white font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                  title={`Switch to ${type.label}`}
+                >
+                  <span>{type.icon}</span>
+                  <span className="hidden xl:inline">{type.short}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Indicators Dialog Trigger */}
+          <button
+            onClick={onOpenIndicatorsModal}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/30 text-blue-300 font-bold transition-all flex-shrink-0"
+          >
+            <span className="italic font-serif font-black">fx</span>
+            <span>Indicators</span>
+            {activeIndicatorsCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-mono">
+                {activeIndicatorsCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Right Segment: Load History Button, Tools, Split View, Snapshot, Fullscreen, Reset */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Historical Data Loading Trigger */}
+          {onLoadOlderHistory && (
+            <button
+              onClick={onLoadOlderHistory}
+              disabled={isLoadingHistory || !hasMoreHistory}
+              className={`px-2 py-1 rounded-lg text-xs font-mono flex items-center gap-1.5 transition-all border ${
+                isLoadingHistory
+                  ? 'bg-blue-900/30 border-blue-500/40 text-blue-300 animate-pulse'
+                  : !hasMoreHistory
+                  ? 'bg-slate-950/40 border-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-slate-950 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
+              }`}
+              title={
+                !hasMoreHistory
+                  ? 'Earliest history reached for this timeframe'
+                  : `Load older bars before earliest bar (Currently ${candlesCount} bars loaded)`
+              }
+            >
+              {isLoadingHistory ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                  <span className="hidden sm:inline">Loading...</span>
+                </>
+              ) : (
+                <>
+                  <History className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="hidden sm:inline">
+                    {!hasMoreHistory ? 'Earliest Reached' : `+Bars (${candlesCount})`}
+                  </span>
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Layout Split Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowLayoutDropdown(!showLayoutDropdown)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+              title="Chart Split View Layout"
+            >
+              <Split className="w-4 h-4" />
+            </button>
+
+            {showLayoutDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowLayoutDropdown(false)}
+                />
+                <div className="absolute top-9 right-0 w-48 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 z-50 font-sans">
+                  <button
+                    onClick={() => {
+                      onLayoutModeChange('single');
+                      setShowLayoutDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left ${
+                      layoutMode === 'single'
+                        ? 'bg-blue-600 text-white font-bold'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>[ 1 ]</span>
+                    <span>Single Chart</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onLayoutModeChange('split-v');
+                      setShowLayoutDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left ${
+                      layoutMode === 'split-v'
+                        ? 'bg-blue-600 text-white font-bold'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>[ | ]</span>
+                    <span>Dual Vertical Split</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onLayoutModeChange('split-h');
+                      setShowLayoutDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left ${
+                      layoutMode === 'split-h'
+                        ? 'bg-blue-600 text-white font-bold'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>[ = ]</span>
+                    <span>Dual Horizontal Split</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Fit Content / Reset View */}
+          <button
+            onClick={onFitContent}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            title="Reset Zoom / Fit Content (Auto)"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+
+          {/* Take Snapshot / Screenshot */}
+          <button
+            onClick={onTakeSnapshot}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            title="Save Chart Screenshot (PNG)"
+          >
+            <Camera className="w-4 h-4" />
+          </button>
+
+          {/* Fullscreen Toggle */}
+          <button
+            onClick={onToggleFullscreen}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* History Toast / Notice Notification Banner */}
+      {historyNotice && (
+        <div className="absolute top-11 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 border border-amber-500/40 text-amber-300 px-4 py-2 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-mono backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+          <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+          <span>{historyNotice}</span>
+          {onDismissHistoryNotice && (
+            <button
+              onClick={onDismissHistoryNotice}
+              className="text-slate-400 hover:text-slate-200 ml-2"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
