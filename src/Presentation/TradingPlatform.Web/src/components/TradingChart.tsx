@@ -90,7 +90,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [activeTool, setActiveTool] = useState<DrawingTool>('cursor');
   const [drawings, setDrawings] = useState<DrawingItem[]>([]);
   const [showDrawings, setShowDrawings] = useState(true);
-  const [chartViewVersion, setChartViewVersion] = useState(0);
 
   const handleDeleteDrawing = (id: string) => {
     setDrawings((prev) => prev.filter((d) => d.id !== id));
@@ -383,27 +382,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     const handleMainRangeChange = (range: LogicalRange | null) => {
       if (!range) return;
 
-      // Bump chartViewVersion so drawings canvas re-projects points to updated bar coordinates
-      setChartViewVersion((v) => v + 1);
-
-      // 1. Synchronize to sub-charts (RSI, MACD)
-      if (!isSyncingRangeRef.current) {
-        isSyncingRangeRef.current = true;
-        try {
-          if (rsiChartRef.current) {
-            rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
-          }
-          if (macdChartRef.current) {
-            macdChartRef.current.timeScale().setVisibleLogicalRange(range);
-          }
-        } catch {}
-        finally {
-          isSyncingRangeRef.current = false;
+      // 1. Unidirectionally synchronize sub-charts (RSI, MACD) to match main chart range
+      try {
+        if (rsiChartRef.current) {
+          rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
         }
-      }
+        if (macdChartRef.current) {
+          macdChartRef.current.timeScale().setVisibleLogicalRange(range);
+        }
+      } catch {}
 
       // 2. Auto-load older bars when scrolled near earliest bar
-      if (range.from < 5) {
+      if (range.from < 10) {
         checkAndLoadOlderHistory();
       }
     };
@@ -416,7 +406,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       try {
         chart.applyOptions({ width: w, height: h });
         setChartDimensions({ width: w, height: h });
-        setChartViewVersion((v) => v + 1);
       } catch {}
     });
     resizeObserver.observe(container);
@@ -632,93 +621,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     syncIndicatorLine('spanA', activeIndicators.ichimoku, '#10b981', 1, ichi.spanA, LineStyle.Dotted, 'Span A');
     syncIndicatorLine('spanB', activeIndicators.ichimoku, '#f59e0b', 1, ichi.spanB, LineStyle.Dotted, 'Span B');
 
-    // E. Price Lines (Open Positions)
-    if (mainSeriesRef.current) {
-      priceLinesRef.current.forEach((pl) => {
-        try {
-          mainSeriesRef.current?.removePriceLine(pl);
-        } catch {}
-      });
-      priceLinesRef.current = [];
-
-      positions
-        .filter((p) => p.symbol === symbol && p.status === 'Open')
-        .forEach((pos) => {
-          try {
-            const entryLine = mainSeriesRef.current?.createPriceLine({
-              price: pos.entryPrice,
-              color: pos.orderType === 'Buy' ? '#38bdf8' : '#fb923c',
-              lineWidth: 1,
-              lineStyle: LineStyle.Dotted,
-              axisLabelVisible: true,
-              title: `${pos.orderType.toUpperCase()} ${pos.lots}L @ ${formatPrice(pos.entryPrice, symbol)}`,
-            });
-            if (entryLine) priceLinesRef.current.push(entryLine);
-
-            if (pos.stopLossPrice) {
-              const slLine = mainSeriesRef.current?.createPriceLine({
-                price: pos.stopLossPrice,
-                color: '#ef4444',
-                lineWidth: 1,
-                lineStyle: LineStyle.Dashed,
-                axisLabelVisible: true,
-                title: `SL: ${formatPrice(pos.stopLossPrice, symbol)}`,
-              });
-              if (slLine) priceLinesRef.current.push(slLine);
-            }
-
-            if (pos.takeProfitPrice) {
-              const tpLine = mainSeriesRef.current?.createPriceLine({
-                price: pos.takeProfitPrice,
-                color: '#10b981',
-                lineWidth: 1,
-                lineStyle: LineStyle.Dashed,
-                axisLabelVisible: true,
-                title: `TP: ${formatPrice(pos.takeProfitPrice, symbol)}`,
-              });
-              if (tpLine) priceLinesRef.current.push(tpLine);
-            }
-          } catch {}
-        });
-
-      // Markers
-      const markers: SeriesMarker<UTCTimestamp>[] = [];
-      positions
-        .filter((p) => p.symbol === symbol && p.status === 'Open')
-        .forEach((pos) => {
-          const posTime = getCandleTimeSeconds(pos.openedAtUtc);
-          markers.push({
-            time: posTime as UTCTimestamp,
-            position: pos.orderType === 'Buy' ? 'belowBar' : 'aboveBar',
-            color: pos.orderType === 'Buy' ? '#10b981' : '#ef4444',
-            shape: pos.orderType === 'Buy' ? 'arrowUp' : 'arrowDown',
-            text: `${pos.orderType.toUpperCase()} ${pos.lots}`,
-          });
-        });
-
-      auditLogs
-        .filter((log) => log.symbol === symbol && log.state === 'NearMiss')
-        .slice(0, 10)
-        .forEach((log) => {
-          const t = getCandleTimeSeconds(log.candleTimestampUtc);
-          markers.push({
-            time: t as UTCTimestamp,
-            position: 'aboveBar',
-            color: '#f59e0b',
-            shape: 'circle',
-            text: 'NEAR MISS',
-          });
-        });
-
-      if (markers.length > 0) {
-        markers.sort((a, b) => Number(a.time) - Number(b.time));
-        try {
-          mainSeriesRef.current?.setMarkers(markers);
-        } catch {}
-      }
-    }
-
-    // F. Viewport & Zoom Lock Synchronization
+    // E. Viewport & Zoom Lock Synchronization
     if (isNewSymbolOrTimeframe) {
       setTimeout(() => {
         try {
@@ -734,24 +637,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
 
       if (prependedCount > 0) {
-        // If user was scrolling left (at the beginning of chart), reveal the newly loaded bars
-        // smoothly without jumping forward to the right!
-        const rangeWidth = Math.max(25, prevRange.to - prevRange.from);
-        if (prevRange.from <= 8) {
-          try {
-            timeScale.setVisibleLogicalRange({
-              from: 0,
-              to: rangeWidth,
-            });
-          } catch {}
-        } else {
-          try {
-            timeScale.setVisibleLogicalRange({
-              from: prevRange.from + prependedCount,
-              to: prevRange.to + prependedCount,
-            });
-          } catch {}
-        }
+        // Shift visible range by prependedCount so the viewport stays locked on the exact same bars
+        try {
+          timeScale.setVisibleLogicalRange({
+            from: prevRange.from + prependedCount,
+            to: prevRange.to + prependedCount,
+          });
+        } catch {}
       } else {
         const isTrackingLiveEdge = prevRange.to >= prevInfo.count - 2;
         const appendedCount = cleanCandles.length - prevInfo.count;
@@ -764,17 +656,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               to: prevRange.to + appendedCount,
             });
           } catch {}
-        } else {
-          // Lock view completely so live ticks do NOT reset scroll or zoom size
-          try {
-            const rangeWidth = Math.max(20, prevRange.to - prevRange.from);
-            const safeFrom = Math.max(0, prevRange.from);
-            timeScale.setVisibleLogicalRange({
-              from: safeFrom,
-              to: safeFrom + rangeWidth,
-            });
-          } catch {}
         }
+        // When user has scrolled back to inspect history or zoom, DO NOT override visibleLogicalRange.
+        // Lightweight Charts maintains the exact scroll position and bar sizing naturally.
       }
     }
 
@@ -790,11 +674,107 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     chartType,
     activeIndicators,
     indicatorSettings,
-    positions,
-    auditLogs,
     symbol,
     timeframe,
   ]);
+
+  // ----------------------------------------------------
+  // 2b. Open Positions & Signal Audit Logs (Price Lines & Markers)
+  // Kept in a dedicated effect so 2.5s polling never resets candle data or viewport
+  // ----------------------------------------------------
+  useEffect(() => {
+    const series = mainSeriesRef.current;
+    if (!series) return;
+
+    // Clear existing price lines
+    priceLinesRef.current.forEach((pl) => {
+      try {
+        series.removePriceLine(pl);
+      } catch {}
+    });
+    priceLinesRef.current = [];
+
+    // Add entry, SL, TP price lines for current symbol positions
+    positions
+      .filter((p) => p.symbol === symbol && p.status === 'Open')
+      .forEach((pos) => {
+        try {
+          const entryLine = series.createPriceLine({
+            price: pos.entryPrice,
+            color: pos.orderType === 'Buy' ? '#38bdf8' : '#fb923c',
+            lineWidth: 1,
+            lineStyle: LineStyle.Dotted,
+            axisLabelVisible: true,
+            title: `${pos.orderType.toUpperCase()} ${pos.lots}L @ ${formatPrice(pos.entryPrice, symbol)}`,
+          });
+          if (entryLine) priceLinesRef.current.push(entryLine);
+
+          if (pos.stopLossPrice) {
+            const slLine = series.createPriceLine({
+              price: pos.stopLossPrice,
+              color: '#ef4444',
+              lineWidth: 1,
+              lineStyle: LineStyle.Dashed,
+              axisLabelVisible: true,
+              title: `SL: ${formatPrice(pos.stopLossPrice, symbol)}`,
+            });
+            if (slLine) priceLinesRef.current.push(slLine);
+          }
+
+          if (pos.takeProfitPrice) {
+            const tpLine = series.createPriceLine({
+              price: pos.takeProfitPrice,
+              color: '#10b981',
+              lineWidth: 1,
+              lineStyle: LineStyle.Dashed,
+              axisLabelVisible: true,
+              title: `TP: ${formatPrice(pos.takeProfitPrice, symbol)}`,
+            });
+            if (tpLine) priceLinesRef.current.push(tpLine);
+          }
+        } catch {}
+      });
+
+    // Markers (Order executions & Near-miss audits)
+    const markers: SeriesMarker<UTCTimestamp>[] = [];
+    positions
+      .filter((p) => p.symbol === symbol && p.status === 'Open')
+      .forEach((pos) => {
+        const posTime = getCandleTimeSeconds(pos.openedAtUtc);
+        markers.push({
+          time: posTime as UTCTimestamp,
+          position: pos.orderType === 'Buy' ? 'belowBar' : 'aboveBar',
+          color: pos.orderType === 'Buy' ? '#10b981' : '#ef4444',
+          shape: pos.orderType === 'Buy' ? 'arrowUp' : 'arrowDown',
+          text: `${pos.orderType.toUpperCase()} ${pos.lots}`,
+        });
+      });
+
+    auditLogs
+      .filter((log) => log.symbol === symbol && log.state === 'NearMiss')
+      .slice(0, 10)
+      .forEach((log) => {
+        const t = getCandleTimeSeconds(log.candleTimestampUtc);
+        markers.push({
+          time: t as UTCTimestamp,
+          position: 'aboveBar',
+          color: '#f59e0b',
+          shape: 'circle',
+          text: 'NEAR MISS',
+        });
+      });
+
+    if (markers.length > 0) {
+      markers.sort((a, b) => Number(a.time) - Number(b.time));
+      try {
+        series.setMarkers(markers);
+      } catch {}
+    } else {
+      try {
+        series.setMarkers([]);
+      } catch {}
+    }
+  }, [positions, auditLogs, symbol]);
 
   // ----------------------------------------------------
   // 3. RSI Oscillator Sub-Pane (Lifecycle & Data separated)
@@ -878,22 +858,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       } catch {}
     }
 
-    // Two-way synchronization with guard
-    const handleRsiRangeChange = (range: LogicalRange | null) => {
-      if (isSyncingRangeRef.current || !range || !mainChartRef.current) return;
-      isSyncingRangeRef.current = true;
-      try {
-        mainChartRef.current.timeScale().setVisibleLogicalRange(range);
-        if (macdChartRef.current) {
-          macdChartRef.current.timeScale().setVisibleLogicalRange(range);
-        }
-      } catch {}
-      finally {
-        isSyncingRangeRef.current = false;
-      }
-    };
-    rsiChart.timeScale().subscribeVisibleLogicalRangeChange(handleRsiRangeChange);
-
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0 || !rsiChartRef.current) return;
       const { width: w, height: h } = entries[0].contentRect;
@@ -905,9 +869,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     return () => {
       resizeObserver.disconnect();
-      try {
-        rsiChart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRsiRangeChange);
-      } catch {}
       try {
         rsiChart.remove();
       } catch {}
@@ -922,7 +883,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     try {
       const rsiPoints = calculateRSI(cleanCandles, indicatorSettings.rsiPeriod);
       rsiSeriesRef.current.setData(
-        rsiPoints.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }))
+        rsiPoints.map((p) =>
+          p.value !== undefined
+            ? { time: p.time as UTCTimestamp, value: p.value }
+            : { time: p.time as UTCTimestamp }
+        )
       );
     } catch {}
   }, [cleanCandles, activeIndicators.rsi, indicatorSettings.rsiPeriod]);
@@ -991,22 +956,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       } catch {}
     }
 
-    // Two-way synchronization with guard
-    const handleMacdRangeChange = (range: LogicalRange | null) => {
-      if (isSyncingRangeRef.current || !range || !mainChartRef.current) return;
-      isSyncingRangeRef.current = true;
-      try {
-        mainChartRef.current.timeScale().setVisibleLogicalRange(range);
-        if (rsiChartRef.current) {
-          rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
-        }
-      } catch {}
-      finally {
-        isSyncingRangeRef.current = false;
-      }
-    };
-    macdChart.timeScale().subscribeVisibleLogicalRangeChange(handleMacdRangeChange);
-
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0 || !macdChartRef.current) return;
       const { width: w, height: h } = entries[0].contentRect;
@@ -1018,9 +967,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     return () => {
       resizeObserver.disconnect();
-      try {
-        macdChart.timeScale().unsubscribeVisibleLogicalRangeChange(handleMacdRangeChange);
-      } catch {}
       try {
         macdChart.remove();
       } catch {}
@@ -1042,18 +988,34 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       const { hist, macd, signal } = macdSeriesMapRef.current;
       if (hist) {
         hist.setData(
-          macdData.histogram.map((h) => ({
-            time: h.time as UTCTimestamp,
-            value: h.value,
-            color: h.color,
-          }))
+          macdData.histogram.map((h) =>
+            h.value !== undefined
+              ? {
+                  time: h.time as UTCTimestamp,
+                  value: h.value,
+                  color: h.color,
+                }
+              : { time: h.time as UTCTimestamp }
+          )
         );
       }
       if (macd) {
-        macd.setData(macdData.macd.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+        macd.setData(
+          macdData.macd.map((p) =>
+            p.value !== undefined
+              ? { time: p.time as UTCTimestamp, value: p.value }
+              : { time: p.time as UTCTimestamp }
+          )
+        );
       }
       if (signal) {
-        signal.setData(macdData.signal.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+        signal.setData(
+          macdData.signal.map((p) =>
+            p.value !== undefined
+              ? { time: p.time as UTCTimestamp, value: p.value }
+              : { time: p.time as UTCTimestamp }
+          )
+        );
       }
     } catch {}
   }, [
@@ -1246,7 +1208,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               chartDimensions={chartDimensions}
               priceRange={priceRange}
               candles={cleanCandles}
-              chartViewVersion={chartViewVersion}
             />
           </div>
 

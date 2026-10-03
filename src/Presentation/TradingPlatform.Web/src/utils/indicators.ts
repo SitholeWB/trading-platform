@@ -5,6 +5,11 @@ export interface IndicatorPoint {
   value: number;
 }
 
+export interface AlignedPoint {
+  time: number; // UTC timestamp in seconds
+  value?: number;
+}
+
 export interface BollingerBandPoints {
   upper: IndicatorPoint[];
   middle: IndicatorPoint[];
@@ -12,9 +17,9 @@ export interface BollingerBandPoints {
 }
 
 export interface MacdPoints {
-  macd: IndicatorPoint[];
-  signal: IndicatorPoint[];
-  histogram: { time: number; value: number; color: string }[];
+  macd: AlignedPoint[];
+  signal: AlignedPoint[];
+  histogram: { time: number; value?: number; color?: string }[];
 }
 
 export interface StochasticPoints {
@@ -156,11 +161,21 @@ export function calculateBollingerBands(
 }
 
 /**
- * Relative Strength Index (RSI) using Wilder's smoothing
+ * Relative Strength Index (RSI) using Wilder's smoothing.
+ * Warmup candles are padded with whitespace objects { time } to ensure exact 1-to-1 bar alignment.
  */
-export function calculateRSI(candles: Candle[], period: number = 14): IndicatorPoint[] {
-  const result: IndicatorPoint[] = [];
-  if (candles.length <= period || period <= 0) return result;
+export function calculateRSI(candles: Candle[], period: number = 14): AlignedPoint[] {
+  const result: AlignedPoint[] = [];
+  if (!candles || candles.length === 0) return result;
+
+  if (candles.length <= period || period <= 0) {
+    return candles.map((c) => ({ time: getCandleTimeSeconds(c.timestamp) }));
+  }
+
+  // Pre-pad with whitespace data points for warmup candles
+  for (let i = 0; i < period; i++) {
+    result.push({ time: getCandleTimeSeconds(candles[i].timestamp) });
+  }
 
   let gains = 0;
   let losses = 0;
@@ -203,7 +218,8 @@ export function calculateRSI(candles: Candle[], period: number = 14): IndicatorP
 }
 
 /**
- * Moving Average Convergence Divergence (MACD)
+ * Moving Average Convergence Divergence (MACD).
+ * Warmup candles are padded with whitespace objects { time } to ensure exact 1-to-1 bar alignment.
  */
 export function calculateMACD(
   candles: Candle[],
@@ -211,33 +227,53 @@ export function calculateMACD(
   slowPeriod: number = 26,
   signalPeriod: number = 9
 ): MacdPoints {
-  const empty: MacdPoints = { macd: [], signal: [], histogram: [] };
-  if (candles.length < slowPeriod + signalPeriod) return empty;
+  if (!candles || candles.length === 0) {
+    return { macd: [], signal: [], histogram: [] };
+  }
+
+  if (candles.length < slowPeriod + signalPeriod) {
+    const blanks = candles.map((c) => ({ time: getCandleTimeSeconds(c.timestamp) }));
+    return {
+      macd: blanks,
+      signal: blanks,
+      histogram: blanks,
+    };
+  }
 
   const fastEma = calculateEMA(candles, fastPeriod);
   const slowEma = calculateEMA(candles, slowPeriod);
 
   // Align Fast and Slow EMA by time
   const slowMap = new Map<number, number>();
-  slowEma.forEach((p) => slowMap.set(p.time, p.value));
+  slowEma.forEach((p) => {
+    if (p.value !== undefined) slowMap.set(p.time, p.value);
+  });
 
   const macdLineRaw: { time: number; value: number }[] = [];
   fastEma.forEach((fastPoint) => {
-    const slowVal = slowMap.get(fastPoint.time);
-    if (slowVal !== undefined) {
-      macdLineRaw.push({
-        time: fastPoint.time,
-        value: Number((fastPoint.value - slowVal).toFixed(6)),
-      });
+    if (fastPoint.value !== undefined) {
+      const slowVal = slowMap.get(fastPoint.time);
+      if (slowVal !== undefined) {
+        macdLineRaw.push({
+          time: fastPoint.time,
+          value: Number((fastPoint.value - slowVal).toFixed(6)),
+        });
+      }
     }
   });
 
+  if (macdLineRaw.length < signalPeriod) {
+    const blanks = candles.map((c) => ({ time: getCandleTimeSeconds(c.timestamp) }));
+    return { macd: blanks, signal: blanks, histogram: blanks };
+  }
+
+  const macdMap = new Map<number, number>();
+  macdLineRaw.forEach((m) => macdMap.set(m.time, m.value));
+
   // Calculate Signal line (EMA of MACD line)
   const signalMultiplier = 2 / (signalPeriod + 1);
-  const signalPoints: IndicatorPoint[] = [];
-  const histPoints: { time: number; value: number; color: string }[] = [];
-
-  if (macdLineRaw.length < signalPeriod) return empty;
+  const signalMap = new Map<number, number>();
+  const histMap = new Map<number, { value: number; color: string }>();
 
   let initialSignalSum = 0;
   for (let i = 0; i < signalPeriod; i++) {
@@ -248,9 +284,9 @@ export function calculateMACD(
   const firstTime = macdLineRaw[signalPeriod - 1].time;
   const firstMacd = macdLineRaw[signalPeriod - 1].value;
   const firstHist = firstMacd - prevSignal;
-  signalPoints.push({ time: firstTime, value: Number(prevSignal.toFixed(6)) });
-  histPoints.push({
-    time: firstTime,
+
+  signalMap.set(firstTime, Number(prevSignal.toFixed(6)));
+  histMap.set(firstTime, {
     value: Number(firstHist.toFixed(6)),
     color: firstHist >= 0 ? '#10b981' : '#ef4444',
   });
@@ -262,11 +298,6 @@ export function calculateMACD(
     const currHist = currMacd - currSignal;
     const time = macdLineRaw[i].time;
 
-    // TradingView 4-color histogram logic:
-    // Bullish growing: bright green (#10b981)
-    // Bullish falling: pale green (#34d399)
-    // Bearish growing: bright red (#ef4444)
-    // Bearish falling: pale red (#f87171)
     let color = '#10b981';
     if (currHist >= 0) {
       color = currHist >= prevHist ? '#10b981' : '#34d399';
@@ -274,21 +305,47 @@ export function calculateMACD(
       color = currHist <= prevHist ? '#ef4444' : '#f87171';
     }
 
-    signalPoints.push({ time, value: Number(currSignal.toFixed(6)) });
-    histPoints.push({ time, value: Number(currHist.toFixed(6)), color });
+    signalMap.set(time, Number(currSignal.toFixed(6)));
+    histMap.set(time, { value: Number(currHist.toFixed(6)), color });
 
     prevSignal = currSignal;
     prevHist = currHist;
   }
 
-  // Filter macdLine to only return from signal line start point
-  const signalStartTime = signalPoints[0]?.time ?? 0;
-  const trimmedMacd = macdLineRaw.filter((p) => p.time >= signalStartTime);
+  // Build 1-to-1 arrays matching each candle in cleanCandles
+  const alignedMacd: AlignedPoint[] = [];
+  const alignedSignal: AlignedPoint[] = [];
+  const alignedHist: { time: number; value?: number; color?: string }[] = [];
+
+  for (const c of candles) {
+    const t = getCandleTimeSeconds(c.timestamp);
+    const mVal = macdMap.get(t);
+    const sVal = signalMap.get(t);
+    const hData = histMap.get(t);
+
+    if (mVal !== undefined) {
+      alignedMacd.push({ time: t, value: mVal });
+    } else {
+      alignedMacd.push({ time: t });
+    }
+
+    if (sVal !== undefined) {
+      alignedSignal.push({ time: t, value: sVal });
+    } else {
+      alignedSignal.push({ time: t });
+    }
+
+    if (hData !== undefined) {
+      alignedHist.push({ time: t, value: hData.value, color: hData.color });
+    } else {
+      alignedHist.push({ time: t });
+    }
+  }
 
   return {
-    macd: trimmedMacd,
-    signal: signalPoints,
-    histogram: histPoints,
+    macd: alignedMacd,
+    signal: alignedSignal,
+    histogram: alignedHist,
   };
 }
 

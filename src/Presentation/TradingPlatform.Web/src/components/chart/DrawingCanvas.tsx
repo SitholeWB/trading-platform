@@ -19,7 +19,20 @@ interface DrawingCanvasProps {
   chartDimensions: { width: number; height: number };
   priceRange: { min: number; max: number };
   candles: Candle[];
-  chartViewVersion?: number;
+}
+
+function findCandleIndexByTime(candles: Candle[], time: number): number {
+  if (candles.length === 0) return -1;
+  let low = 0;
+  let high = candles.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const t = getCandleTimeSeconds(candles[mid].timestamp);
+    if (t === time) return mid;
+    if (t < time) low = mid + 1;
+    else high = mid - 1;
+  }
+  return Math.min(candles.length - 1, Math.max(0, low));
 }
 
 export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
@@ -36,11 +49,26 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   chartDimensions,
   priceRange,
   candles,
-  chartViewVersion = 0,
 }) => {
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [, setCanvasUpdate] = useState(0);
+
+  // Directly subscribe to chart range changes so SVG canvas re-projects points
+  // smoothly on every scroll/zoom without causing parent TradingChart to re-render!
+  useEffect(() => {
+    if (!chart) return;
+    const handleRangeChange = () => {
+      setCanvasUpdate((v) => v + 1);
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleRangeChange);
+    return () => {
+      try {
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange);
+      } catch {}
+    };
+  }, [chart]);
 
   // Dragging state for moving entire drawing or individual anchor handles
   const [dragState, setDragState] = useState<{
@@ -74,32 +102,43 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         } catch {}
       }
 
-      // Fallbacks if coordinate is off-screen or chart has not yet computed
-      if (x === null) {
-        if (candles.length > 0) {
-          const firstTime = getCandleTimeSeconds(candles[0].timestamp);
-          const lastTime = getCandleTimeSeconds(candles[candles.length - 1].timestamp);
-          if (pt.time <= firstTime) x = 0;
-          else if (pt.time >= lastTime) x = width;
-          else {
-            const ratio = (pt.time - firstTime) / (lastTime - firstTime || 1);
-            x = ratio * width;
+      // If point is scrolled off-screen horizontally, calculate true off-screen coordinate
+      // via logical coordinates so drawing line geometry stays anchored and unwarped
+      if (x === null && chart && candles.length > 0) {
+        try {
+          const timeScale = chart.timeScale();
+          const candleIdx = findCandleIndexByTime(candles, pt.time);
+          if (candleIdx >= 0) {
+            x = timeScale.logicalToCoordinate(candleIdx as any);
           }
-        } else {
-          x = width / 2;
-        }
+          if (x === null) {
+            const firstTime = getCandleTimeSeconds(candles[0].timestamp);
+            const lastTime = getCandleTimeSeconds(candles[candles.length - 1].timestamp);
+            const firstCoord = timeScale.logicalToCoordinate(0 as any) ?? 0;
+            const lastCoord = timeScale.logicalToCoordinate((candles.length - 1) as any) ?? width;
+            const totalDuration = lastTime - firstTime;
+            if (totalDuration > 0) {
+              const ratio = (pt.time - firstTime) / totalDuration;
+              x = Math.round(firstCoord + ratio * (lastCoord - firstCoord));
+            }
+          }
+        } catch {}
+      }
+
+      if (x === null) {
+        x = width / 2;
       }
 
       if (y === null) {
         const minP = priceRange.min;
         const maxP = priceRange.max;
         const ratio = (maxP - (pt.price ?? minP)) / (maxP - minP || 0.001);
-        y = ratio * height;
+        y = Math.round(ratio * height);
       }
 
       return { x: Math.round(x), y: Math.round(y) };
     },
-    [chart, series, candles, width, height, priceRange, chartViewVersion]
+    [chart, series, candles, width, height, priceRange]
   );
 
   const toData = useCallback(
@@ -112,6 +151,22 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           const t = chart.timeScale().coordinateToTime(pixelX);
           if (t !== null && typeof t === 'number') {
             time = t;
+          } else {
+            const logical = chart.timeScale().coordinateToLogical(pixelX);
+            if (logical !== null && candles.length > 0) {
+              if (logical >= candles.length) {
+                const lastTime = getCandleTimeSeconds(candles[candles.length - 1].timestamp);
+                const step = candles.length > 1 ? lastTime - getCandleTimeSeconds(candles[candles.length - 2].timestamp) : 300;
+                time = lastTime + Math.round((logical - (candles.length - 1)) * step);
+              } else if (logical < 0) {
+                const firstTime = getCandleTimeSeconds(candles[0].timestamp);
+                const step = candles.length > 1 ? getCandleTimeSeconds(candles[1].timestamp) - firstTime : 300;
+                time = firstTime + Math.round(logical * step);
+              } else {
+                const idx = Math.min(candles.length - 1, Math.max(0, Math.round(logical)));
+                time = getCandleTimeSeconds(candles[idx].timestamp);
+              }
+            }
           }
         } catch {}
       }
@@ -271,22 +326,22 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
   };
 
-  const handlePointerMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    // 1. In-progress creation rubber-banding
-    if (isInteracting && currentPoints.length > 0) {
-      const pt = getCoordinatesFromEvent(e);
-      setHoverPoint(pt);
-      return;
-    }
+  // Global window listeners for drag operations so high-speed cursor movements
+  // never drop or stutter outside the SVG bounds
+  useEffect(() => {
+    if (!dragState) return;
 
-    // 2. Dragging existing drawing or anchor handle
-    if (dragState) {
-      const currentData = getCoordinatesFromEvent(e);
+    const onWindowMouseMove = (e: MouseEvent) => {
+      if (!svgRef.current) return;
+      const rect = svgRef.current.getBoundingClientRect();
+      const pixelX = e.clientX - rect.left;
+      const pixelY = e.clientY - rect.top;
+      const currentData = toData(pixelX, pixelY);
+
       const targetDrawing = drawings.find((d) => d.id === dragState.drawingId);
       if (!targetDrawing) return;
 
       if (dragState.handleIndex >= 0) {
-        // Dragging specific handle
         const newPts = [...targetDrawing.points];
         newPts[dragState.handleIndex] = currentData;
 
@@ -307,7 +362,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
         onUpdateDrawing({ ...targetDrawing, points: newPts, extraData });
       } else {
-        // Dragging entire drawing body
         const deltaTime = currentData.time - dragState.startData.time;
         const deltaPrice = currentData.price - dragState.startData.price;
 
@@ -328,6 +382,25 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
         onUpdateDrawing({ ...targetDrawing, points: shiftedPts, extraData });
       }
+    };
+
+    const onWindowMouseUp = () => {
+      setDragState(null);
+    };
+
+    window.addEventListener('mousemove', onWindowMouseMove);
+    window.addEventListener('mouseup', onWindowMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onWindowMouseMove);
+      window.removeEventListener('mouseup', onWindowMouseUp);
+    };
+  }, [dragState, drawings, onUpdateDrawing, toData]);
+
+  const handlePointerMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    // In-progress creation rubber-banding
+    if (isInteracting && currentPoints.length > 0) {
+      const pt = getCoordinatesFromEvent(e);
+      setHoverPoint(pt);
     }
   };
 
