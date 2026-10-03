@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  Eye,
   Flame,
   FolderPlus,
   Layers,
@@ -40,30 +41,118 @@ interface MarketScannerViewProps {
   activeProvider?: string;
 }
 
+const SCANNER_STORAGE_LIVE = 'tp_scanner_live_report';
+const SCANNER_STORAGE_HIST = 'tp_scanner_hist_report';
+const SCANNER_STORAGE_GROUP = 'tp_scanner_group_id';
+const SCANNER_STORAGE_STRAT = 'tp_scanner_strategy_id';
+const SCANNER_STORAGE_TF = 'tp_scanner_timeframe';
+const SCANNER_STORAGE_TAB = 'tp_scanner_tab';
+const SCANNER_STORAGE_VIEWED = 'tp_scanner_last_viewed';
+const SCANNER_STORAGE_BARS = 'tp_scanner_bar_count';
+
 export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
   onOpenChart,
   onPlaceQuickOrder,
   activeProvider = 'KeylessPublic',
 }) => {
-  const [activeTab, setActiveTab] = useState<'live' | 'historical' | 'buckets'>('live');
+  const [activeTab, setActiveTabState] = useState<'live' | 'historical' | 'buckets'>(() => {
+    return (localStorage.getItem(SCANNER_STORAGE_TAB) as any) || 'live';
+  });
+  const setActiveTab = (tab: 'live' | 'historical' | 'buckets') => {
+    setActiveTabState(tab);
+    localStorage.setItem(SCANNER_STORAGE_TAB, tab);
+  };
 
   // Common data
   const [symbolGroups, setSymbolGroups] = useState<SymbolGroup[]>([]);
   const [strategies, setStrategies] = useState<StrategyDefinition[]>([]);
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('group-fx-majors');
-  const [selectedStrategyId, setSelectedStrategyId] = useState<string>('');
-  const [timeframe, setTimeframe] = useState<Timeframe>('M5');
+  
+  const [selectedGroupId, setSelectedGroupIdState] = useState<string>(() => {
+    return localStorage.getItem(SCANNER_STORAGE_GROUP) || 'group-fx-majors';
+  });
+  const setSelectedGroupId = (id: string) => {
+    setSelectedGroupIdState(id);
+    localStorage.setItem(SCANNER_STORAGE_GROUP, id);
+  };
+
+  const [selectedStrategyId, setSelectedStrategyIdState] = useState<string>(() => {
+    return localStorage.getItem(SCANNER_STORAGE_STRAT) || '';
+  });
+  const setSelectedStrategyId = (id: string) => {
+    setSelectedStrategyIdState(id);
+    localStorage.setItem(SCANNER_STORAGE_STRAT, id);
+  };
+
+  const [timeframe, setTimeframeState] = useState<Timeframe>(() => {
+    return (localStorage.getItem(SCANNER_STORAGE_TF) as Timeframe) || 'M5';
+  });
+  const setTimeframe = (tf: Timeframe) => {
+    setTimeframeState(tf);
+    localStorage.setItem(SCANNER_STORAGE_TF, tf);
+  };
+
+  const [lastViewedSymbol, setLastViewedSymbol] = useState<string | null>(() => {
+    return localStorage.getItem(SCANNER_STORAGE_VIEWED) || null;
+  });
 
   // Live scan states
   const [isLiveScanning, setIsLiveScanning] = useState(false);
-  const [liveReport, setLiveReport] = useState<LiveScanReport | null>(null);
+  const [liveReport, setLiveReportState] = useState<LiveScanReport | null>(() => {
+    try {
+      const saved = localStorage.getItem(SCANNER_STORAGE_LIVE);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const setLiveReport = (report: LiveScanReport | null) => {
+    setLiveReportState(report);
+    if (report) {
+      try {
+        localStorage.setItem(SCANNER_STORAGE_LIVE, JSON.stringify(report));
+      } catch (e) {
+        console.warn('Could not cache live report in localStorage', e);
+      }
+    } else {
+      localStorage.removeItem(SCANNER_STORAGE_LIVE);
+    }
+  };
+
   const [autoScanInterval, setAutoScanInterval] = useState<number>(0); // 0 = off, 15, 30, 60
   const [expandedMatchIndex, setExpandedMatchIndex] = useState<number | null>(null);
 
   // Historical scan states
-  const [barCount, setBarCount] = useState<number>(200);
+  const [barCount, setBarCountState] = useState<number>(() => {
+    const saved = localStorage.getItem(SCANNER_STORAGE_BARS);
+    return saved ? Number(saved) : 200;
+  });
+  const setBarCount = (count: number) => {
+    setBarCountState(count);
+    localStorage.setItem(SCANNER_STORAGE_BARS, String(count));
+  };
+
   const [isHistScanning, setIsHistScanning] = useState(false);
-  const [histReport, setHistReport] = useState<HistoricalScanReport | null>(null);
+  const [histReport, setHistReportState] = useState<HistoricalScanReport | null>(() => {
+    try {
+      const saved = localStorage.getItem(SCANNER_STORAGE_HIST);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const setHistReport = (report: HistoricalScanReport | null) => {
+    setHistReportState(report);
+    if (report) {
+      try {
+        localStorage.setItem(SCANNER_STORAGE_HIST, JSON.stringify(report));
+      } catch (e) {
+        console.warn('Could not cache hist report in localStorage', e);
+      }
+    } else {
+      localStorage.removeItem(SCANNER_STORAGE_HIST);
+    }
+  };
+
   const [histFilter, setHistFilter] = useState<'all' | 'trades' | 'matches'>('trades');
 
   // Bucket management states
@@ -73,6 +162,12 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
   const [newBucketCat, setNewBucketCat] = useState('forex');
   const [newBucketSymbols, setNewBucketSymbols] = useState('');
   const [newSymbolInput, setNewSymbolInput] = useState<{ [groupId: string]: string }>({});
+
+  const handleInspectChart = (symbol: string, tf?: Timeframe) => {
+    setLastViewedSymbol(symbol);
+    localStorage.setItem(SCANNER_STORAGE_VIEWED, symbol);
+    onOpenChart(symbol, tf);
+  };
 
   // Initial load
   useEffect(() => {
@@ -92,6 +187,18 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
       }
       if (strats.length > 0 && !selectedStrategyId) {
         setSelectedStrategyId(strats[0].id);
+      }
+
+      // Restore latest scans from backend if not already cached in localStorage
+      if (!liveReport) {
+        tradingApi.getLatestLiveScan().then((latest) => {
+          if (latest) setLiveReport(latest);
+        });
+      }
+      if (!histReport) {
+        tradingApi.getLatestHistoricalScan().then((latest) => {
+          if (latest) setHistReport(latest);
+        });
       }
     } catch (err) {
       console.error('[MARKET SCANNER] Error loading initial data:', err);
@@ -476,74 +583,92 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
                   </div>
                 )}
 
-                {liveReport?.verifiedMatches.map((m, idx) => (
-                  <div
-                    key={`${m.symbol}-${m.strategyId}-${idx}`}
-                    className="bg-slate-900 border border-emerald-500/40 rounded-xl p-4 space-y-3 relative overflow-hidden shadow-lg shadow-emerald-950/20"
-                  >
-                    <div className="absolute top-0 right-0 px-3 py-0.5 bg-emerald-500/20 text-emerald-400 border-b border-l border-emerald-500/40 text-[10px] font-mono font-bold rounded-bl-lg">
-                      100% MATCH
-                    </div>
+                {liveReport?.verifiedMatches.map((m, idx) => {
+                  const isLastViewed = m.symbol === lastViewedSymbol;
+                  return (
+                    <div
+                      key={`${m.symbol}-${m.strategyId}-${idx}`}
+                      className={`bg-slate-900 rounded-xl p-4 space-y-3 relative overflow-hidden shadow-lg transition-all ${
+                        isLastViewed
+                          ? 'border-2 border-blue-500/80 ring-2 ring-blue-500/20 shadow-blue-950/40'
+                          : 'border border-emerald-500/40 shadow-emerald-950/20'
+                      }`}
+                    >
+                      <div className="absolute top-0 right-0 flex items-center">
+                        {isLastViewed && (
+                          <div className="px-2.5 py-0.5 bg-blue-600 text-white text-[10px] font-mono font-bold rounded-bl-lg flex items-center gap-1 shadow-sm">
+                            <Eye className="w-3 h-3" />
+                            <span>LAST VIEWED</span>
+                          </div>
+                        )}
+                        <div className={`px-3 py-0.5 bg-emerald-500/20 text-emerald-400 border-b border-l border-emerald-500/40 text-[10px] font-mono font-bold ${isLastViewed ? '' : 'rounded-bl-lg'}`}>
+                          100% MATCH
+                        </div>
+                      </div>
 
-                    <div className="flex items-start justify-between pr-24">
-                      <div className="flex items-center gap-3">
-                        <span className="text-base font-bold font-mono text-white tracking-wider">
-                          {m.symbol}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-bold font-mono flex items-center gap-1 ${
-                            m.recommendedSide === 'Buy'
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                              : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      <div className="flex items-start justify-between pr-24">
+                        <div className="flex items-center gap-3">
+                          <span className="text-base font-bold font-mono text-white tracking-wider">
+                            {m.symbol}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs font-bold font-mono flex items-center gap-1 ${
+                              m.recommendedSide === 'Buy'
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                            }`}
+                          >
+                            {m.recommendedSide === 'Buy' ? (
+                              <TrendingUp className="w-3 h-3" />
+                            ) : (
+                              <TrendingDown className="w-3 h-3" />
+                            )}
+                            <span>{m.recommendedSide === 'Buy' ? 'BUY' : 'SELL'}</span>
+                          </span>
+                          <span className="text-xs text-slate-400 font-mono">({m.timeframe})</span>
+                        </div>
+                      </div>
+
+                      {/* Price, SL, TP Grid */}
+                      <div className="grid grid-cols-3 gap-2 bg-slate-950/80 rounded-lg p-2.5 font-mono text-xs border border-slate-800">
+                        <div>
+                          <span className="text-[10px] text-slate-500 block">ENTRY</span>
+                          <span className="font-bold text-slate-200">{m.entryPrice}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-red-400 block">STOP LOSS</span>
+                          <span className="font-bold text-red-400">{m.stopLoss ?? 'None'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-emerald-400 block">TAKE PROFIT</span>
+                          <span className="font-bold text-emerald-400">{m.takeProfit ?? 'None'}</span>
+                        </div>
+                      </div>
+
+                      {/* Strategy and Condition Highlights */}
+                      <div className="text-xs font-mono space-y-1">
+                        <div className="text-slate-400">
+                          Strategy: <span className="text-indigo-400 font-semibold">{m.strategyName}</span>
+                        </div>
+                        <div className="text-emerald-400/90 text-[11px] flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>All entry rules evaluated to true on closed candle</span>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 pt-1 border-t border-slate-800/80">
+                        <button
+                          onClick={() => handleInspectChart(m.symbol, m.timeframe as Timeframe)}
+                          className={`flex-1 py-1.5 rounded-lg border text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all ${
+                            isLastViewed
+                              ? 'bg-blue-600 text-white border-blue-500 font-bold shadow-md shadow-blue-900/40'
+                              : 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/40 text-blue-400'
                           }`}
                         >
-                          {m.recommendedSide === 'Buy' ? (
-                            <TrendingUp className="w-3 h-3" />
-                          ) : (
-                            <TrendingDown className="w-3 h-3" />
-                          )}
-                          <span>{m.recommendedSide === 'Buy' ? 'BUY' : 'SELL'}</span>
-                        </span>
-                        <span className="text-xs text-slate-400 font-mono">({m.timeframe})</span>
-                      </div>
-                    </div>
-
-                    {/* Price, SL, TP Grid */}
-                    <div className="grid grid-cols-3 gap-2 bg-slate-950/80 rounded-lg p-2.5 font-mono text-xs border border-slate-800">
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">ENTRY</span>
-                        <span className="font-bold text-slate-200">{m.entryPrice}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-red-400 block">STOP LOSS</span>
-                        <span className="font-bold text-red-400">{m.stopLoss ?? 'None'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-emerald-400 block">TAKE PROFIT</span>
-                        <span className="font-bold text-emerald-400">{m.takeProfit ?? 'None'}</span>
-                      </div>
-                    </div>
-
-                    {/* Strategy and Condition Highlights */}
-                    <div className="text-xs font-mono space-y-1">
-                      <div className="text-slate-400">
-                        Strategy: <span className="text-indigo-400 font-semibold">{m.strategyName}</span>
-                      </div>
-                      <div className="text-emerald-400/90 text-[11px] flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>All entry rules evaluated to true on closed candle</span>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2 pt-1 border-t border-slate-800/80">
-                      <button
-                        onClick={() => onOpenChart(m.symbol, m.timeframe as Timeframe)}
-                        className="flex-1 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>Inspect Chart</span>
-                      </button>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>{isLastViewed ? 'Inspect Again' : 'Inspect Chart'}</span>
+                        </button>
 
                       {onPlaceQuickOrder && (
                         <button
@@ -564,7 +689,8 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
                       )}
                     </div>
                   </div>
-                ))}
+                );
+              })}
               </div>
 
               {/* Right Column: 60%–99% Near Misses */}
@@ -585,12 +711,24 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
 
                 {liveReport?.nearMisses.map((m, idx) => {
                   const isExpanded = expandedMatchIndex === idx;
+                  const isLastViewed = m.symbol === lastViewedSymbol;
                   return (
                     <div
                       key={`near-${m.symbol}-${m.strategyId}-${idx}`}
-                      className="bg-slate-900 border border-amber-500/30 rounded-xl p-4 space-y-3 relative overflow-hidden"
+                      className={`bg-slate-900 rounded-xl p-4 space-y-3 relative overflow-hidden transition-all ${
+                        isLastViewed
+                          ? 'border-2 border-blue-500/80 ring-2 ring-blue-500/20 shadow-blue-950/40'
+                          : 'border border-amber-500/30'
+                      }`}
                     >
-                      <div className="flex items-start justify-between">
+                      {isLastViewed && (
+                        <div className="absolute top-0 right-0 px-2.5 py-0.5 bg-blue-600 text-white text-[10px] font-mono font-bold rounded-bl-lg flex items-center gap-1 shadow-sm">
+                          <Eye className="w-3 h-3" />
+                          <span>LAST VIEWED</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-start justify-between pr-24">
                         <div className="flex items-center gap-3">
                           <span className="text-base font-bold font-mono text-white tracking-wider">
                             {m.symbol}
@@ -658,11 +796,15 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
                         </button>
 
                         <button
-                          onClick={() => onOpenChart(m.symbol, m.timeframe as Timeframe)}
-                          className="px-3 py-1 rounded bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 text-xs font-mono font-medium flex items-center gap-1.5 transition-all"
+                          onClick={() => handleInspectChart(m.symbol, m.timeframe as Timeframe)}
+                          className={`px-3 py-1 rounded text-xs font-mono font-medium flex items-center gap-1.5 transition-all ${
+                            isLastViewed
+                              ? 'bg-blue-600 text-white border border-blue-500 font-bold shadow-sm'
+                              : 'bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400'
+                          }`}
                         >
                           <ExternalLink className="w-3 h-3" />
-                          <span>Inspect Setup on Chart</span>
+                          <span>{isLastViewed ? 'Inspect Again' : 'Inspect Setup on Chart'}</span>
                         </button>
                       </div>
 
@@ -956,7 +1098,7 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
                               </td>
                               <td className="py-2.5 px-4 text-right">
                                 <button
-                                  onClick={() => onOpenChart(t.symbol, timeframe)}
+                                  onClick={() => handleInspectChart(t.symbol, timeframe)}
                                   className="text-blue-400 hover:text-blue-300 text-[11px] underline flex items-center gap-1 justify-end"
                                 >
                                   <ExternalLink className="w-3 h-3" />
@@ -994,7 +1136,7 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
                           <div className="flex items-center gap-4">
                             <span className="text-slate-300">Close: {m.entryPrice}</span>
                             <button
-                              onClick={() => onOpenChart(m.symbol, timeframe)}
+                              onClick={() => handleInspectChart(m.symbol, timeframe)}
                               className="text-blue-400 hover:text-blue-300 text-[11px] flex items-center gap-1"
                             >
                               <ExternalLink className="w-3 h-3" />

@@ -349,7 +349,7 @@ export function App() {
           )}
 
           {/* Page: Robotic Market Scanner & Backtester */}
-          {activePage === 'scanner' && (
+          <div className={activePage === 'scanner' ? 'flex-1 h-full flex flex-col overflow-hidden' : 'hidden'}>
             <MarketScannerView
               onOpenChart={(symbol, tf) => {
                 setSelectedSymbol(symbol);
@@ -359,7 +359,7 @@ export function App() {
               onPlaceQuickOrder={handlePlaceQuickOrder}
               activeProvider={activeProvider}
             />
-          )}
+          </div>
 
           {/* Page 2: Strategy Studio & Brain */}
           {activePage === 'strategies' && (

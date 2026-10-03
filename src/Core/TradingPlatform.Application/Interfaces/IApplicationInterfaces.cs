@@ -96,5 +96,7 @@ public interface IMarketScannerService
 {
     Task<LiveScanReport> RunLiveScanAsync(LiveScanRequest request, CancellationToken ct = default);
     Task<HistoricalScanReport> RunHistoricalScanAsync(HistoricalScanRequest request, CancellationToken ct = default);
+    LiveScanReport? GetLatestLiveScanReport();
+    HistoricalScanReport? GetLatestHistoricalScanReport();
 }
 

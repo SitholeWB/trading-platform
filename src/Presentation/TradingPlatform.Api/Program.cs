@@ -1359,10 +1359,22 @@ scannerGroup.MapPost("/live", async ([FromBody] LiveScanRequest request, IMarket
     return Results.Ok(report);
 });
 
+scannerGroup.MapGet("/live/latest", (IMarketScannerService scanner) =>
+{
+    var report = scanner.GetLatestLiveScanReport();
+    return report != null ? Results.Ok(report) : Results.NoContent();
+});
+
 scannerGroup.MapPost("/historical", async ([FromBody] HistoricalScanRequest request, IMarketScannerService scanner, CancellationToken ct) =>
 {
     var report = await scanner.RunHistoricalScanAsync(request, ct);
     return Results.Ok(report);
+});
+
+scannerGroup.MapGet("/historical/latest", (IMarketScannerService scanner) =>
+{
+    var report = scanner.GetLatestHistoricalScanReport();
+    return report != null ? Results.Ok(report) : Results.NoContent();
 });
 
 app.MapFallbackToFile("index.html");

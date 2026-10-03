@@ -11,7 +11,6 @@
     <ProjectReference Include="..\..\src\Core\TradingPlatform.Domain\TradingPlatform.Domain.csproj" />
     <ProjectReference Include="..\..\src\Core\TradingPlatform.Application\TradingPlatform.Application.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\TradingPlatform.Broker.Abstractions\TradingPlatform.Broker.Abstractions.csproj" />
-    <ProjectReference Include="..\..\src\Infrastructure\TradingPlatform.Broker.Public\TradingPlatform.Broker.Public.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\TradingPlatform.RulesEngine\TradingPlatform.RulesEngine.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\TradingPlatform.Persistence\TradingPlatform.Persistence.csproj" />
   </ItemGroup>

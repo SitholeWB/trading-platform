@@ -254,10 +254,28 @@ export const tradingApi = {
       method: 'POST',
       body: JSON.stringify(req),
     }),
+  getLatestLiveScan: async (): Promise<LiveScanReport | null> => {
+    try {
+      const res = await fetch(`${BASE_URL}/scanner/live/latest`);
+      if (res.status === 204 || !res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
   runHistoricalScan: (req: HistoricalScanRequest) =>
     request<HistoricalScanReport>('/scanner/historical', {
       method: 'POST',
       body: JSON.stringify(req),
     }),
+  getLatestHistoricalScan: async (): Promise<HistoricalScanReport | null> => {
+    try {
+      const res = await fetch(`${BASE_URL}/scanner/historical/latest`);
+      if (res.status === 204 || !res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
 };
 

@@ -18,6 +18,12 @@ public class MarketScannerService : IMarketScannerService
     private readonly IStrategyRepository _strategyRepo;
     private readonly ILogger<MarketScannerService> _logger;
 
+    private static LiveScanReport? _latestLiveReport;
+    private static HistoricalScanReport? _latestHistoricalReport;
+
+    public LiveScanReport? GetLatestLiveScanReport() => _latestLiveReport;
+    public HistoricalScanReport? GetLatestHistoricalScanReport() => _latestHistoricalReport;
+
     public MarketScannerService(
         IHistoricalDataProvider historicalDataProvider,
         IIndicatorCalculationService indicatorService,
@@ -145,7 +151,7 @@ public class MarketScannerService : IMarketScannerService
         _logger.LogInformation("[MARKET SCANNER] Live Scan completed in {Elapsed}ms. Scanned={Scanned}, Verified={Verified}, NearMiss={NearMiss}",
             sw.ElapsedMilliseconds, scannedCount, verifiedMatches.Count, nearMisses.Count);
 
-        return new LiveScanReport(
+        var report = new LiveScanReport(
             groupId,
             groupName,
             request.Timeframe,
@@ -163,6 +169,9 @@ public class MarketScannerService : IMarketScannerService
                 .ToList(),
             sw.ElapsedMilliseconds
         );
+
+        _latestLiveReport = report;
+        return report;
     }
 
     public async Task<HistoricalScanReport> RunHistoricalScanAsync(HistoricalScanRequest request, CancellationToken ct = default)
@@ -293,7 +302,7 @@ public class MarketScannerService : IMarketScannerService
         _logger.LogInformation("[MARKET SCANNER] Historical Scan complete in {Elapsed}ms. Signals={Signals}, WinRate={WinRate:F1}%, PnL={PnL} pips",
             sw.ElapsedMilliseconds, totalSignals, winRate, totalPips);
 
-        return new HistoricalScanReport(
+        var report = new HistoricalScanReport(
             strategy.Id,
             strategy.Name,
             groupName,
@@ -320,6 +329,9 @@ public class MarketScannerService : IMarketScannerService
                 .ToList(),
             sw.ElapsedMilliseconds
         );
+
+        _latestHistoricalReport = report;
+        return report;
     }
 
     private HistoricalTradeSimulation SimulateTradeResolution(
