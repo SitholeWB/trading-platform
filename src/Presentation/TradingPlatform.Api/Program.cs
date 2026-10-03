@@ -1248,6 +1248,7 @@ settingsGroup.MapPost("/broker-config", async (
         config.TwelveDataApiKey = dto.TwelveDataApiKey;
 
     await repo.UpdateConfigurationAsync(config, ct);
+    CompositeMarketDataProvider.InvalidateConfigCache();
 
     return Results.Ok(new
     {

@@ -173,3 +173,4 @@ public static class DeterministicMarketDataSynthesizer
         return 1.0850m;
     }
 }
+

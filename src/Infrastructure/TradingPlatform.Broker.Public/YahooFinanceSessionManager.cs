@@ -71,8 +71,10 @@ public class YahooFinanceSessionManager
             string? cookieHeader = null;
             try
             {
+                using var timeoutCts1 = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts1.CancelAfter(TimeSpan.FromSeconds(3));
                 using var cookieReq = new HttpRequestMessage(HttpMethod.Get, "https://fc.yahoo.com");
-                using var cookieResp = await _httpClient.SendAsync(cookieReq, ct);
+                using var cookieResp = await _httpClient.SendAsync(cookieReq, timeoutCts1.Token);
 
                 if (cookieResp.Headers.TryGetValues("Set-Cookie", out var setCookies))
                 {
@@ -110,13 +112,15 @@ public class YahooFinanceSessionManager
             {
                 try
                 {
+                    using var timeoutCts2 = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    timeoutCts2.CancelAfter(TimeSpan.FromSeconds(3));
                     using var crumbReq = new HttpRequestMessage(HttpMethod.Get, endpoint);
                     crumbReq.Headers.Add("Cookie", cookieHeader);
 
-                    using var crumbResp = await _httpClient.SendAsync(crumbReq, ct);
+                    using var crumbResp = await _httpClient.SendAsync(crumbReq, timeoutCts2.Token);
                     if (crumbResp.IsSuccessStatusCode)
                     {
-                        var text = (await crumbResp.Content.ReadAsStringAsync(ct)).Trim();
+                        var text = (await crumbResp.Content.ReadAsStringAsync(timeoutCts2.Token)).Trim();
                         if (!string.IsNullOrWhiteSpace(text) && !text.Contains("<html") && !text.Contains("error"))
                         {
                             crumb = text;

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
+using TradingPlatform.Domain.Entities;
 using TradingPlatform.Domain.Enums;
 using TradingPlatform.Domain.Models;
 
@@ -39,7 +40,43 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
     private static string? _lastFailoverReason = null;
     private static DateTime? _lastFailoverUtc = null;
 
+    private static BrokerConfiguration? _cachedConfig;
+    private static DateTime _configCacheExpiryUtc = DateTime.MinValue;
+    private static readonly SemaphoreSlim _configLock = new(1, 1);
+
     private static readonly ConcurrentDictionary<string, (DateTime ExpirationUtc, IReadOnlyList<Candle> Candles)> _candleCache = new();
+
+    public static void InvalidateConfigCache()
+    {
+        _cachedConfig = null;
+        _configCacheExpiryUtc = DateTime.MinValue;
+    }
+
+    private async Task<BrokerConfiguration> GetCachedBrokerConfigAsync(CancellationToken ct)
+    {
+        if (_cachedConfig != null && DateTime.UtcNow < _configCacheExpiryUtc)
+        {
+            return _cachedConfig;
+        }
+
+        await _configLock.WaitAsync(ct);
+        try
+        {
+            if (_cachedConfig != null && DateTime.UtcNow < _configCacheExpiryUtc)
+            {
+                return _cachedConfig;
+            }
+
+            var config = await _configRepo.GetConfigurationAsync(ct);
+            _cachedConfig = config;
+            _configCacheExpiryUtc = DateTime.UtcNow.AddMinutes(2);
+            return config;
+        }
+        finally
+        {
+            _configLock.Release();
+        }
+    }
 
     public CompositeMarketDataProvider(
         YahooFinanceGateway yahooGateway,
@@ -80,7 +117,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             return cached.Candles;
         }
 
-        var config = await _configRepo.GetConfigurationAsync(ct);
+        var config = await GetCachedBrokerConfigAsync(ct);
         var parsedTf = Enum.TryParse<Timeframe>(timeframe, true, out var tf) ? tf : Timeframe.M5;
 
         // 1. If configured provider is explicitly Oanda and token is present

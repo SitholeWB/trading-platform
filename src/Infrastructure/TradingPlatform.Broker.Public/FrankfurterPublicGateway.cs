@@ -74,10 +74,12 @@ public class FrankfurterPublicGateway : IHistoricalDataProvider
         {
             try
             {
-                using var response = await _httpClient.GetAsync(url, ct);
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(TimeSpan.FromSeconds(3));
+                using var response = await _httpClient.GetAsync(url, timeoutCts.Token);
                 if (response.IsSuccessStatusCode)
                 {
-                    using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+                    using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(timeoutCts.Token), cancellationToken: timeoutCts.Token);
                     if (doc.RootElement.TryGetProperty("rates", out var rates) &&
                         rates.TryGetProperty(quoteCurr, out var rateElement))
                     {

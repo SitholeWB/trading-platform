@@ -133,7 +133,9 @@ public class YahooFinanceGateway : IHistoricalDataProvider
             request1.Headers.Add("Cookie", session.Cookie);
         }
 
-        var response = await _httpClient.SendAsync(request1, ct);
+        using var timeoutCts1 = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts1.CancelAfter(TimeSpan.FromSeconds(4));
+        var response = await _httpClient.SendAsync(request1, timeoutCts1.Token);
 
         // 2. If rejected with 401 or 403, invalidate session and retry once with fresh crumb handshake
         if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
@@ -158,7 +160,9 @@ public class YahooFinanceGateway : IHistoricalDataProvider
                 request2.Headers.Add("Cookie", refreshedSession.Cookie);
             }
 
-            return await _httpClient.SendAsync(request2, ct);
+            using var timeoutCts2 = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts2.CancelAfter(TimeSpan.FromSeconds(4));
+            return await _httpClient.SendAsync(request2, timeoutCts2.Token);
         }
 
         return response;
