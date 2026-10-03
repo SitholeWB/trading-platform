@@ -34,9 +34,12 @@ export const SecondaryChartPane: React.FC<SecondaryChartPaneProps> = ({
     { label: '1m', value: 'M1' },
     { label: '5m', value: 'M5' },
     { label: '15m', value: 'M15' },
+    { label: '30m', value: 'M30' },
     { label: '1h', value: 'H1' },
     { label: '4h', value: 'H4' },
     { label: '1D', value: 'D1' },
+    { label: '1W', value: 'W1' },
+    { label: '1M', value: 'MN1' },
   ];
 
   // Fetch candles for this secondary pane

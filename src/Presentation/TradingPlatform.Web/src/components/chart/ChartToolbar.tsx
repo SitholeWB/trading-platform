@@ -80,6 +80,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
     { label: '4h', value: 'H4' },
     { label: '1D', value: 'D1' },
     { label: '1W', value: 'W1' },
+    { label: '1M', value: 'MN1' },
   ];
 
   const chartTypes: { id: ChartType; label: string; icon: string; short: string }[] = [

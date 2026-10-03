@@ -150,7 +150,7 @@ public class CandleIngestionWorker : BackgroundService
                 "Buys when price is above EMA50 and Ichimoku SpanA with RSI momentum confirmation",
                 Timeframe.M5,
                 strategy1Rules,
-                autoTradingEnabled: true,
+                autoTradingEnabled: false,
                 aiValidationEnabled: true);
 
             await strategyRepo.AddAsync(strategy1, ct);
@@ -183,7 +183,7 @@ public class CandleIngestionWorker : BackgroundService
                 "Sells when price closes below EMA50 with RSI bearish momentum",
                 Timeframe.M5,
                 strategy2Rules,
-                autoTradingEnabled: true,
+                autoTradingEnabled: false,
                 aiValidationEnabled: false);
 
             await strategyRepo.AddAsync(strategy2, ct);

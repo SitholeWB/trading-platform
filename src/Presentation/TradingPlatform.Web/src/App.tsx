@@ -422,6 +422,7 @@ export function App() {
           selectedSymbol={selectedSymbol}
           currentPrice={currentPrice}
           onOpenSymbolSearch={() => setIsSymbolSearchOpen(true)}
+          openPositionsCount={positions.filter((p) => p.status === 'Open').length}
         />
 
         {/* Dedicated Page Viewport */}

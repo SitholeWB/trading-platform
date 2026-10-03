@@ -92,15 +92,22 @@ export const RiskConsole: React.FC<RiskConsoleProps> = ({
         </div>
       </div>
 
-      {/* Emergency Button */}
-      <div className="pt-2">
-        <button
-          onClick={onOpenKillSwitch}
-          className="w-full py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider transition-colors shadow-lg shadow-red-600/20"
-        >
-          {risk?.isKillSwitchEngaged ? '⚠️ KILL SWITCH ENGAGED' : '🚨 EMERGENCY KILL SWITCH'}
-        </button>
-      </div>
+      {/* Emergency Button - Visible only if there are open positions or kill switch engaged */}
+      {(openCount > 0 || risk?.isKillSwitchEngaged) && (
+        <div className="pt-2">
+          <button
+            onClick={onOpenKillSwitch}
+            className="w-full py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider transition-colors shadow-lg shadow-red-600/20"
+          >
+            {risk?.isKillSwitchEngaged ? '⚠️ RESET / DISENGAGE KILL SWITCH' : '🚨 EMERGENCY KILL SWITCH'}
+          </button>
+        </div>
+      )}
+      {openCount === 0 && !risk?.isKillSwitchEngaged && (
+        <div className="pt-2 text-center text-[11px] text-slate-500 font-mono">
+          No open positions. Kill switch disarmed.
+        </div>
+      )}
     </div>
   );
 };

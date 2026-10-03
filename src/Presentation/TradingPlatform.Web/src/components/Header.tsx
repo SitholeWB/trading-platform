@@ -10,6 +10,7 @@ interface HeaderProps {
   selectedSymbol: string;
   currentPrice: number;
   onOpenSymbolSearch?: () => void;
+  openPositionsCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   selectedSymbol,
   currentPrice,
   onOpenSymbolSearch,
+  openPositionsCount = 0,
 }) => {
   const isKillSwitchEngaged = risk?.isKillSwitchEngaged ?? false;
   const currentDrawdown = account?.currentDrawdownPercent ?? 0;
@@ -87,18 +89,20 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Emergency Kill Switch Button */}
-        <button
-          onClick={onOpenKillSwitch}
-          className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-md ${
-            isKillSwitchEngaged
-              ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-400'
-              : 'bg-red-950/70 border border-red-800/80 text-red-300 hover:bg-red-900/80 hover:text-white'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-red-400" />
-          <span>{isKillSwitchEngaged ? 'HALTED' : 'KILL SWITCH'}</span>
-        </button>
+        {/* Emergency Kill Switch Button - Visible only if there are open positions (or already engaged) */}
+        {(openPositionsCount > 0 || isKillSwitchEngaged) && (
+          <button
+            onClick={onOpenKillSwitch}
+            className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-md ${
+              isKillSwitchEngaged
+                ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-400'
+                : 'bg-red-950/70 border border-red-800/80 text-red-300 hover:bg-red-900/80 hover:text-white'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-red-400" />
+            <span>{isKillSwitchEngaged ? 'HALTED' : 'KILL SWITCH'}</span>
+          </button>
+        )}
       </div>
     </header>
   );

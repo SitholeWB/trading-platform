@@ -444,12 +444,12 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
                   <label className="block text-[10px] uppercase font-mono tracking-wider text-slate-400 mb-1">
                     Candle Bar Timeframe
                   </label>
-                  <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-mono">
-                    {(['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1'] as Timeframe[]).map((tf) => (
+                  <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-mono overflow-x-auto scrollbar-none">
+                    {(['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN1'] as Timeframe[]).map((tf) => (
                       <button
                         key={tf}
                         onClick={() => setTimeframe(tf)}
-                        className={`px-2.5 py-1 rounded transition-all ${
+                        className={`px-2 py-1 rounded transition-all whitespace-nowrap ${
                           timeframe === tf
                             ? 'bg-blue-600 text-white font-bold'
                             : 'text-slate-400 hover:text-slate-200'
@@ -472,9 +472,15 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
                     className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
                   >
                     <option value="0">Manual Only</option>
-                    <option value="15">Every 15s</option>
-                    <option value="30">Every 30s</option>
-                    <option value="60">Every 60s</option>
+                    <option value="300">Every 5 Minutes</option>
+                    <option value="900">Every 15 Minutes</option>
+                    <option value="1800">Every 30 Minutes</option>
+                    <option value="3600">Every 1 Hour</option>
+                    <option value="7200">Every 2 Hours</option>
+                    <option value="14400">Every 4 Hours</option>
+                    <option value="28800">Every 8 Hours</option>
+                    <option value="43200">Every 12 Hours</option>
+                    <option value="86400">Every 24 Hours (1 Day)</option>
                   </select>
                 </div>
               </div>
@@ -889,12 +895,12 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
                   <label className="block text-[10px] uppercase font-mono tracking-wider text-slate-400 mb-1">
                     Timeframe
                   </label>
-                  <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-mono">
-                    {(['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1'] as Timeframe[]).map((tf) => (
+                  <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-mono overflow-x-auto scrollbar-none">
+                    {(['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN1'] as Timeframe[]).map((tf) => (
                       <button
                         key={tf}
                         onClick={() => setTimeframe(tf)}
-                        className={`px-2.5 py-1 rounded transition-all ${
+                        className={`px-2 py-1 rounded transition-all whitespace-nowrap ${
                           timeframe === tf
                             ? 'bg-blue-600 text-white font-bold'
                             : 'text-slate-400 hover:text-slate-200'

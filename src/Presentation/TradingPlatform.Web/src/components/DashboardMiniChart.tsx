@@ -54,8 +54,12 @@ const QUICK_TIMEFRAMES: { label: string; value: Timeframe }[] = [
   { label: 'M1', value: 'M1' },
   { label: 'M5', value: 'M5' },
   { label: 'M15', value: 'M15' },
+  { label: 'M30', value: 'M30' },
   { label: 'H1', value: 'H1' },
+  { label: 'H4', value: 'H4' },
   { label: 'D1', value: 'D1' },
+  { label: 'W1', value: 'W1' },
+  { label: 'MN1', value: 'MN1' },
 ];
 
 export const DashboardMiniChart: React.FC<DashboardMiniChartProps> = ({

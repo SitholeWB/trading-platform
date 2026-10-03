@@ -72,7 +72,7 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
   const [name, setName] = useState('NewStrategy');
   const [description, setDescription] = useState('Quantitative strategy');
   const [timeframe, setTimeframe] = useState<Timeframe>('M5');
-  const [autoTrading, setAutoTrading] = useState(true);
+  const [autoTrading, setAutoTrading] = useState(false);
   const [aiValidation, setAiValidation] = useState(false);
   const [combinator, setCombinator] = useState<'and' | 'or'>('and');
 
@@ -214,7 +214,7 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
       setName('NewCustomStrategy');
       setDescription('Custom quantitative strategy with dynamic indicators');
       setTimeframe('M5');
-      setAutoTrading(true);
+      setAutoTrading(false);
       setAiValidation(false);
       setCombinator('and');
       setRules([

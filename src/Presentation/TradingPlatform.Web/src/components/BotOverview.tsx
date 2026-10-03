@@ -94,16 +94,18 @@ export const BotOverview: React.FC<BotOverviewProps> = ({
           >
             ⚡ Configure Logic
           </button>
-          <button
-            onClick={onOpenKillSwitch}
-            className={`px-3.5 py-1.5 rounded-lg font-bold text-xs transition-colors shadow-md ${
-              isKillSwitch
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                : 'bg-red-600 hover:bg-red-500 text-white'
-            }`}
-          >
-            {isKillSwitch ? 'Reset Robot' : '🚨 Kill Switch'}
-          </button>
+          {(openPositions.length > 0 || isKillSwitch) && (
+            <button
+              onClick={onOpenKillSwitch}
+              className={`px-3.5 py-1.5 rounded-lg font-bold text-xs transition-colors shadow-md ${
+                isKillSwitch
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                  : 'bg-red-600 hover:bg-red-500 text-white'
+              }`}
+            >
+              {isKillSwitch ? 'Reset Robot' : '🚨 Kill Switch'}
+            </button>
+          )}
         </div>
       </div>
 
