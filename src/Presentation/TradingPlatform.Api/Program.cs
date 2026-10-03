@@ -1303,6 +1303,60 @@ alertsGroup.MapPost("/", async (HttpRequest request, CancellationToken ct) =>
     return Results.Ok(new { success = true });
 });
 
+// ----------------------------------------------------
+// Symbol Groups (Buckets / Baskets) Endpoints
+// ----------------------------------------------------
+var symbolGroupsGroup = app.MapGroup("/api/symbol-groups").WithTags("Symbol Groups");
+
+symbolGroupsGroup.MapGet("/", async (ISymbolGroupRepository repo, CancellationToken ct) =>
+{
+    var groups = await repo.GetAllAsync(ct);
+    return Results.Ok(groups);
+});
+
+symbolGroupsGroup.MapGet("/{id}", async (string id, ISymbolGroupRepository repo, CancellationToken ct) =>
+{
+    var group = await repo.GetByIdAsync(id, ct);
+    return group != null ? Results.Ok(group) : Results.NotFound();
+});
+
+symbolGroupsGroup.MapPost("/", async ([FromBody] SymbolGroup group, ISymbolGroupRepository repo, CancellationToken ct) =>
+{
+    await repo.AddAsync(group, ct);
+    return Results.Ok(group);
+});
+
+symbolGroupsGroup.MapPut("/{id}", async (string id, [FromBody] SymbolGroup group, ISymbolGroupRepository repo, CancellationToken ct) =>
+{
+    group.Id = id;
+    group.UpdatedAtUtc = DateTime.UtcNow;
+    await repo.UpdateAsync(group, ct);
+    return Results.Ok(group);
+});
+
+symbolGroupsGroup.MapDelete("/{id}", async (string id, ISymbolGroupRepository repo, CancellationToken ct) =>
+{
+    await repo.DeleteAsync(id, ct);
+    return Results.NoContent();
+});
+
+// ----------------------------------------------------
+// Market Scanner Robot Endpoints
+// ----------------------------------------------------
+var scannerGroup = app.MapGroup("/api/scanner").WithTags("Market Scanner");
+
+scannerGroup.MapPost("/live", async ([FromBody] LiveScanRequest request, IMarketScannerService scanner, CancellationToken ct) =>
+{
+    var report = await scanner.RunLiveScanAsync(request, ct);
+    return Results.Ok(report);
+});
+
+scannerGroup.MapPost("/historical", async ([FromBody] HistoricalScanRequest request, IMarketScannerService scanner, CancellationToken ct) =>
+{
+    var report = await scanner.RunHistoricalScanAsync(request, ct);
+    return Results.Ok(report);
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();

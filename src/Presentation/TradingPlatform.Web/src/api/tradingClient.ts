@@ -7,6 +7,11 @@ import {
   SignalAuditLog,
   StrategyDefinition,
   SymbolsCatalogResponse,
+  SymbolGroup,
+  LiveScanRequest,
+  LiveScanReport,
+  HistoricalScanRequest,
+  HistoricalScanReport,
 } from '../types/trading';
 
 const BASE_URL = '/api';
@@ -223,6 +228,36 @@ export const tradingApi = {
     request<any>('/settings/broker-config', {
       method: 'POST',
       body: JSON.stringify(config),
+    }),
+
+  // Symbol Groups (Buckets / Baskets)
+  getSymbolGroups: () =>
+    request<SymbolGroup[]>('/symbol-groups'),
+  getSymbolGroupById: (id: string) =>
+    request<SymbolGroup>(`/symbol-groups/${id}`),
+  createSymbolGroup: (group: Partial<SymbolGroup>) =>
+    request<SymbolGroup>('/symbol-groups', {
+      method: 'POST',
+      body: JSON.stringify(group),
+    }),
+  updateSymbolGroup: (id: string, group: Partial<SymbolGroup>) =>
+    request<SymbolGroup>(`/symbol-groups/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(group),
+    }),
+  deleteSymbolGroup: (id: string) =>
+    fetch(`${BASE_URL}/symbol-groups/${id}`, { method: 'DELETE' }),
+
+  // Market Scanner Robot
+  runLiveScan: (req: LiveScanRequest) =>
+    request<LiveScanReport>('/scanner/live', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+  runHistoricalScan: (req: HistoricalScanRequest) =>
+    request<HistoricalScanReport>('/scanner/historical', {
+      method: 'POST',
+      body: JSON.stringify(req),
     }),
 };
 

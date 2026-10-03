@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<ITradeRepository, TradeRepository>();
         services.AddScoped<IRiskProfileRepository, RiskProfileRepository>();
         services.AddScoped<IBrokerConfigurationRepository, BrokerConfigurationRepository>();
+        services.AddSingleton<ISymbolGroupRepository, SymbolGroupRepository>();
 
         return services;
     }

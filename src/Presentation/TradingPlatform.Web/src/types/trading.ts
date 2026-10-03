@@ -217,3 +217,95 @@ export interface SymbolsCatalogResponse {
   symbols: SymbolCatalogItem[];
 }
 
+export interface SymbolGroup {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  symbols: string[];
+  assignedStrategyId?: string | null;
+  createdAtUtc?: string;
+  updatedAtUtc?: string;
+}
+
+export interface ScannerMatchResult {
+  symbol: string;
+  strategyName: string;
+  strategyId: string;
+  timeframe: string;
+  state: 'FullyMet' | 'NearMiss';
+  matchPercentage: number;
+  recommendedSide: OrderType;
+  entryPrice: number;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  candleTimestamp: string;
+  passedConditions: string[];
+  failedConditions: string[];
+  detailsJson?: string | null;
+}
+
+export interface LiveScanRequest {
+  symbolGroupId?: string | null;
+  symbols?: string[] | null;
+  strategyId?: string | null;
+  timeframe?: string;
+}
+
+export interface LiveScanReport {
+  symbolGroupId: string;
+  symbolGroupName: string;
+  timeframe: string;
+  scannedAtUtc: string;
+  totalSymbolsScanned: number;
+  verifiedMatches: ScannerMatchResult[];
+  nearMisses: ScannerMatchResult[];
+  durationMs: number;
+}
+
+export interface HistoricalScanRequest {
+  strategyId: string;
+  symbolGroupId?: string | null;
+  symbols?: string[] | null;
+  timeframe?: string;
+  barCount?: number;
+}
+
+export interface HistoricalTradeSimulation {
+  symbol: string;
+  side: OrderType;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  entryTime: string;
+  exitTime?: string | null;
+  exitPrice?: number | null;
+  outcome: 'Win' | 'Loss' | 'Open';
+  profitLossPips: number;
+  profitLossAmount: number;
+}
+
+export interface HistoricalScanReport {
+  strategyId: string;
+  strategyName: string;
+  symbolGroupName: string;
+  timeframe: string;
+  barsAnalyzed: number;
+  periodStartUtc: string;
+  periodEndUtc: string;
+  totalSignalsFound: number;
+  verifiedMatchesCount: number;
+  nearMissesCount: number;
+  simulatedTradesCount: number;
+  winningTradesCount: number;
+  losingTradesCount: number;
+  winRatePercent: number;
+  totalProfitLossPips: number;
+  profitFactor: number;
+  maxDrawdownPips: number;
+  simulatedTrades: HistoricalTradeSimulation[];
+  historicalMatches: ScannerMatchResult[];
+  durationMs: number;
+}
+
+

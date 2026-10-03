@@ -1,0 +1,204 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using TradingPlatform.Application.Interfaces;
+using TradingPlatform.Broker.Abstractions;
+using TradingPlatform.Domain.Entities;
+using TradingPlatform.Domain.Enums;
+using TradingPlatform.Domain.Models;
+using TradingPlatform.RulesEngine.Indicators;
+using TradingPlatform.RulesEngine.Scanner;
+using Xunit;
+
+namespace TradingPlatform.UnitTests.Scanner;
+
+public class MarketScannerServiceTests
+{
+    private readonly Mock<IHistoricalDataProvider> _dataProviderMock = new();
+    private readonly Mock<ISymbolGroupRepository> _symbolGroupRepoMock = new();
+    private readonly Mock<IStrategyRepository> _strategyRepoMock = new();
+    private readonly IIndicatorCalculationService _indicatorService = new IndicatorCalculationService();
+    private readonly Mock<IRulesEngineService> _rulesEngineMock = new();
+
+    private List<Candle> GenerateMockCandles(string symbol, int count, decimal basePrice = 1.1000m)
+    {
+        var list = new List<Candle>();
+        var time = DateTime.UtcNow.AddMinutes(-5 * count);
+        var price = basePrice;
+
+        for (int i = 0; i < count; i++)
+        {
+            var open = price;
+            var close = open + 0.0005m;
+            var high = close + 0.0004m;
+            var low = open - 0.0003m;
+            price = close;
+
+            list.Add(new Candle(
+                symbol,
+                Timeframe.M5,
+                time.AddMinutes(5 * i),
+                open,
+                high,
+                low,
+                close,
+                1000,
+                true));
+        }
+
+        return list;
+    }
+
+    [Fact]
+    public async Task LiveScan_Finds_VerifiedMatch_And_NearMiss()
+    {
+        var group = new SymbolGroup("grp-1", "Test Forex", "Forex test bucket", "forex", new[] { "EURUSD", "GBPUSD" });
+        _symbolGroupRepoMock.Setup(r => r.GetByIdAsync("grp-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(group);
+
+        var strategy = new StrategyDefinition("EmaTrend", "EMA Trend", Timeframe.M5, "{}");
+        _strategyRepoMock.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { strategy });
+
+        _dataProviderMock.Setup(d => d.GetHistoricalCandlesAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string sym, string tf, int cnt, CancellationToken ct) => GenerateMockCandles(sym, cnt));
+
+        _rulesEngineMock.Setup(r => r.EvaluateAsync(It.Is<MarketSnapshot>(s => s.Symbol == "EURUSD"), It.IsAny<IEnumerable<StrategyDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new SignalResult(
+                    strategy.Id,
+                    strategy.Name,
+                    "EURUSD",
+                    Timeframe.M5,
+                    DateTime.UtcNow,
+                    SignalState.FullyMet,
+                    OrderType.Buy,
+                    1.1050m,
+                    1.1020m,
+                    1.1100m,
+                    true,
+                    false,
+                    Array.Empty<RuleFailureDetail>(),
+                    "{\"TotalRules\":2,\"PassedRules\":2}"
+                )
+            });
+
+        _rulesEngineMock.Setup(r => r.EvaluateAsync(It.Is<MarketSnapshot>(s => s.Symbol == "GBPUSD"), It.IsAny<IEnumerable<StrategyDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new SignalResult(
+                    strategy.Id,
+                    strategy.Name,
+                    "GBPUSD",
+                    Timeframe.M5,
+                    DateTime.UtcNow,
+                    SignalState.NearMiss,
+                    OrderType.Buy,
+                    1.2550m,
+                    1.2500m,
+                    1.2650m,
+                    true,
+                    false,
+                    new[] { new RuleFailureDetail("RSI_Check", "Rsi14 > 60", "RSI is 55", 0.67m) },
+                    "{\"TotalRules\":3,\"PassedRules\":2}"
+                )
+            });
+
+        var scanner = new MarketScannerService(
+            _dataProviderMock.Object,
+            _indicatorService,
+            _rulesEngineMock.Object,
+            _symbolGroupRepoMock.Object,
+            _strategyRepoMock.Object,
+            NullLogger<MarketScannerService>.Instance
+        );
+
+        var report = await scanner.RunLiveScanAsync(new LiveScanRequest("grp-1", null, null, "M5"));
+
+        Assert.Equal("grp-1", report.SymbolGroupId);
+        Assert.Equal(2, report.TotalSymbolsScanned);
+        Assert.Single(report.VerifiedMatches);
+        Assert.Equal("EURUSD", report.VerifiedMatches[0].Symbol);
+        Assert.Equal(100m, report.VerifiedMatches[0].MatchPercentage);
+        Assert.Single(report.NearMisses);
+        Assert.Equal("GBPUSD", report.NearMisses[0].Symbol);
+        Assert.Equal(67m, report.NearMisses[0].MatchPercentage);
+    }
+
+    [Fact]
+    public async Task HistoricalScan_SimulatesTrades_CalculatesWinRateAndPnL()
+    {
+        var group = new SymbolGroup("grp-1", "Test Forex", "Forex test", "forex", new[] { "EURUSD" });
+        _symbolGroupRepoMock.Setup(r => r.GetByIdAsync("grp-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(group);
+
+        var strategy = new StrategyDefinition("BreakoutStrategy", "Breakout", Timeframe.M5, "{}");
+        _strategyRepoMock.Setup(r => r.GetByIdAsync(strategy.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(strategy);
+
+        _rulesEngineMock.SetReturnsDefault<Task<IReadOnlyList<SignalResult>>>(
+            Task.FromResult<IReadOnlyList<SignalResult>>(Array.Empty<SignalResult>()));
+
+        var mockCandles = GenerateMockCandles("EURUSD", 100, 1.1000m);
+        // Force the last candles to rise so TP is hit
+        for (int i = 45; i < mockCandles.Count; i++)
+        {
+            var old = mockCandles[i];
+            mockCandles[i] = new Candle(
+                old.Symbol,
+                old.Timeframe,
+                old.Timestamp,
+                old.Open,
+                old.High + 0.0200m, // High enough to trigger TakeProfit
+                old.Low,
+                old.Close + 0.0150m,
+                old.Volume,
+                true);
+        }
+
+        _dataProviderMock.Setup(d => d.GetHistoricalCandlesAsync("EURUSD", "M5", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockCandles);
+
+        // Emit a signal at bar 35
+        _rulesEngineMock.Setup(r => r.EvaluateAsync(It.Is<MarketSnapshot>(s => s.Timestamp == mockCandles[35].Timestamp), It.IsAny<IEnumerable<StrategyDefinition>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new SignalResult(
+                    strategy.Id,
+                    strategy.Name,
+                    "EURUSD",
+                    Timeframe.M5,
+                    mockCandles[35].Timestamp,
+                    SignalState.FullyMet,
+                    OrderType.Buy,
+                    mockCandles[35].Close,
+                    mockCandles[35].Close - 0.0030m,
+                    mockCandles[35].Close + 0.0060m, // TP reachable by future bars
+                    true,
+                    false,
+                    Array.Empty<RuleFailureDetail>(),
+                    "{}"
+                )
+            });
+
+        var scanner = new MarketScannerService(
+            _dataProviderMock.Object,
+            _indicatorService,
+            _rulesEngineMock.Object,
+            _symbolGroupRepoMock.Object,
+            _strategyRepoMock.Object,
+            NullLogger<MarketScannerService>.Instance
+        );
+
+        var report = await scanner.RunHistoricalScanAsync(new HistoricalScanRequest(strategy.Id, "grp-1", null, "M5", 100));
+
+        Assert.NotNull(report);
+        Assert.Equal(strategy.Id, report.StrategyId);
+        Assert.True(report.TotalSignalsFound >= 1);
+        Assert.True(report.SimulatedTradesCount >= 1);
+        var trade = report.SimulatedTrades[0];
+        Assert.Equal("Win", trade.Outcome);
+        Assert.True(trade.ProfitLossPips > 0);
+        Assert.Equal(100m, report.WinRatePercent);
+    }
+}

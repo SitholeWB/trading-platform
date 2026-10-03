@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { NavigationSidebar, PageId } from './components/NavigationSidebar';
 import { BotOverview } from './components/BotOverview';
 import { TradingChart } from './components/TradingChart';
+import { MarketScannerView } from './components/MarketScannerView';
 import { RuleStudio } from './components/RuleStudio';
 import { NearMissRadar } from './components/NearMissRadar';
 import { PositionsManager } from './components/PositionsManager';
@@ -17,6 +18,7 @@ import {
   AccountSummary,
   Candle,
   IndicatorConfig,
+  OrderType,
   Position,
   RiskProfile,
   SignalAuditLog,
@@ -256,6 +258,23 @@ export function App() {
     }
   };
 
+  const handlePlaceQuickOrder = async (symbol: string, side: OrderType, price: number, sl?: number, tp?: number) => {
+    try {
+      await tradingApi.placeOrder({
+        symbol,
+        orderType: side,
+        lots: 0.1,
+        price,
+        stopLoss: sl,
+        takeProfit: tp,
+      });
+      const updated = await tradingApi.getPositions();
+      setPositions(updated);
+    } catch (err) {
+      console.warn('Quick order placement error:', err);
+    }
+  };
+
   const handleToggleKillSwitch = async (engage: boolean, reason?: string) => {
     const updated = await tradingApi.toggleKillSwitch(engage, reason);
     setRisk(updated);
@@ -278,6 +297,7 @@ export function App() {
 
   const pageTitles: Record<PageId, string> = {
     dashboard: '🤖 Bot Operations & Health',
+    scanner: '📡 Robotic Market Scanner & Backtester',
     strategies: '⚡ Dynamic Strategy Studio',
     radar: '🎯 Near-Miss & Forensic Radar',
     positions: '💼 Positions & Risk Management',
@@ -325,6 +345,19 @@ export function App() {
               onNavigateTo={setActivePage}
               selectedSymbol={selectedSymbol}
               currentPrice={currentPrice}
+            />
+          )}
+
+          {/* Page: Robotic Market Scanner & Backtester */}
+          {activePage === 'scanner' && (
+            <MarketScannerView
+              onOpenChart={(symbol, tf) => {
+                setSelectedSymbol(symbol);
+                if (tf) setTimeframe(tf);
+                setActivePage('chart');
+              }}
+              onPlaceQuickOrder={handlePlaceQuickOrder}
+              activeProvider={activeProvider}
             />
           )}
 

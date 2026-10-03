@@ -82,3 +82,19 @@ public interface IBrokerConfigurationRepository
     Task<BrokerConfiguration> GetConfigurationAsync(CancellationToken ct = default);
     Task UpdateConfigurationAsync(BrokerConfiguration configuration, CancellationToken ct = default);
 }
+
+public interface ISymbolGroupRepository
+{
+    Task<IReadOnlyList<SymbolGroup>> GetAllAsync(CancellationToken ct = default);
+    Task<SymbolGroup?> GetByIdAsync(string id, CancellationToken ct = default);
+    Task AddAsync(SymbolGroup group, CancellationToken ct = default);
+    Task UpdateAsync(SymbolGroup group, CancellationToken ct = default);
+    Task DeleteAsync(string id, CancellationToken ct = default);
+}
+
+public interface IMarketScannerService
+{
+    Task<LiveScanReport> RunLiveScanAsync(LiveScanRequest request, CancellationToken ct = default);
+    Task<HistoricalScanReport> RunHistoricalScanAsync(HistoricalScanRequest request, CancellationToken ct = default);
+}
+

@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type PageId = 'dashboard' | 'strategies' | 'radar' | 'positions' | 'sandbox' | 'chart';
+export type PageId = 'dashboard' | 'scanner' | 'strategies' | 'radar' | 'positions' | 'sandbox' | 'chart';
 
 interface NavigationSidebarProps {
   activePage: PageId;
@@ -29,6 +29,13 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       icon: '🤖',
       label: 'Dashboard',
       badge: null,
+    },
+    {
+      id: 'scanner' as PageId,
+      icon: '📡',
+      label: 'Market Scanner',
+      badge: 'Robot',
+      badgeColor: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
     },
     {
       id: 'strategies' as PageId,

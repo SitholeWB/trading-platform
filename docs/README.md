@@ -17,6 +17,7 @@ This system is an all-in-one institutional trading workstation combining **Tradi
 | **[5. Risk Management & Kill Switch](risk-management-and-killswitch.md)** | 10-second equity heartbeat monitor, maximum daily drawdown protection, emergency kill switch, and broker lockout. |
 | **[6. REST API Reference](api-reference.md)** | Complete specification of all API endpoints across market data, orders, positions, strategies, audit logs, and chart state. |
 | **[7. Deployment & Operations](deployment-and-operations.md)** | Quick start, local development, Docker deployment, MetaTrader 5 ZeroMQ EA setup, and troubleshooting. |
+| **[8. Market Scanner Robot & Backtester](market-scanner-robot.md)** | Continuous multi-symbol robotic scanning, closed-candle invariant, symbol buckets/baskets, verified match vs near-miss diagnostics, and historical bar simulation. |
 
 ---
 

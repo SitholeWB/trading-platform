@@ -164,3 +164,36 @@ Liquidates an open position immediately at market price.
 
 - **`GET /api/settings/broker-config`**: Returns active provider, masked API tokens, and account IDs.
 - **`POST /api/settings/broker-config`**: Updates broker credentials and switches active provider.
+
+---
+
+## 8. Symbol Groups & Baskets (`/api/symbol-groups`)
+
+- **`GET /api/symbol-groups`**: Returns all configured symbol baskets (Forex Majors, Crosses, Crypto, Tech, Indices, Commodities, Custom).
+- **`GET /api/symbol-groups/{id}`**: Returns a specific symbol bucket.
+- **`POST /api/symbol-groups`**: Creates a new symbol basket.
+- **`PUT /api/symbol-groups/{id}`**: Updates an existing basket (name, description, category, symbol list, assigned strategy).
+- **`DELETE /api/symbol-groups/{id}`**: Deletes a custom symbol basket.
+
+---
+
+## 9. Market Scanner Robot (`/api/scanner`)
+
+- **`POST /api/scanner/live`**: Executes a real-time closed-candle scan across a defined symbol bucket or custom list of symbols. Returns verified matches (100%) and near-misses (60%–99%).
+  ```json
+  {
+    "symbolGroupId": "group-fx-majors",
+    "strategyId": "guid-optional",
+    "timeframe": "M5"
+  }
+  ```
+- **`POST /api/scanner/historical`**: Executes a bar-by-bar historical scan and trade resolution simulation across $N$ past candles. Returns win rate %, net P&L pips, profit factor, max drawdown, and full trade timeline.
+  ```json
+  {
+    "strategyId": "e2f1...",
+    "symbolGroupId": "group-fx-majors",
+    "timeframe": "M5",
+    "barCount": 200
+  }
+  ```
+
