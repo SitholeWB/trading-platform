@@ -100,6 +100,7 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
 
   // Run Live Scan
   const handleRunLiveScan = async () => {
+    if (isLiveScanning) return;
     setIsLiveScanning(true);
     try {
       const report = await tradingApi.runLiveScan({
@@ -122,10 +123,11 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
       handleRunLiveScan();
     }, autoScanInterval * 1000);
     return () => clearInterval(interval);
-  }, [autoScanInterval, selectedGroupId, selectedStrategyId, timeframe]);
+  }, [autoScanInterval, selectedGroupId, selectedStrategyId, timeframe, isLiveScanning]);
 
   // Run Historical Scan
   const handleRunHistoricalScan = async () => {
+    if (isHistScanning) return;
     if (!selectedStrategyId) {
       alert('Please select a strategy to run historical scan.');
       return;

@@ -117,52 +117,11 @@ public class FrankfurterPublicGateway : IHistoricalDataProvider
         return 1.0850m;
     }
 
-    private static List<Candle> SynthesizeCandlesFromRate(
+    private static IReadOnlyList<Candle> SynthesizeCandlesFromRate(
         string symbol,
         Timeframe tf,
         int count,
         decimal baseRate,
-        DateTime anchorTime)
-    {
-        var list = new List<Candle>();
-        decimal currentClose = baseRate;
-        int intervalMins = tf switch
-        {
-            Timeframe.M1 => 1,
-            Timeframe.M5 => 5,
-            Timeframe.M15 => 15,
-            Timeframe.M30 => 30,
-            Timeframe.H1 => 60,
-            Timeframe.H4 => 240,
-            Timeframe.D1 => 1440,
-            _ => 5
-        };
-
-        double volatility = (double)baseRate * (symbol.Contains("JPY") ? 0.0008 : 0.0005);
-        int decimals = symbol.Contains("JPY") ? 3 : 5;
-
-        for (int i = count; i >= 0; i--)
-        {
-            decimal open = currentClose;
-            decimal change = (decimal)((Random.Shared.NextDouble() - 0.49) * volatility);
-            decimal close = open + change;
-            decimal high = Math.Max(open, close) + (decimal)(Random.Shared.NextDouble() * volatility * 0.4);
-            decimal low = Math.Min(open, close) - (decimal)(Random.Shared.NextDouble() * volatility * 0.4);
-
-            list.Add(new Candle(
-                symbol,
-                tf,
-                anchorTime.AddMinutes(-intervalMins * i),
-                Math.Round(open, decimals),
-                Math.Round(high, decimals),
-                Math.Round(low, decimals),
-                Math.Round(close, decimals),
-                Random.Shared.Next(250, 1800),
-                isComplete: true));
-
-            currentClose = close;
-        }
-
-        return list;
-    }
+        DateTime anchorTime) =>
+        DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, tf, count, anchorTime, baseRate);
 }

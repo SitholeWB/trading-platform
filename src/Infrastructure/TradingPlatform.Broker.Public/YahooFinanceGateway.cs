@@ -50,10 +50,15 @@ public class YahooFinanceGateway : IHistoricalDataProvider
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("[YAHOO FINANCE] HTTP {Status} received for {Url}", response.StatusCode, url);
-                return FallbackCandles(symbol, parsedTimeframe, count);
+                return Array.Empty<Candle>();
             }
 
             candles = await ParseYahooChartResponseAsync(response, symbol, parsedTimeframe, ct);
+            if (candles.Count == 0)
+            {
+                _logger.LogWarning("[YAHOO FINANCE] Zero candles parsed from response for {Symbol}", symbol);
+                return Array.Empty<Candle>();
+            }
 
             if (candles.Count > count)
             {
@@ -65,8 +70,8 @@ public class YahooFinanceGateway : IHistoricalDataProvider
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[YAHOO FINANCE] Exception fetching data for {Symbol}. Returning fallback candles.", symbol);
-            return FallbackCandles(symbol, parsedTimeframe, count);
+            _logger.LogWarning(ex, "[YAHOO FINANCE] Exception fetching data for {Symbol}. Returning empty list to activate failover.", symbol);
+            return Array.Empty<Candle>();
         }
     }
 
@@ -209,6 +214,9 @@ public class YahooFinanceGateway : IHistoricalDataProvider
             decimal c = closes[i].GetDecimal();
             decimal vol = volumes[i].ValueKind != JsonValueKind.Null ? volumes[i].GetDecimal() : 100m;
 
+            var barDurationSecs = GetTimeframeSeconds(parsedTimeframe);
+            bool isComplete = time.AddSeconds(barDurationSecs) <= DateTime.UtcNow;
+
             candles.Add(new Candle(
                 symbol,
                 parsedTimeframe,
@@ -218,7 +226,7 @@ public class YahooFinanceGateway : IHistoricalDataProvider
                 l,
                 c,
                 vol,
-                isComplete: true));
+                isComplete: isComplete));
         }
 
         return candles;
@@ -359,63 +367,6 @@ public class YahooFinanceGateway : IHistoricalDataProvider
         _ => ("5m", "5d")
     };
 
-    private static decimal GetBaselinePrice(string symbol)
-    {
-        var s = symbol.ToUpperInvariant();
-        if (s.Contains("GSPC") || s.Contains("500") || s.Contains("SPX")) return 5780.00m;
-        if (s.Contains("IXIC") || s.Contains("NAS") || s.Contains("NDX") || s.Contains("QQQ")) return 20150.00m;
-        if (s.Contains("DJI") || s.Contains("US30") || s.Contains("DOW")) return 42350.00m;
-        if (s.Contains("DAX") || s.Contains("GDAXI") || s.Contains("GER40")) return 19450.00m;
-        if (s.Contains("FTSE") || s.Contains("UK100")) return 8320.00m;
-        if (s.Contains("N225") || s.Contains("JP225")) return 38650.00m;
-        if (s.Contains("GC=F") || s.Contains("GOLD") || s.Contains("XAU")) return 2655.00m;
-        if (s.Contains("SI=F") || s.Contains("SILVER") || s.Contains("XAG")) return 31.85m;
-        if (s.Contains("CL=F") || s.Contains("OIL") || s.Contains("WTI")) return 71.50m;
-        if (s.Contains("BZ=F") || s.Contains("BRENT")) return 75.20m;
-        if (s.Contains("BTC")) return 68500.00m;
-        if (s.Contains("ETH")) return 3520.00m;
-        if (s.Contains("SOL")) return 178.00m;
-        if (s.Contains("AAPL")) return 232.00m;
-        if (s.Contains("MSFT")) return 428.00m;
-        if (s.Contains("NVDA")) return 126.00m;
-        if (s.Contains("TSLA")) return 254.00m;
-        if (s.Contains("JPY")) return 154.20m;
-        if (s.Contains("GBP")) return 1.2640m;
-        return 1.0850m;
-    }
-
-    private static List<Candle> FallbackCandles(string symbol, Timeframe tf, int count)
-    {
-        var list = new List<Candle>();
-        decimal currentClose = GetBaselinePrice(symbol);
-        var now = DateTime.UtcNow;
-
-        double volatility = (double)currentClose * (symbol.Contains("JPY") || currentClose > 100 ? 0.0015 : 0.0008);
-
-        for (int i = count; i >= 0; i--)
-        {
-            decimal open = currentClose;
-            decimal change = (decimal)((Random.Shared.NextDouble() - 0.49) * volatility);
-            decimal close = open + change;
-            decimal high = Math.Max(open, close) + (decimal)(Random.Shared.NextDouble() * volatility * 0.5);
-            decimal low = Math.Min(open, close) - (decimal)(Random.Shared.NextDouble() * volatility * 0.5);
-
-            int decimals = currentClose >= 100 ? 2 : (symbol.Contains("JPY") ? 3 : 5);
-
-            list.Add(new Candle(
-                symbol,
-                tf,
-                now.AddMinutes(-5 * i),
-                Math.Round(open, decimals),
-                Math.Round(high, decimals),
-                Math.Round(low, decimals),
-                Math.Round(close, decimals),
-                Random.Shared.Next(200, 2000),
-                isComplete: true));
-
-            currentClose = close;
-        }
-
-        return list;
-    }
+    private static IReadOnlyList<Candle> FallbackCandles(string symbol, Timeframe tf, int count) =>
+        DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, tf, count);
 }

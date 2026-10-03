@@ -55,6 +55,10 @@ public class MarketScannerService : IMarketScannerService
 
         var syncLock = new object();
 
+        var parsedTf = Enum.TryParse<Timeframe>(request.Timeframe, true, out var tf) ? tf : Timeframe.M5;
+        var barDuration = GetTimeframeDuration(parsedTf);
+        var now = DateTime.UtcNow;
+
         await Parallel.ForEachAsync(symbols, parallelOptions, async (symbol, token) =>
         {
             try
@@ -66,10 +70,27 @@ public class MarketScannerService : IMarketScannerService
                     return;
                 }
 
+                // Closed-candle invariant: evaluate completed closed bars only.
+                // If the provider returned an actively forming bar (where Timestamp + Duration > Now), strip it.
+                var closedCandles = candles.Where(c => c.IsComplete).ToList();
+                if (closedCandles.Count < 25)
+                {
+                    closedCandles = candles.Where(c => c.Timestamp + barDuration <= now).ToList();
+                }
+                if (closedCandles.Count < 25)
+                {
+                    closedCandles = candles.Take(candles.Count > 1 ? candles.Count - 1 : candles.Count).ToList();
+                }
+
+                if (closedCandles.Count < 25)
+                {
+                    _logger.LogWarning("[MARKET SCANNER] Insufficient closed candles for {Symbol} ({Count} bars)", symbol, closedCandles.Count);
+                    return;
+                }
+
                 Interlocked.Increment(ref scannedCount);
 
-                // Closed-candle invariant: evaluate the closed bar window
-                var snapshot = _indicatorService.CalculateSnapshot(candles);
+                var snapshot = _indicatorService.CalculateSnapshot(closedCandles);
                 var signals = await _rulesEngine.EvaluateAsync(snapshot, strategies, token);
 
                 foreach (var signal in signals)
@@ -130,8 +151,16 @@ public class MarketScannerService : IMarketScannerService
             request.Timeframe,
             DateTime.UtcNow,
             scannedCount,
-            verifiedMatches.OrderByDescending(m => m.MatchPercentage).ToList(),
-            nearMisses.OrderByDescending(m => m.MatchPercentage).ToList(),
+            verifiedMatches
+                .OrderByDescending(m => m.MatchPercentage)
+                .ThenBy(m => m.Symbol)
+                .ThenBy(m => m.StrategyName)
+                .ToList(),
+            nearMisses
+                .OrderByDescending(m => m.MatchPercentage)
+                .ThenBy(m => m.Symbol)
+                .ThenBy(m => m.StrategyName)
+                .ToList(),
             sw.ElapsedMilliseconds
         );
     }
@@ -283,7 +312,12 @@ public class MarketScannerService : IMarketScannerService
             profitFactor,
             maxDrawdownPips,
             simulatedTrades.OrderBy(t => t.EntryTime).ToList(),
-            historicalMatches.OrderByDescending(m => m.CandleTimestamp).ToList(),
+            historicalMatches
+                .OrderByDescending(m => m.CandleTimestamp)
+                .ThenByDescending(m => m.MatchPercentage)
+                .ThenBy(m => m.Symbol)
+                .ThenBy(m => m.StrategyName)
+                .ToList(),
             sw.ElapsedMilliseconds
         );
     }
@@ -460,7 +494,7 @@ public class MarketScannerService : IMarketScannerService
     {
         if (symbols != null && symbols.Count > 0)
         {
-            return (groupId ?? "custom", "Custom Symbols Basket", symbols.Distinct().ToList());
+            return (groupId ?? "custom", "Custom Symbols Basket", symbols.Distinct().OrderBy(s => s).ToList());
         }
 
         if (!string.IsNullOrWhiteSpace(groupId))
@@ -468,7 +502,7 @@ public class MarketScannerService : IMarketScannerService
             var group = await _symbolGroupRepo.GetByIdAsync(groupId, ct);
             if (group != null && group.Symbols.Count > 0)
             {
-                return (group.Id, group.Name, group.Symbols);
+                return (group.Id, group.Name, group.Symbols.Distinct().OrderBy(s => s).ToList());
             }
         }
 
@@ -476,10 +510,10 @@ public class MarketScannerService : IMarketScannerService
         var defaultGroup = allGroups.FirstOrDefault();
         if (defaultGroup != null && defaultGroup.Symbols.Count > 0)
         {
-            return (defaultGroup.Id, defaultGroup.Name, defaultGroup.Symbols);
+            return (defaultGroup.Id, defaultGroup.Name, defaultGroup.Symbols.Distinct().OrderBy(s => s).ToList());
         }
 
-        return ("default-fx", "Forex Majors", new[] { "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD" });
+        return ("default-fx", "Forex Majors", new[] { "AUDUSD", "EURUSD", "GBPUSD", "USDCAD", "USDJPY" });
     }
 
     private async Task<IReadOnlyList<StrategyDefinition>> ResolveStrategiesAsync(
@@ -497,7 +531,21 @@ public class MarketScannerService : IMarketScannerService
         }
 
         var all = await _strategyRepo.GetAllAsync(ct);
-        var active = all.Where(s => s.IsActive).ToList();
-        return active.Count > 0 ? active : all;
+        var active = all.Where(s => s.IsActive).OrderBy(s => s.Name).ToList();
+        return active.Count > 0 ? active : all.OrderBy(s => s.Name).ToList();
     }
+
+    private static TimeSpan GetTimeframeDuration(Timeframe tf) => tf switch
+    {
+        Timeframe.M1 => TimeSpan.FromMinutes(1),
+        Timeframe.M5 => TimeSpan.FromMinutes(5),
+        Timeframe.M15 => TimeSpan.FromMinutes(15),
+        Timeframe.M30 => TimeSpan.FromMinutes(30),
+        Timeframe.H1 => TimeSpan.FromHours(1),
+        Timeframe.H4 => TimeSpan.FromHours(4),
+        Timeframe.D1 => TimeSpan.FromDays(1),
+        Timeframe.W1 => TimeSpan.FromDays(7),
+        Timeframe.MN1 => TimeSpan.FromDays(30),
+        _ => TimeSpan.FromMinutes(5)
+    };
 }

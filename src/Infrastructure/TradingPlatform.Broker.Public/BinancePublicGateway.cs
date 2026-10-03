@@ -151,34 +151,6 @@ public class BinancePublicGateway : IHistoricalDataProvider
         _ => "5m"
     };
 
-    private static List<Candle> FallbackCryptoCandles(string symbol, Timeframe tf, int count)
-    {
-        var list = new List<Candle>();
-        decimal currentClose = symbol.Contains("BTC") ? 68500m : (symbol.Contains("ETH") ? 3450m : 150m);
-        var now = DateTime.UtcNow;
-
-        for (int i = count; i >= 0; i--)
-        {
-            decimal open = currentClose;
-            decimal change = (decimal)((Random.Shared.NextDouble() - 0.49) * (double)(currentClose * 0.003m));
-            decimal close = open + change;
-            decimal high = Math.Max(open, close) + (decimal)(Random.Shared.NextDouble() * (double)(currentClose * 0.0015m));
-            decimal low = Math.Min(open, close) - (decimal)(Random.Shared.NextDouble() * (double)(currentClose * 0.0015m));
-
-            list.Add(new Candle(
-                symbol,
-                tf,
-                now.AddMinutes(-5 * i),
-                Math.Round(open, 2),
-                Math.Round(high, 2),
-                Math.Round(low, 2),
-                Math.Round(close, 2),
-                Random.Shared.Next(50, 500),
-                isComplete: true));
-
-            currentClose = close;
-        }
-
-        return list;
-    }
+    private static IReadOnlyList<Candle> FallbackCryptoCandles(string symbol, Timeframe tf, int count) =>
+        DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, tf, count);
 }

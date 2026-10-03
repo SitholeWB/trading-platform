@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
+using TradingPlatform.Domain.Enums;
 using TradingPlatform.Domain.Models;
 
 namespace TradingPlatform.Broker.Public;
@@ -37,6 +39,8 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
     private static string? _lastFailoverReason = null;
     private static DateTime? _lastFailoverUtc = null;
 
+    private static readonly ConcurrentDictionary<string, (DateTime ExpirationUtc, IReadOnlyList<Candle> Candles)> _candleCache = new();
+
     public CompositeMarketDataProvider(
         YahooFinanceGateway yahooGateway,
         BinancePublicGateway binanceGateway,
@@ -70,7 +74,14 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
         int count,
         CancellationToken ct)
     {
+        string cacheKey = $"{symbol.Trim().ToUpperInvariant()}_{timeframe.Trim().ToUpperInvariant()}_{count}";
+        if (_candleCache.TryGetValue(cacheKey, out var cached) && cached.ExpirationUtc > DateTime.UtcNow)
+        {
+            return cached.Candles;
+        }
+
         var config = await _configRepo.GetConfigurationAsync(ct);
+        var parsedTf = Enum.TryParse<Timeframe>(timeframe, true, out var tf) ? tf : Timeframe.M5;
 
         // 1. If configured provider is explicitly Oanda and token is present
         if (string.Equals(config.ActiveProvider, "Oanda", StringComparison.OrdinalIgnoreCase) &&
@@ -86,6 +97,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                     if (oandaCandles.Count > 0)
                     {
                         ResetFailoverState();
+                        _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), oandaCandles);
                         return oandaCandles;
                     }
                 }
@@ -106,6 +118,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 if (binanceCandles.Count > 0)
                 {
                     ResetFailoverState();
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), binanceCandles);
                     return binanceCandles;
                 }
             }
@@ -118,7 +131,12 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             // Fallback to Yahoo for crypto (e.g. BTC-USD)
             try
             {
-                return await _yahooGateway.GetHistoricalCandlesAsync(symbol, timeframe, count, ct);
+                var yahooCrypto = await _yahooGateway.GetHistoricalCandlesAsync(symbol, timeframe, count, ct);
+                if (yahooCrypto.Count > 0)
+                {
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), yahooCrypto);
+                    return yahooCrypto;
+                }
             }
             catch (Exception ex)
             {
@@ -136,6 +154,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 if (yahooCandles.Count > 0)
                 {
                     ResetFailoverState();
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), yahooCandles);
                     return yahooCandles;
                 }
             }
@@ -149,7 +168,13 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             try
             {
                 _logger.LogInformation("[COMPOSITE PROVIDER] Keyless auto-failover: querying European Central Bank (Frankfurter) for {Symbol}...", symbol);
-                return await _frankfurterGateway.GetHistoricalCandlesAsync(symbol, timeframe, count, ct);
+                var ecbCandles = await _frankfurterGateway.GetHistoricalCandlesAsync(symbol, timeframe, count, ct);
+                if (ecbCandles.Count > 0)
+                {
+                    EngageFailover($"Yahoo Finance offline for {symbol}; served official ECB rates via Frankfurter.", "Frankfurter-ECB");
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), ecbCandles);
+                    return ecbCandles;
+                }
             }
             catch (Exception ex)
             {
@@ -164,16 +189,23 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             if (generalCandles.Count > 0)
             {
                 ResetFailoverState();
+                _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), generalCandles);
                 return generalCandles;
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[COMPOSITE PROVIDER] Yahoo Finance failed for {Symbol}.", symbol);
-            EngageFailover($"Yahoo Finance failed for {symbol}; utilizing resilient synthetic continuity.", "Synthesizer-Backup");
         }
 
-        return await _yahooGateway.GetHistoricalCandlesAsync(symbol, timeframe, count, ct);
+        // 5. Final Resilient Continuity Fallback: 100% Deterministic Synthesizer
+        _logger.LogInformation("[COMPOSITE PROVIDER] Activating deterministic market synthesizer for {Symbol} {Timeframe} ({Count} bars)",
+            symbol, timeframe, count);
+        EngageFailover($"External market data feeds unavailable for {symbol}; activated deterministic resilient synthesizer.", "Deterministic-Synthesizer");
+
+        var syntheticCandles = DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, parsedTf, count);
+        _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), syntheticCandles);
+        return syntheticCandles;
     }
 
     public async Task<IReadOnlyList<Candle>> GetHistoricalCandlesBeforeAsync(
@@ -183,19 +215,43 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
         DateTime beforeUtc,
         CancellationToken ct)
     {
+        string beforeKey = $"{symbol.Trim().ToUpperInvariant()}_{timeframe.Trim().ToUpperInvariant()}_{count}_{beforeUtc.Ticks}";
+        if (_candleCache.TryGetValue(beforeKey, out var cachedBefore) && cachedBefore.ExpirationUtc > DateTime.UtcNow)
+        {
+            return cachedBefore.Candles;
+        }
+
+        var parsedTf = Enum.TryParse<Timeframe>(timeframe, true, out var tf) ? tf : Timeframe.M5;
+
         if (IsCryptoSymbol(symbol))
         {
             try
             {
                 var binanceOlder = await _binanceGateway.GetHistoricalCandlesBeforeAsync(symbol, timeframe, count, beforeUtc, ct);
-                if (binanceOlder.Count > 0) return binanceOlder;
+                if (binanceOlder.Count > 0)
+                {
+                    _candleCache[beforeKey] = (DateTime.UtcNow.AddMinutes(5), binanceOlder);
+                    return binanceOlder;
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[COMPOSITE PROVIDER] Binance older candles failed for {Symbol}, failing over to Yahoo.", symbol);
             }
 
-            return await _yahooGateway.GetHistoricalCandlesBeforeAsync(symbol, timeframe, count, beforeUtc, ct);
+            try
+            {
+                var yahooCrypto = await _yahooGateway.GetHistoricalCandlesBeforeAsync(symbol, timeframe, count, beforeUtc, ct);
+                if (yahooCrypto.Count > 0)
+                {
+                    _candleCache[beforeKey] = (DateTime.UtcNow.AddMinutes(5), yahooCrypto);
+                    return yahooCrypto;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[COMPOSITE PROVIDER] Yahoo crypto older candles failed for {Symbol}.", symbol);
+            }
         }
 
         if (IsForexSymbol(symbol))
@@ -203,7 +259,11 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             try
             {
                 var yahooOlder = await _yahooGateway.GetHistoricalCandlesBeforeAsync(symbol, timeframe, count, beforeUtc, ct);
-                if (yahooOlder.Count > 0) return yahooOlder;
+                if (yahooOlder.Count > 0)
+                {
+                    _candleCache[beforeKey] = (DateTime.UtcNow.AddMinutes(5), yahooOlder);
+                    return yahooOlder;
+                }
             }
             catch (Exception ex)
             {
@@ -211,10 +271,39 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 EngageFailover($"Yahoo Finance history rejected for {symbol}; failover to ECB.", "Frankfurter-ECB");
             }
 
-            return await _frankfurterGateway.GetHistoricalCandlesBeforeAsync(symbol, timeframe, count, beforeUtc, ct);
+            try
+            {
+                var ecbOlder = await _frankfurterGateway.GetHistoricalCandlesBeforeAsync(symbol, timeframe, count, beforeUtc, ct);
+                if (ecbOlder.Count > 0)
+                {
+                    _candleCache[beforeKey] = (DateTime.UtcNow.AddMinutes(5), ecbOlder);
+                    return ecbOlder;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[COMPOSITE PROVIDER] Frankfurter ECB older candles failed for {Symbol}.", symbol);
+            }
         }
 
-        return await _yahooGateway.GetHistoricalCandlesBeforeAsync(symbol, timeframe, count, beforeUtc, ct);
+        try
+        {
+            var generalOlder = await _yahooGateway.GetHistoricalCandlesBeforeAsync(symbol, timeframe, count, beforeUtc, ct);
+            if (generalOlder.Count > 0)
+            {
+                _candleCache[beforeKey] = (DateTime.UtcNow.AddMinutes(5), generalOlder);
+                return generalOlder;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[COMPOSITE PROVIDER] Yahoo general older candles failed for {Symbol}.", symbol);
+        }
+
+        // Deterministic fallback for historical window
+        var syntheticOlder = DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, parsedTf, count, beforeUtc);
+        _candleCache[beforeKey] = (DateTime.UtcNow.AddMinutes(5), syntheticOlder);
+        return syntheticOlder;
     }
 
     private static bool IsCryptoSymbol(string symbol)
