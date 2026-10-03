@@ -4,6 +4,20 @@ A production-ready algorithmic trading platform built with **Clean Architecture*
 
 ---
 
+## 📖 Comprehensive Documentation
+
+Complete technical guides and mermaid architectural diagrams are available in the [`docs/`](docs/README.md) directory:
+
+- 🏗️ **[System Architecture](docs/architecture.md)** — Clean Architecture, CQRS mediator, ports & adapters, and database constraints.
+- 📈 **[Charting Workstation](docs/charting-workstation.md)** — Viewport zoom locking, persistent drawings CRUD, multi-chart grid layouts, on-chart trade overlay, and audio alerts.
+- 🌐 **[Market Data Feeds & Failover](docs/market-data-providers.md)** — Zero-key feeds, Yahoo Cookie/Crumb session manager, European Central Bank (Frankfurter) fallback, and Binance streams.
+- 🤖 **[Rule Engine & Autonomous Bots](docs/rule-engine-and-bots.md)** — Quantitative strategy compilation, closed-candle invariant, and near-miss radar.
+- 🛡️ **[Risk Management & Kill Switch](docs/risk-management-and-killswitch.md)** — 10-second equity heartbeat, daily drawdown limits, and emergency liquidation circuit.
+- 📡 **[REST API Reference](docs/api-reference.md)** — Complete specification of all API endpoints.
+- 🚀 **[Deployment & Operations](docs/deployment-and-operations.md)** — Local setup, MetaTrader 5 ZeroMQ configuration, and production hosting.
+
+---
+
 ## 1. Architecture & Design Principles
 
 ```text
