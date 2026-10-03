@@ -10,16 +10,21 @@ namespace TradingPlatform.Broker.Public;
 public class YahooFinanceGateway : IHistoricalDataProvider
 {
     private readonly HttpClient _httpClient;
+    private readonly YahooFinanceSessionManager _sessionManager;
     private readonly ILogger<YahooFinanceGateway> _logger;
 
-    public YahooFinanceGateway(HttpClient httpClient, ILogger<YahooFinanceGateway> logger)
+    public YahooFinanceGateway(
+        HttpClient httpClient,
+        YahooFinanceSessionManager sessionManager,
+        ILogger<YahooFinanceGateway> logger)
     {
         _httpClient = httpClient;
+        _sessionManager = sessionManager;
         _logger = logger;
 
         if (!_httpClient.DefaultRequestHeaders.Contains("User-Agent"))
         {
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
         }
     }
 
@@ -41,7 +46,7 @@ public class YahooFinanceGateway : IHistoricalDataProvider
         {
             _logger.LogInformation("[YAHOO FINANCE] Requesting {YahooSymbol} interval={Interval} range={Range}...", yahooSymbol, interval, range);
 
-            using var response = await _httpClient.GetAsync(url, ct);
+            using var response = await SendAuthenticatedChartRequestAsync(url, ct);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("[YAHOO FINANCE] HTTP {Status} received for {Url}", response.StatusCode, url);
@@ -87,7 +92,7 @@ public class YahooFinanceGateway : IHistoricalDataProvider
             string url = $"https://query1.finance.yahoo.com/v8/finance/chart/{yahooSymbol}?interval={interval}&period1={p1}&period2={p2}";
 
             _logger.LogInformation("[YAHOO FINANCE] Requesting older candles for {YahooSymbol} interval={Interval} period1={P1} period2={P2}...", yahooSymbol, interval, p1, p2);
-            using var response = await _httpClient.GetAsync(url, ct);
+            using var response = await SendAuthenticatedChartRequestAsync(url, ct);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogInformation("[YAHOO FINANCE] Older range rejected ({Status}) for {Symbol}: provider history limit reached.", (int)response.StatusCode, symbol);
@@ -103,6 +108,55 @@ public class YahooFinanceGateway : IHistoricalDataProvider
         }
 
         return Array.Empty<Candle>();
+    }
+
+    private async Task<HttpResponseMessage> SendAuthenticatedChartRequestAsync(string rawUrl, CancellationToken ct)
+    {
+        // 1. Obtain active session
+        var session = await _sessionManager.GetOrRefreshSessionAsync(forceRefresh: false, ct);
+        string finalUrl = rawUrl;
+        if (session != null && !string.IsNullOrWhiteSpace(session.Crumb))
+        {
+            finalUrl = rawUrl.Contains("?")
+                ? $"{rawUrl}&crumb={Uri.EscapeDataString(session.Crumb)}"
+                : $"{rawUrl}?crumb={Uri.EscapeDataString(session.Crumb)}";
+        }
+
+        using var request1 = new HttpRequestMessage(HttpMethod.Get, finalUrl);
+        if (session != null && !string.IsNullOrWhiteSpace(session.Cookie))
+        {
+            request1.Headers.Add("Cookie", session.Cookie);
+        }
+
+        var response = await _httpClient.SendAsync(request1, ct);
+
+        // 2. If rejected with 401 or 403, invalidate session and retry once with fresh crumb handshake
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+            response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            _logger.LogWarning("[YAHOO FINANCE] Received HTTP {Status}. Invalidating session and retrying with fresh crumb handshake...", response.StatusCode);
+            response.Dispose();
+            _sessionManager.InvalidateSession();
+
+            var refreshedSession = await _sessionManager.GetOrRefreshSessionAsync(forceRefresh: true, ct);
+            string retryUrl = rawUrl;
+            if (refreshedSession != null && !string.IsNullOrWhiteSpace(refreshedSession.Crumb))
+            {
+                retryUrl = rawUrl.Contains("?")
+                    ? $"{rawUrl}&crumb={Uri.EscapeDataString(refreshedSession.Crumb)}"
+                    : $"{rawUrl}?crumb={Uri.EscapeDataString(refreshedSession.Crumb)}";
+            }
+
+            using var request2 = new HttpRequestMessage(HttpMethod.Get, retryUrl);
+            if (refreshedSession != null && !string.IsNullOrWhiteSpace(refreshedSession.Cookie))
+            {
+                request2.Headers.Add("Cookie", refreshedSession.Cookie);
+            }
+
+            return await _httpClient.SendAsync(request2, ct);
+        }
+
+        return response;
     }
 
     private static async Task<List<Candle>> ParseYahooChartResponseAsync(

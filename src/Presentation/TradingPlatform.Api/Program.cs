@@ -288,7 +288,10 @@ marketDataGroup.MapGet("/candles", async (
     return Results.Ok(candles);
 });
 
-marketDataGroup.MapGet("/providers", async (IBrokerConfigurationRepository repo, CancellationToken ct) =>
+marketDataGroup.MapGet("/providers", async (
+    IBrokerConfigurationRepository repo,
+    YahooFinanceSessionManager sessionManager,
+    CancellationToken ct) =>
 {
     var config = await repo.GetConfigurationAsync(ct);
     var providers = new[]
@@ -297,7 +300,7 @@ marketDataGroup.MapGet("/providers", async (IBrokerConfigurationRepository repo,
         {
             Id = "KeylessPublic",
             Name = "Keyless Public (Yahoo Finance FX + Binance Crypto)",
-            Description = "100% Free, zero-setup, multi-timeframe candles (~1m delay). Works out of the box for sharing.",
+            Description = "100% Free, zero-setup, multi-timeframe candles (~1m delay). Authenticated Crumb Session & Auto-Failover active.",
             RequiresKey = false,
             IsConfigured = true,
             SupportedTimeframes = new[] { "M1", "M5", "M15", "M30", "H1", "D1", "W1", "MN1" }
@@ -334,8 +337,19 @@ marketDataGroup.MapGet("/providers", async (IBrokerConfigurationRepository repo,
     return Results.Ok(new
     {
         ActiveProvider = config.ActiveProvider,
+        YahooSession = sessionManager.StatusSummary,
         Providers = providers
     });
+});
+
+marketDataGroup.MapGet("/health", async (
+    IBrokerConfigurationRepository repo,
+    YahooFinanceSessionManager sessionManager,
+    CancellationToken ct) =>
+{
+    var config = await repo.GetConfigurationAsync(ct);
+    var health = CompositeMarketDataProvider.GetHealthStatus(config.ActiveProvider ?? "KeylessPublic", sessionManager.StatusSummary);
+    return Results.Ok(health);
 });
 
 marketDataGroup.MapGet("/symbols", async (
