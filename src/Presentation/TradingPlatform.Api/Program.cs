@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using TradingPlatform.Api.Hosting;
 using TradingPlatform.Application;
@@ -25,6 +26,13 @@ builder.Services.AddRulesEngineServices();
 builder.Services.AddOandaBroker(builder.Configuration);
 builder.Services.AddPublicMarketDataServices();
 builder.Services.AddHostedService<SpaHostedService>();
+
+// Configure HTTP JSON options to seamlessly handle string-based and numeric enums
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    options.SerializerOptions.Converters.Add(new TimeframeJsonConverter());
+});
 
 var app = builder.Build();
 
