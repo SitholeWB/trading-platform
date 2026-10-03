@@ -164,3 +164,26 @@ Traders can set alerts on key breakout levels or support/resistance zones.
    On every incoming tick or candle update, the engine compares the previous price against the current price. When a level is breached:
    - **Zero-Dependency Web Audio Chime ([`audioAlert.ts`](file:///home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Presentation/TradingPlatform.Web/src/utils/audioAlert.ts))**: Synthesizes a crisp two-tone alert chime (A5 880Hz → E6 1318.5Hz) using the browser's native AudioContext. Works 100% offline without external audio files.
    - **Animated Toast Banner**: An animated alert notification bounces onto the screen detailing the symbol, target price, and note.
+
+---
+
+## 7. Dashboard Mini Chart & Advanced Charting Gateway
+
+The main mission control dashboard integrates a live mini chart component ([`DashboardMiniChart.tsx`](file:///home/wb-sithole/.gemini/antigravity/scratch/TradingPlatform/src/Presentation/TradingPlatform.Web/src/components/DashboardMiniChart.tsx)) that acts as an interactive preview and direct gateway to the full workstation:
+
+### Features:
+1. **Live Candlestick / Area Sparkline Preview**:
+   - Renders live market data using the core Lightweight Charts engine.
+   - Shows active symbol, asset category, current market price, price delta, and 24h high/low.
+   - Toggles dynamically between Candlesticks and smooth Area gradient views.
+   - Overlays an EMA 20 trend line directly on the mini canvas.
+2. **Quick Asset & Timeframe Switcher**:
+   - One-click asset chips (`EURUSD`, `GBPUSD`, `USDJPY`, `BTCUSD`, `ETHUSD`, `XAUUSD`, `US500`).
+   - Granular timeframe selectors (`M1`, `M5`, `M15`, `H1`, `D1`).
+3. **Seamless Gateway to Full Workstation**:
+   - Prominent **"Open Advanced Chart"** call-to-action button.
+   - Full chart canvas is interactive and clickable: clicking anywhere on the mini chart opens the full Workstation for that exact symbol and timeframe.
+   - Hover preview banner highlights the 15+ indicators, smart drawing suite, and multi-pane capabilities.
+4. **Advanced Capabilities Showcase Ribbon**:
+   - Displays clear feature badges directly below the mini chart to educate traders on the deep capabilities available in the full workstation (15+ Technical Indicators, Institutional Drawing Suite, Dual Split Multi-Timeframe Views, and On-Chart Drag-and-Drop Order Execution).
+

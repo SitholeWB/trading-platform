@@ -438,6 +438,10 @@ export function App() {
               onNavigateTo={handleNavigateTo}
               selectedSymbol={selectedSymbol}
               currentPrice={currentPrice}
+              candles={candles}
+              timeframe={timeframe}
+              onSelectSymbol={setSelectedSymbol}
+              onSelectTimeframe={setTimeframe}
             />
           )}
 

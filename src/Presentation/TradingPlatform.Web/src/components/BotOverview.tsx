@@ -1,5 +1,14 @@
 import React from 'react';
-import { AccountSummary, Position, RiskProfile, SignalAuditLog, StrategyDefinition } from '../types/trading';
+import {
+  AccountSummary,
+  Position,
+  RiskProfile,
+  SignalAuditLog,
+  StrategyDefinition,
+  Candle,
+  Timeframe,
+} from '../types/trading';
+import { DashboardMiniChart } from './DashboardMiniChart';
 
 interface BotOverviewProps {
   account: AccountSummary | null;
@@ -8,9 +17,13 @@ interface BotOverviewProps {
   positions: Position[];
   auditLogs: SignalAuditLog[];
   onOpenKillSwitch: () => void;
-  onNavigateTo: (page: 'strategies' | 'radar' | 'positions' | 'sandbox' | 'chart') => void;
+  onNavigateTo: (page: 'strategies' | 'radar' | 'positions' | 'sandbox' | 'chart' | 'scanner' | 'dashboard') => void;
   selectedSymbol: string;
   currentPrice: number;
+  candles?: Candle[];
+  timeframe?: Timeframe;
+  onSelectSymbol?: (symbol: string) => void;
+  onSelectTimeframe?: (tf: Timeframe) => void;
 }
 
 export const BotOverview: React.FC<BotOverviewProps> = ({
@@ -23,6 +36,10 @@ export const BotOverview: React.FC<BotOverviewProps> = ({
   onNavigateTo,
   selectedSymbol,
   currentPrice,
+  candles,
+  timeframe,
+  onSelectSymbol,
+  onSelectTimeframe,
 }) => {
   const isKillSwitch = risk?.isKillSwitchEngaged ?? false;
   const activeStrategies = strategies.filter((s) => s.isActive && s.autoTradingEnabled);
@@ -203,6 +220,21 @@ export const BotOverview: React.FC<BotOverviewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Live Market Mini Chart & Advanced Charting Station Gateway */}
+      <DashboardMiniChart
+        candles={candles}
+        selectedSymbol={selectedSymbol}
+        timeframe={timeframe}
+        currentPrice={currentPrice}
+        onNavigateToChart={(sym, tf) => {
+          if (sym && onSelectSymbol) onSelectSymbol(sym);
+          if (tf && onSelectTimeframe) onSelectTimeframe(tf);
+          onNavigateTo('chart');
+        }}
+        onSelectSymbol={onSelectSymbol}
+        onSelectTimeframe={onSelectTimeframe}
+      />
 
       {/* Middle Dual Section: Robot Subsystems & Account Equity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
