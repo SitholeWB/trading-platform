@@ -2,8 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TradingPlatform.Application;
-using TradingPlatform.Application.Commands.IngestCandle;
-using TradingPlatform.Application.Common.CQRS;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Oanda;
 using TradingPlatform.Domain.Entities;
@@ -60,7 +58,7 @@ public class EndToEndPipelineIntegrationTests
         using var scope = serviceProvider.CreateScope();
         var sp = scope.ServiceProvider;
 
-        var mediator = sp.GetRequiredService<IMediator>();
+        var ingestionService = sp.GetRequiredService<ICandleIngestionService>();
         var strategyRepo = sp.GetRequiredService<IStrategyRepository>();
         var bufferService = sp.GetRequiredService<ICandleBufferService>();
         var db = sp.GetRequiredService<TradingDbContext>();
@@ -108,7 +106,7 @@ public class EndToEndPipelineIntegrationTests
             2000m,
             isComplete: true);
 
-        var snapshot = await mediator.Send(new IngestCandleCommand(triggerCandle));
+        var snapshot = await ingestionService.IngestCandleAsync(triggerCandle);
 
         // 4. Assertions
         Assert.NotNull(snapshot);
@@ -143,7 +141,7 @@ public class EndToEndPipelineIntegrationTests
         using var scope = serviceProvider.CreateScope();
         var sp = scope.ServiceProvider;
 
-        var mediator = sp.GetRequiredService<IMediator>();
+        var ingestionService = sp.GetRequiredService<ICandleIngestionService>();
         var strategyRepo = sp.GetRequiredService<IStrategyRepository>();
         var db = sp.GetRequiredService<TradingDbContext>();
 
@@ -163,12 +161,12 @@ public class EndToEndPipelineIntegrationTests
         var candle = new Candle("GBPUSD", Timeframe.M5, candleTime, 1.2500m, 1.2550m, 1.2490m, 1.2530m, 500m, true);
 
         // First ingestion -> executes trade
-        await mediator.Send(new IngestCandleCommand(candle));
+        await ingestionService.IngestCandleAsync(candle);
         var initialOrdersCount = await db.TradeOrders.CountAsync(o => o.Symbol == "GBPUSD");
         Assert.Equal(1, initialOrdersCount);
 
         // Second ingestion with identical timestamp and symbol -> caught by idempotency fingerprint guard
-        await mediator.Send(new IngestCandleCommand(candle));
+        await ingestionService.IngestCandleAsync(candle);
         var secondOrdersCount = await db.TradeOrders.CountAsync(o => o.Symbol == "GBPUSD");
 
         // Order count must remain 1!

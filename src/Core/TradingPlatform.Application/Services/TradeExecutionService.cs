@@ -1,59 +1,42 @@
 using Microsoft.Extensions.Logging;
 using TradingPlatform.AI.Abstractions;
 using TradingPlatform.AI.Abstractions.Models;
-using TradingPlatform.Application.Commands.Risk;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Common.Validation;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
 using TradingPlatform.Broker.Abstractions.Models;
 using TradingPlatform.Domain.Entities;
 using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Events;
 using TradingPlatform.Domain.Models;
 
-namespace TradingPlatform.Application.Commands.ExecuteTrade;
+namespace TradingPlatform.Application.Services;
 
-public record ExecuteTradeSignalCommand(SignalResult Signal) : ICommand<ExecutionResult>;
-
-public class ExecuteTradeSignalCommandValidator : AbstractValidator<ExecuteTradeSignalCommand>
-{
-    public ExecuteTradeSignalCommandValidator()
-    {
-        RuleFor(x => x.Signal).NotNull("Signal cannot be null.");
-        RuleFor(x => x.Signal.Symbol).NotEmpty("Signal symbol is required.");
-        RuleFor(x => x.Signal.EntryPrice).GreaterThan(0m, "Entry price must be positive.");
-    }
-}
-
-public class ExecuteTradeSignalCommandHandler : IRequestHandler<ExecuteTradeSignalCommand, ExecutionResult>
+public class TradeExecutionService : ITradeExecutionService
 {
     private readonly ISignalAuditRepository _auditRepository;
     private readonly ITradeRepository _tradeRepository;
     private readonly IOrderExecutionService _orderExecutionService;
     private readonly IAIReasoningService _aiReasoningService;
-    private readonly IMediator _mediator;
-    private readonly ILogger<ExecuteTradeSignalCommandHandler> _logger;
+    private readonly IRiskPolicyService _riskPolicyService;
+    private readonly ILogger<TradeExecutionService> _logger;
 
-    public ExecuteTradeSignalCommandHandler(
+    public TradeExecutionService(
         ISignalAuditRepository auditRepository,
         ITradeRepository tradeRepository,
         IOrderExecutionService orderExecutionService,
         IAIReasoningService aiReasoningService,
-        IMediator mediator,
-        ILogger<ExecuteTradeSignalCommandHandler> logger)
+        IRiskPolicyService riskPolicyService,
+        ILogger<TradeExecutionService> logger)
     {
         _auditRepository = auditRepository;
         _tradeRepository = tradeRepository;
         _orderExecutionService = orderExecutionService;
         _aiReasoningService = aiReasoningService;
-        _mediator = mediator;
+        _riskPolicyService = riskPolicyService;
         _logger = logger;
     }
 
-    public async Task<ExecutionResult> Handle(ExecuteTradeSignalCommand request, CancellationToken ct)
+    public async Task<ExecutionResult> ExecuteSignalAsync(SignalResult signal, CancellationToken ct = default)
     {
-        var signal = request.Signal;
         var fingerprint = $"{signal.Symbol}_{signal.Timeframe}_{signal.CandleTimestamp:yyyyMMddHHmm}_{signal.StrategyId}";
 
         // Step 1: Idempotency & De-duplication Check
@@ -63,9 +46,9 @@ public class ExecuteTradeSignalCommandHandler : IRequestHandler<ExecuteTradeSign
             return ExecutionResult.Failed($"Duplicate signal detected for fingerprint: {fingerprint}");
         }
 
-        // Step 2: Risk Policy Pipeline Check
+        // Step 2: Risk Policy Pipeline Check via Direct Service Call
         const decimal defaultLotSize = 0.10m; // Default micro/mini lot
-        var riskResult = await _mediator.Send(new ValidateRiskPolicyCommand(signal.Symbol, signal.RecommendedOrderType, defaultLotSize), ct);
+        var riskResult = await _riskPolicyService.ValidatePolicyAsync(signal.Symbol, signal.RecommendedOrderType, defaultLotSize, ct: ct);
         if (!riskResult.IsPassed)
         {
             _logger.LogWarning("[RISK REJECTION] Trade signal rejected by risk engine: {Reason}", riskResult.RejectionReason);
@@ -87,7 +70,7 @@ public class ExecuteTradeSignalCommandHandler : IRequestHandler<ExecuteTradeSign
         if (signal.AiValidationEnabled)
         {
             _logger.LogInformation("[AI VALIDATION] Strategy '{Strategy}' has AI validation enabled. Querying AI Reasoning Service...", signal.StrategyName);
-            
+
             var dummyNews = new List<NewsHeadline>
             {
                 new("Market session summary", "Reuters", DateTime.UtcNow.AddMinutes(-10), 0.1m, "Low", new[] { signal.Symbol })

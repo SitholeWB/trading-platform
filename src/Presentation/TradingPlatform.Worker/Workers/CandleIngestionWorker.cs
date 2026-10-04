@@ -1,8 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Commands.IngestCandle;
-using TradingPlatform.Application.Common.CQRS;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
 using TradingPlatform.Domain.Entities;
@@ -43,10 +41,10 @@ public class CandleIngestionWorker : BackgroundService
         _streamer.OnCandleClosed += async candle =>
         {
             using var scope = _serviceProvider.CreateScope();
-            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            var ingestionService = scope.ServiceProvider.GetRequiredService<ICandleIngestionService>();
             try
             {
-                await mediator.Send(new IngestCandleCommand(candle), stoppingToken);
+                await ingestionService.IngestCandleAsync(candle, stoppingToken);
             }
             catch (Exception ex)
             {
@@ -90,11 +88,11 @@ public class CandleIngestionWorker : BackgroundService
 
                 using (var scope = _serviceProvider.CreateScope())
                 {
-                    var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+                    var ingestionService = scope.ServiceProvider.GetRequiredService<ICandleIngestionService>();
                     _logger.LogInformation("[WORKER: SIMULATOR] Injecting synthetic M5 candle for EURUSD: O={O} H={H} L={L} C={C}",
                         open, high, low, close);
 
-                    await mediator.Send(new IngestCandleCommand(completedCandle), stoppingToken);
+                    await ingestionService.IngestCandleAsync(completedCandle, stoppingToken);
                 }
             }
             catch (OperationCanceledException)

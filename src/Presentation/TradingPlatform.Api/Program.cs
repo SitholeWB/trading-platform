@@ -2,10 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using TradingPlatform.Api.Hosting;
 using TradingPlatform.Application;
-using TradingPlatform.Application.Commands.IngestCandle;
-using TradingPlatform.Application.Common.CQRS;
 using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Application.Queries;
 using TradingPlatform.Broker.Abstractions;
 using TradingPlatform.Broker.Abstractions.Models;
 using TradingPlatform.Broker.Oanda;
@@ -56,15 +53,15 @@ if (app.Environment.IsDevelopment())
 // ----------------------------------------------------
 var strategiesGroup = app.MapGroup("/api/strategies").WithTags("Strategies");
 
-strategiesGroup.MapGet("/", async (IMediator mediator, CancellationToken ct) =>
+strategiesGroup.MapGet("/", async (IStrategyRepository repo, CancellationToken ct) =>
 {
-    var list = await mediator.Send(new GetStrategiesQuery(), ct);
+    var list = await repo.GetAllAsync(ct);
     return Results.Ok(list);
 });
 
-strategiesGroup.MapGet("/{id:guid}", async (Guid id, IMediator mediator, CancellationToken ct) =>
+strategiesGroup.MapGet("/{id:guid}", async (IStrategyRepository repo, Guid id, CancellationToken ct) =>
 {
-    var strategy = await mediator.Send(new GetStrategyByIdQuery(id), ct);
+    var strategy = await repo.GetByIdAsync(id, ct);
     return strategy != null ? Results.Ok(strategy) : Results.NotFound();
 });
 
@@ -119,10 +116,10 @@ strategiesGroup.MapDelete("/{id:guid}", async (Guid id, IStrategyRepository repo
 // ----------------------------------------------------
 var auditsGroup = app.MapGroup("/api/audit-logs").WithTags("Audit Logs & Near-Misses");
 
-auditsGroup.MapGet("/", async ([FromQuery] int? count, IMediator mediator, CancellationToken ct) =>
+auditsGroup.MapGet("/", async ([FromQuery] int? count, ISignalAuditRepository repo, CancellationToken ct) =>
 {
     int limit = count.HasValue && count.Value > 0 ? count.Value : 50;
-    var logs = await mediator.Send(new GetRecentSignalAuditLogsQuery(limit), ct);
+    var logs = await repo.GetRecentAsync(limit, ct);
     return Results.Ok(logs);
 });
 
@@ -137,9 +134,9 @@ auditsGroup.MapGet("/{fingerprint}", async (string fingerprint, ISignalAuditRepo
 // ----------------------------------------------------
 var positionsGroup = app.MapGroup("/api/positions").WithTags("Positions");
 
-positionsGroup.MapGet("/", async (IMediator mediator, CancellationToken ct) =>
+positionsGroup.MapGet("/", async (ITradeRepository repo, CancellationToken ct) =>
 {
-    var positions = await mediator.Send(new GetOpenPositionsQuery(), ct);
+    var positions = await repo.GetOpenPositionsAsync(ct);
     return Results.Ok(positions);
 });
 
@@ -220,9 +217,9 @@ positionsGroup.MapPost("/{ticket:long}/modify", async (long ticket, [FromBody] M
 // ----------------------------------------------------
 var riskGroup = app.MapGroup("/api/risk").WithTags("Risk Management");
 
-riskGroup.MapGet("/", async (IMediator mediator, CancellationToken ct) =>
+riskGroup.MapGet("/", async (IRiskProfileRepository repo, CancellationToken ct) =>
 {
-    var profile = await mediator.Send(new GetRiskProfileQuery(), ct);
+    var profile = await repo.GetOrCreateProfileAsync(ct);
     return Results.Ok(profile);
 });
 
@@ -259,16 +256,16 @@ riskGroup.MapPost("/kill-switch", async ([FromBody] KillSwitchToggleDto dto, IRi
 // ----------------------------------------------------
 // 5. Account & Heartbeat Endpoints
 // ----------------------------------------------------
-app.MapGet("/api/account", async (IMediator mediator, CancellationToken ct) =>
+app.MapGet("/api/account", async (IOrderExecutionService broker, CancellationToken ct) =>
 {
-    var summary = await mediator.Send(new GetAccountSummaryQuery(), ct);
+    var summary = await broker.GetAccountSummaryAsync(ct);
     return Results.Ok(summary);
 }).WithTags("Account");
 
 // ----------------------------------------------------
 // 6. Candle Simulation / Ingestion Testing Endpoint
 // ----------------------------------------------------
-app.MapPost("/api/simulation/candle", async ([FromBody] IngestCandleDto dto, IMediator mediator, CancellationToken ct) =>
+app.MapPost("/api/simulation/candle", async ([FromBody] IngestCandleDto dto, ICandleIngestionService ingestionService, CancellationToken ct) =>
 {
     var candle = new Candle(
         dto.Symbol,
@@ -281,7 +278,7 @@ app.MapPost("/api/simulation/candle", async ([FromBody] IngestCandleDto dto, IMe
         dto.Volume,
         dto.IsComplete);
 
-    var snapshot = await mediator.Send(new IngestCandleCommand(candle), ct);
+    var snapshot = await ingestionService.IngestCandleAsync(candle, ct);
     return Results.Ok(new
     {
         CandleIngested = candle,
