@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { tradingApi } from '../api/tradingClient';
+import { AIProviderConfig } from '../types/trading';
+import { ShieldCheck, Cpu, Database, Globe } from 'lucide-react';
 
 interface BrokerSettingsModalProps {
   isOpen: boolean;
@@ -12,6 +14,9 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
   onClose,
   onProviderChanged,
 }) => {
+  const [modalTab, setModalTab] = useState<'broker' | 'ai'>('broker');
+
+  // Broker Settings
   const [activeProvider, setActiveProvider] = useState<string>('KeylessPublic');
   const [oandaAccountId, setOandaAccountId] = useState('');
   const [oandaApiToken, setOandaApiToken] = useState('');
@@ -20,6 +25,18 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
   const [hasExistingToken, setHasExistingToken] = useState(false);
   const [maskedToken, setMaskedToken] = useState('');
   const [showToken, setShowToken] = useState(false);
+
+  // AI BYOK Settings
+  const [aiConfig, setAiConfig] = useState<AIProviderConfig>({
+    provider: 'BuiltIn',
+    model: 'Built-in Quant Engine',
+    hasApiKey: false,
+  });
+  const [selectedAiProvider, setSelectedAiProvider] = useState('BuiltIn');
+  const [aiApiKeyInput, setAiApiKeyInput] = useState('');
+  const [aiModelInput, setAiModelInput] = useState('');
+  const [aiEndpointInput, setAiEndpointInput] = useState('');
+  const [aiStatusMessage, setAiStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -43,8 +60,15 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
         setMaskedToken(res.maskedOandaToken || '');
         setOandaApiToken('');
       }
+      const ai = await tradingApi.getAiConfig();
+      if (ai) {
+        setAiConfig(ai);
+        setSelectedAiProvider(ai.provider || 'BuiltIn');
+        setAiModelInput(ai.model || '');
+        setAiEndpointInput(ai.endpoint || '');
+      }
     } catch (err) {
-      console.warn('Failed to load broker settings:', err);
+      console.warn('Failed to load settings:', err);
     } finally {
       setIsLoading(false);
     }
@@ -82,6 +106,43 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
     }
   };
 
+  const handleSaveAi = async () => {
+    try {
+      setIsLoading(true);
+      setStatusMessage(null);
+      const keyToSave = aiApiKeyInput.trim()
+        ? aiApiKeyInput.trim()
+        : (selectedAiProvider === aiConfig.provider ? aiConfig.apiKey : null);
+
+      const updated = await tradingApi.updateAiConfig({
+        provider: selectedAiProvider,
+        model: aiModelInput || null,
+        apiKey: keyToSave,
+        endpoint: aiEndpointInput || null,
+      });
+      setAiConfig(updated);
+      setAiApiKeyInput('');
+      setStatusMessage({ text: 'AI BYOK credentials saved in browser storage!', type: 'success' });
+      setTimeout(() => {
+        onClose();
+        setStatusMessage(null);
+      }, 1000);
+    } catch (err: any) {
+      setStatusMessage({ text: err.message || 'Failed to save AI settings', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAiProviderSelect = (prov: string) => {
+    setSelectedAiProvider(prov);
+    if (prov === 'OpenAI') setAiModelInput('gpt-4o');
+    else if (prov === 'Claude') setAiModelInput('claude-3-5-sonnet-20241022');
+    else if (prov === 'Gemini') setAiModelInput('gemini-1.5-pro');
+    else if (prov === 'Ollama') setAiModelInput('llama3.2');
+    else setAiModelInput('');
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -93,10 +154,10 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
             <span className="text-xl">⚙️</span>
             <div>
               <h2 className="text-sm font-bold text-slate-100 tracking-wide uppercase font-mono">
-                Market Data & Broker Settings
+                Platform Settings & Connections
               </h2>
               <p className="text-[11px] text-slate-400">
-                Configure keyless public data feeds, custom broker API tokens, and desktop database
+                Configure keyless public data feeds, custom broker credentials, and Bring Your Own Key AI providers
               </p>
             </div>
           </div>
@@ -105,6 +166,34 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
             className="text-slate-400 hover:text-slate-200 text-lg leading-none p-1 rounded-lg hover:bg-slate-800 transition-colors"
           >
             ✕
+          </button>
+        </div>
+
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-slate-800 bg-slate-950/40 px-6 pt-2">
+          <button
+            type="button"
+            onClick={() => { setModalTab('broker'); setStatusMessage(null); }}
+            className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+              modalTab === 'broker'
+                ? 'border-blue-500 text-blue-300'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            Market Data & Broker Feeds
+          </button>
+          <button
+            type="button"
+            onClick={() => { setModalTab('ai'); setStatusMessage(null); }}
+            className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+              modalTab === 'ai'
+                ? 'border-cyan-500 text-cyan-300'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            AI Copilot (BYOK Keys)
           </button>
         </div>
 
@@ -123,203 +212,342 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
             </div>
           )}
 
-          {/* Section 1: Choose Active Provider */}
-          <div className="space-y-3">
-            <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block font-mono">
-              1. Active Market Data Feed
-            </label>
+          {modalTab === 'broker' ? (
+            <>
+              {/* Section 1: Choose Active Provider */}
+              <div className="space-y-3">
+                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block font-mono">
+                  1. Active Market Data Feed
+                </label>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Option 1: Keyless Public */}
-              <div
-                onClick={() => setActiveProvider('KeylessPublic')}
-                className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                  activeProvider === 'KeylessPublic'
-                    ? 'bg-blue-600/15 border-blue-500 ring-1 ring-blue-500/50'
-                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2 font-bold text-slate-100">
-                    <span>🌐</span>
-                    <span>Keyless Public</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Option 1: Keyless Public */}
+                  <div
+                    onClick={() => setActiveProvider('KeylessPublic')}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                      activeProvider === 'KeylessPublic'
+                        ? 'bg-blue-600/15 border-blue-500 ring-1 ring-blue-500/50'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 font-bold text-slate-100">
+                        <span>🌐</span>
+                        <span>Keyless Public</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        No Keys Needed
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Yahoo Finance for Forex (EURUSD, GBPUSD, etc.) + Binance 24/7 for Crypto. Works instantly out-of-the-box for sharing with others.
+                    </p>
                   </div>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    No Keys Needed
+
+                  {/* Option 2: OANDA */}
+                  <div
+                    onClick={() => setActiveProvider('Oanda')}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                      activeProvider === 'Oanda'
+                        ? 'bg-blue-600/15 border-blue-500 ring-1 ring-blue-500/50'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 font-bold text-slate-100">
+                        <span>⚡</span>
+                        <span>OANDA v20 Broker</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        Requires API Token
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Direct institutional broker stream and order execution. Practice and Live accounts supported.
+                    </p>
+                  </div>
+
+                  {/* Option 3: MT5 ZeroMQ */}
+                  <div
+                    onClick={() => setActiveProvider('ZeroMQ')}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                      activeProvider === 'ZeroMQ'
+                        ? 'bg-blue-600/15 border-blue-500 ring-1 ring-blue-500/50'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 font-bold text-slate-100">
+                        <span>🖥️</span>
+                        <span>MT5 Local Bridge</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                        NetMQ Local
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Streams ticks and bars directly from your running desktop MetaTrader 5 terminal over local port 5556.
+                    </p>
+                  </div>
+
+                  {/* Option 4: Synthetic Sandbox */}
+                  <div
+                    onClick={() => setActiveProvider('Synthetic')}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                      activeProvider === 'Synthetic'
+                        ? 'bg-blue-600/15 border-blue-500 ring-1 ring-blue-500/50'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 font-bold text-slate-100">
+                        <span>🔬</span>
+                        <span>Offline Sandbox</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                        Synthetic
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Internal price generator. Runs without any network connectivity or external dependency.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Broker API Keys Configuration */}
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-200 uppercase tracking-wider font-mono">
+                    2. Broker Credentials (OANDA / Custom Feeds)
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    {hasExistingToken ? '● Token Configured in Database' : '○ No Token Stored'}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Yahoo Finance for Forex (EURUSD, GBPUSD, etc.) + Binance 24/7 for Crypto. Works instantly out-of-the-box for sharing with others.
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1 font-mono">
+                      OANDA Account ID
+                    </label>
+                    <input
+                      type="text"
+                      value={oandaAccountId}
+                      onChange={(e) => setOandaAccountId(e.target.value)}
+                      placeholder="e.g. 101-004-1234567-001"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1 font-mono">
+                      OANDA Environment
+                    </label>
+                    <select
+                      value={oandaEnvironment}
+                      onChange={(e) => setOandaEnvironment(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="Practice">Practice (Demo Account)</option>
+                      <option value="Trade">Trade (Live Production)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-slate-400 font-mono">
+                      OANDA v20 Bearer API Token
+                    </label>
+                    {hasExistingToken && (
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        Current: {maskedToken}
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showToken ? 'text' : 'password'}
+                      value={oandaApiToken}
+                      onChange={(e) => setOandaApiToken(e.target.value)}
+                      placeholder={hasExistingToken ? 'Leave blank to keep existing token' : 'Paste your OANDA token here'}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 pr-16 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowToken(!showToken)}
+                      className="absolute right-2 top-2 text-[10px] text-slate-400 hover:text-slate-200 font-mono px-2 py-0.5 bg-slate-800 rounded"
+                    >
+                      {showToken ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Architecture & Database Notice */}
+              <div className="bg-blue-950/20 border border-blue-900/40 rounded-xl p-3.5 space-y-1 text-slate-400 text-[11px]">
+                <div className="flex items-center gap-2 text-blue-300 font-semibold font-mono text-xs">
+                  <span>💾</span>
+                  <span>Desktop & Web Deployment Mode</span>
+                </div>
+                <p>
+                  This platform supports <strong className="text-slate-200">SQLite</strong> (<code className="text-blue-300">trading_platform.db</code>) for standalone, zero-configuration local desktop execution on Ubuntu/Linux/Windows, as well as <strong className="text-slate-200">SQL Server</strong> for enterprise multi-user Web hosting.
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* AI Copilot Bring Your Own Key Configuration */}
+              <div className="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-800/40 space-y-2">
+                <div className="flex items-center gap-2 text-indigo-300 font-semibold text-xs">
+                  <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                  <span>Bring Your Own Key (BYOK) — Zero Server Billing Policy</span>
+                </div>
+                <p className="text-slate-400 leading-relaxed text-[11.5px]">
+                  All AI keys are stored purely in your browser's private local storage. Requests to OpenAI, Claude, Gemini, or Ollama execute solely with your personal quota and billing. The platform host pays nothing on your behalf, and you maintain complete control of your AI costs.
                 </p>
               </div>
 
-              {/* Option 2: OANDA */}
-              <div
-                onClick={() => setActiveProvider('Oanda')}
-                className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                  activeProvider === 'Oanda'
-                    ? 'bg-blue-600/15 border-blue-500 ring-1 ring-blue-500/50'
-                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2 font-bold text-slate-100">
+              {/* Provider Selection */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block font-mono">
+                    Select AI Provider
+                  </label>
+                  <span className="text-[10px] text-cyan-400 font-mono">
+                    Active in Browser: <strong>{aiConfig.provider}</strong>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {[
+                    { id: 'BuiltIn', label: '🧠 Built-in', desc: '100% Free & Offline' },
+                    { id: 'OpenAI', label: '🟢 OpenAI', desc: 'GPT-4o, Mini' },
+                    { id: 'Claude', label: '🟣 Claude', desc: 'Sonnet 3.5' },
+                    { id: 'Gemini', label: '🔵 Gemini', desc: '1.5 Pro / Flash' },
+                    { id: 'Ollama', label: '🦙 Ollama', desc: 'Local Self-Hosted' },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleAiProviderSelect(p.id)}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        selectedAiProvider === p.id
+                          ? 'bg-cyan-950/80 border-cyan-500 text-cyan-200 ring-1 ring-cyan-500/50 shadow-sm'
+                          : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="font-semibold text-xs">{p.label}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">{p.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {selectedAiProvider === 'BuiltIn' ? (
+                <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+                  <div className="flex items-center gap-2 text-cyan-300 font-semibold text-xs">
                     <span>⚡</span>
-                    <span>OANDA v20 Broker</span>
+                    <span>Built-in Algorithmic Quant Engine</span>
                   </div>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                    Requires API Token
-                  </span>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Operates deterministically inside the server application using multi-timeframe mathematical analysis (EMA crosses, RSI regimes, ATR dynamic bands, Ichimoku cloud breakout detection). Requires zero API keys and never incurs API token costs.
+                  </p>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Direct institutional broker stream and order execution. Practice and Live accounts supported.
-                </p>
-              </div>
+              ) : (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3.5">
+                  <span className="text-[11px] font-bold text-slate-200 uppercase tracking-wider font-mono block">
+                    {selectedAiProvider} Credentials (BYOK)
+                  </span>
 
-              {/* Option 3: MT5 ZeroMQ */}
-              <div
-                onClick={() => setActiveProvider('ZeroMQ')}
-                className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                  activeProvider === 'ZeroMQ'
-                    ? 'bg-blue-600/15 border-blue-500 ring-1 ring-blue-500/50'
-                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2 font-bold text-slate-100">
-                    <span>🖥️</span>
-                    <span>MT5 Local Bridge</span>
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1 font-mono uppercase">
+                      Model Identifier:
+                    </label>
+                    <input
+                      type="text"
+                      value={aiModelInput}
+                      onChange={(e) => setAiModelInput(e.target.value)}
+                      placeholder={
+                        selectedAiProvider === 'OpenAI'
+                          ? 'gpt-4o'
+                          : selectedAiProvider === 'Claude'
+                          ? 'claude-3-5-sonnet-20241022'
+                          : selectedAiProvider === 'Gemini'
+                          ? 'gemini-1.5-pro'
+                          : 'llama3.2'
+                      }
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500"
+                    />
                   </div>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                    NetMQ Local
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Streams ticks and bars directly from your running desktop MetaTrader 5 terminal over local port 5556.
-                </p>
-              </div>
 
-              {/* Option 4: Synthetic Sandbox */}
-              <div
-                onClick={() => setActiveProvider('Synthetic')}
-                className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                  activeProvider === 'Synthetic'
-                    ? 'bg-blue-600/15 border-blue-500 ring-1 ring-blue-500/50'
-                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2 font-bold text-slate-100">
-                    <span>🔬</span>
-                    <span>Offline Sandbox</span>
+                  {selectedAiProvider !== 'Ollama' && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] text-slate-400 font-mono uppercase">
+                          Your Personal API Key:
+                        </label>
+                        {aiConfig.hasApiKey && (
+                          <span className="text-[10px] text-emerald-400 font-mono">
+                            Stored in Browser: {aiConfig.maskedApiKey}
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="password"
+                        value={aiApiKeyInput}
+                        onChange={(e) => setAiApiKeyInput(e.target.value)}
+                        placeholder={aiConfig.hasApiKey ? 'Leave blank to preserve stored key' : 'Enter your API key (e.g. sk-...)'}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1 font-mono uppercase">
+                      Custom Endpoint URL (Optional):
+                    </label>
+                    <input
+                      type="text"
+                      value={aiEndpointInput}
+                      onChange={(e) => setAiEndpointInput(e.target.value)}
+                      placeholder={
+                        selectedAiProvider === 'Ollama'
+                          ? 'http://localhost:11434'
+                          : 'Leave blank to use official API gateway'
+                      }
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500"
+                    />
                   </div>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                    Synthetic
-                  </span>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Internal price generator. Runs without any network connectivity or external dependency.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Broker API Keys Configuration */}
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-200 uppercase tracking-wider font-mono">
-                2. Broker Credentials (OANDA / Custom Feeds)
-              </span>
-              <span className="text-[10px] text-slate-500">
-                {hasExistingToken ? '● Token Configured in Database' : '○ No Token Stored'}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1 font-mono">
-                  OANDA Account ID
-                </label>
-                <input
-                  type="text"
-                  value={oandaAccountId}
-                  onChange={(e) => setOandaAccountId(e.target.value)}
-                  placeholder="e.g. 101-004-1234567-001"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1 font-mono">
-                  OANDA Environment
-                </label>
-                <select
-                  value={oandaEnvironment}
-                  onChange={(e) => setOandaEnvironment(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"
-                >
-                  <option value="Practice">Practice (Demo Account)</option>
-                  <option value="Trade">Trade (Live Production)</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] text-slate-400 font-mono">
-                  OANDA v20 Bearer API Token
-                </label>
-                {hasExistingToken && (
-                  <span className="text-[10px] text-slate-500 font-mono">
-                    Current: {maskedToken}
-                  </span>
-                )}
-              </div>
-              <div className="relative">
-                <input
-                  type={showToken ? 'text' : 'password'}
-                  value={oandaApiToken}
-                  onChange={(e) => setOandaApiToken(e.target.value)}
-                  placeholder={hasExistingToken ? 'Leave blank to keep existing token' : 'Paste your OANDA token here'}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 pr-16 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute right-2 top-2 text-[10px] text-slate-400 hover:text-slate-200 font-mono px-2 py-0.5 bg-slate-800 rounded"
-                >
-                  {showToken ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: Architecture & Database Notice */}
-          <div className="bg-blue-950/20 border border-blue-900/40 rounded-xl p-3.5 space-y-1 text-slate-400 text-[11px]">
-            <div className="flex items-center gap-2 text-blue-300 font-semibold font-mono text-xs">
-              <span>💾</span>
-              <span>Desktop & Web Deployment Mode</span>
-            </div>
-            <p>
-              This platform supports <strong className="text-slate-200">SQLite</strong> (<code className="text-blue-300">trading_platform.db</code>) for standalone, zero-configuration local desktop execution on Ubuntu/Linux/Windows, as well as <strong className="text-slate-200">SQL Server</strong> for enterprise multi-user Web hosting.
-            </p>
-          </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Footer Actions */}
         <div className="px-6 py-3.5 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={modalTab === 'broker' ? handleSave : handleSaveAi}
             disabled={isLoading}
-            className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
+            className={`px-5 py-2 rounded-lg text-white text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50 ${
+              modalTab === 'broker'
+                ? 'bg-blue-600 hover:bg-blue-500'
+                : 'bg-cyan-600 hover:bg-cyan-500'
+            }`}
           >
-            {isLoading ? 'Saving...' : 'Apply & Save Settings'}
+            {isLoading
+              ? 'Saving...'
+              : modalTab === 'broker'
+              ? 'Apply & Save Broker Settings'
+              : 'Save AI BYOK Settings'}
           </button>
         </div>
       </div>

@@ -395,10 +395,11 @@ export interface CopilotChatResult {
 }
 
 export interface AIProviderConfig {
-  provider: string;
+  provider: 'BuiltIn' | 'OpenAI' | 'Claude' | 'Gemini' | 'Ollama' | string;
   model?: string | null;
   apiKey?: string | null;
   endpoint?: string | null;
-  hasApiKey: boolean;
+  hasApiKey?: boolean;
   maskedApiKey?: string | null;
 }
+

@@ -52,18 +52,18 @@ public record CopilotChatResult(
 
 public record AIProviderConfig(
     string Provider,
-    string? Model,
-    string? ApiKey,
-    string? Endpoint,
+    string? Model = null,
+    string? ApiKey = null,
+    string? Endpoint = null,
     bool HasApiKey = false,
     string? MaskedApiKey = null);
 
 public interface IAIEngineService
 {
-    Task<GeneratedStrategyResult> GenerateStrategyAsync(string userPrompt, string? targetTimeframe = null, CancellationToken ct = default);
+    Task<GeneratedStrategyResult> GenerateStrategyAsync(string userPrompt, string? targetTimeframe = null, AIProviderConfig? providerConfig = null, CancellationToken ct = default);
     Task<MarketAnalysisResult> AnalyzeMarketAsync(string symbol, string timeframe, MarketSnapshot snapshot, CancellationToken ct = default);
     Task<AuditExplanationResult> ExplainAuditAsync(SignalAuditLog auditLog, CancellationToken ct = default);
-    Task<CopilotChatResult> ChatAsync(string message, AICopilotContext context, CancellationToken ct = default);
+    Task<CopilotChatResult> ChatAsync(string message, AICopilotContext context, AIProviderConfig? providerConfig = null, CancellationToken ct = default);
     AIProviderConfig GetConfig();
     void UpdateConfig(AIProviderConfig config);
 }

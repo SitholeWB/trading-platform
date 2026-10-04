@@ -149,19 +149,23 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     setIsSavingConfig(true);
     setConfigFeedback(null);
     try {
+      const keyToSave = apiKeyInput.trim()
+        ? apiKeyInput.trim()
+        : (selectedProvider === aiConfig.provider ? aiConfig.apiKey : null);
+
       const updated = await tradingApi.updateAiConfig({
         provider: selectedProvider,
         model: modelInput || null,
-        apiKey: apiKeyInput || null,
+        apiKey: keyToSave,
         endpoint: endpointInput || null,
       });
       setAiConfig(updated);
       setApiKeyInput('');
-      setConfigFeedback('✓ Saved & active!');
+      setConfigFeedback('✓ Saved in browser & active!');
       setTimeout(() => {
         setConfigFeedback(null);
         setShowConfig(false);
-      }, 1200);
+      }, 1400);
     } catch (err: any) {
       setConfigFeedback(`Failed: ${err?.message || 'Error saving'}`);
     } finally {
@@ -367,10 +371,20 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
 
           {selectedProvider === 'BuiltIn' ? (
             <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
-              ⚡ <strong>Built-in Quant Engine:</strong> 100% offline, zero API keys required, instant sub-millisecond strategy synthesis and technical diagnostics.
+              ⚡ <strong>Built-in Quant Engine (Free):</strong> 100% offline, zero API keys required, instant sub-millisecond strategy synthesis and technical diagnostics.
             </div>
           ) : (
             <div className="space-y-2.5 text-xs">
+              <div className="p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-800/50 text-[11px] text-slate-300 space-y-1">
+                <div className="flex items-center gap-1.5 text-indigo-300 font-semibold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Bring Your Own Key (BYOK) — Zero Server Billing</span>
+                </div>
+                <p className="text-slate-400 leading-relaxed text-[10.5px]">
+                  Your API key is stored safely in your browser's private local storage. Requests use your own provider account quota so you maintain full control of your AI budget.
+                </p>
+              </div>
+
               <div>
                 <label className="text-[10px] text-slate-400 font-mono uppercase block mb-1">
                   Model Name:
@@ -395,7 +409,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
               {selectedProvider !== 'Ollama' && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-slate-400 font-mono uppercase">API Key:</label>
+                    <label className="text-[10px] text-slate-400 font-mono uppercase">API Key (Stored in Browser):</label>
                     {aiConfig.hasApiKey && (
                       <span className="text-[10px] text-emerald-400 font-mono">
                         Saved: {aiConfig.maskedApiKey}

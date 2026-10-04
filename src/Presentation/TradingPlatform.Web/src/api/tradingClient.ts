@@ -44,6 +44,67 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   }
 }
 
+const AI_CONFIG_KEY = 'tp_ai_config';
+
+export function getUserAiConfig(): AIProviderConfig {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(AI_CONFIG_KEY) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        const hasKey = Boolean(parsed.apiKey && String(parsed.apiKey).trim().length > 0);
+        const apiKeyStr = String(parsed.apiKey || '');
+        const masked = hasKey && apiKeyStr.length > 8
+          ? `${apiKeyStr.slice(0, 4)}...${apiKeyStr.slice(-4)}`
+          : (hasKey ? '****' : null);
+        return {
+          provider: parsed.provider || 'BuiltIn',
+          model: parsed.model || null,
+          apiKey: parsed.apiKey || null,
+          endpoint: parsed.endpoint || null,
+          hasApiKey: hasKey,
+          maskedApiKey: masked,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[AI Config] Failed to parse localStorage ai config:', err);
+  }
+  return {
+    provider: 'BuiltIn',
+    model: 'Built-in Quant Engine',
+    hasApiKey: false,
+    maskedApiKey: null,
+  };
+}
+
+export function saveUserAiConfig(config: Partial<AIProviderConfig>): AIProviderConfig {
+  try {
+    const current = getUserAiConfig();
+    const updated: AIProviderConfig = {
+      provider: config.provider || current.provider || 'BuiltIn',
+      model: config.model !== undefined ? config.model : current.model,
+      apiKey: config.apiKey !== undefined ? config.apiKey : current.apiKey,
+      endpoint: config.endpoint !== undefined ? config.endpoint : current.endpoint,
+    };
+    const hasKey = Boolean(updated.apiKey && String(updated.apiKey).trim().length > 0);
+    const apiKeyStr = String(updated.apiKey || '');
+    const masked = hasKey && apiKeyStr.length > 8
+      ? `${apiKeyStr.slice(0, 4)}...${apiKeyStr.slice(-4)}`
+      : (hasKey ? '****' : null);
+    updated.hasApiKey = hasKey;
+    updated.maskedApiKey = masked;
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(updated));
+    }
+    return updated;
+  } catch (err) {
+    console.error('[AI Config] Failed to save localStorage ai config:', err);
+    throw err;
+  }
+}
+
 export const tradingApi = {
   // Strategies
   getStrategies: async (): Promise<StrategyDefinition[]> => {
@@ -314,12 +375,29 @@ export const tradingApi = {
       method: 'POST',
     }),
 
-  // AI Engine & Copilot
-  generateStrategyAi: (prompt: string, timeframe?: string) =>
-    request<GeneratedStrategyResult>('/ai/generate-strategy', {
+  // AI Engine & Copilot (Bring Your Own Key - BYOK)
+  getAiConfig: async (): Promise<AIProviderConfig> => {
+    return getUserAiConfig();
+  },
+  updateAiConfig: async (config: Partial<AIProviderConfig>): Promise<AIProviderConfig> => {
+    const saved = saveUserAiConfig(config);
+    try {
+      await request<AIProviderConfig>('/ai/config', {
+        method: 'POST',
+        body: JSON.stringify(saved),
+      });
+    } catch {
+      // Backend config update is best-effort; keys are sent per-request from browser storage
+    }
+    return saved;
+  },
+  generateStrategyAi: (prompt: string, timeframe?: string, providerConfig?: AIProviderConfig) => {
+    const config = providerConfig ?? getUserAiConfig();
+    return request<GeneratedStrategyResult>('/ai/generate-strategy', {
       method: 'POST',
-      body: JSON.stringify({ prompt, timeframe }),
-    }),
+      body: JSON.stringify({ prompt, timeframe, providerConfig: config }),
+    });
+  },
   analyzeMarketAi: (symbol: string, timeframe: string) =>
     request<MarketAnalysisResult>('/ai/analyze-market', {
       method: 'POST',
@@ -330,18 +408,13 @@ export const tradingApi = {
       method: 'POST',
       body: JSON.stringify({ fingerprint }),
     }),
-  copilotChat: (message: string, context?: AICopilotContext) =>
-    request<CopilotChatResult>('/ai/chat', {
+  copilotChat: (message: string, context?: AICopilotContext, providerConfig?: AIProviderConfig) => {
+    const config = providerConfig ?? getUserAiConfig();
+    return request<CopilotChatResult>('/ai/chat', {
       method: 'POST',
-      body: JSON.stringify({ message, context }),
-    }),
-  getAiConfig: () =>
-    request<AIProviderConfig>('/ai/config'),
-  updateAiConfig: (config: { provider: string; model?: string | null; apiKey?: string | null; endpoint?: string | null }) =>
-    request<AIProviderConfig>('/ai/config', {
-      method: 'POST',
-      body: JSON.stringify(config),
-    }),
+      body: JSON.stringify({ message, context, providerConfig: config }),
+    });
+  },
 };
 
 

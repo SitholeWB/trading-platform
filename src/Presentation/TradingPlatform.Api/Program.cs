@@ -303,7 +303,7 @@ var aiGroup = app.MapGroup("/api/ai").WithTags("AI Engine & Copilot");
 
 aiGroup.MapPost("/generate-strategy", async ([FromBody] GenerateStrategyAiRequest req, IAIEngineService aiService, CancellationToken ct) =>
 {
-    var result = await aiService.GenerateStrategyAsync(req.Prompt, req.Timeframe, ct);
+    var result = await aiService.GenerateStrategyAsync(req.Prompt, req.Timeframe, req.ProviderConfig, ct);
     return Results.Ok(result);
 });
 
@@ -340,7 +340,7 @@ aiGroup.MapPost("/explain-audit", async ([FromBody] ExplainAuditAiRequest req, I
 
 aiGroup.MapPost("/chat", async ([FromBody] CopilotChatRequest req, IAIEngineService aiService, CancellationToken ct) =>
 {
-    var result = await aiService.ChatAsync(req.Message, req.Context ?? new AICopilotContext(), ct);
+    var result = await aiService.ChatAsync(req.Message, req.Context ?? new AICopilotContext(), req.ProviderConfig, ct);
     return Results.Ok(result);
 });
 
@@ -1559,10 +1559,10 @@ public record PlaceManualOrderDto(
     decimal? StopLoss,
     decimal? TakeProfit);
 
-public record GenerateStrategyAiRequest(string Prompt, string? Timeframe);
+public record GenerateStrategyAiRequest(string Prompt, string? Timeframe, AIProviderConfig? ProviderConfig = null);
 public record AnalyzeMarketAiRequest(string Symbol, string Timeframe);
 public record ExplainAuditAiRequest(string Fingerprint);
-public record CopilotChatRequest(string Message, AICopilotContext? Context);
+public record CopilotChatRequest(string Message, AICopilotContext? Context, AIProviderConfig? ProviderConfig = null);
 public record UpdateAiConfigRequest(string Provider, string? Model, string? ApiKey, string? Endpoint);
 
 public partial class Program

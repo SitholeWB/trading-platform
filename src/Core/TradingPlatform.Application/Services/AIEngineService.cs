@@ -1,7 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Domain.Entities;
@@ -13,36 +12,26 @@ namespace TradingPlatform.Application.Services;
 public class AIEngineService : IAIEngineService
 {
     private readonly ILogger<AIEngineService> _logger;
-    private readonly IConfiguration? _config;
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
     private static AIProviderConfig? _runtimeConfig;
 
-    public AIEngineService(ILogger<AIEngineService> logger, IConfiguration? config = null)
+    public AIEngineService(ILogger<AIEngineService> logger)
     {
         _logger = logger;
-        _config = config;
     }
 
     public AIProviderConfig GetConfig()
     {
         if (_runtimeConfig != null) return _runtimeConfig;
 
-        string provider = Environment.GetEnvironmentVariable("AI_PROVIDER") 
-            ?? _config?["AI:Provider"] 
-            ?? "BuiltIn";
+        string provider = Environment.GetEnvironmentVariable("AI_PROVIDER") ?? "BuiltIn";
 
         string? apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
             ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
-            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY")
-            ?? _config?[$"AI:{provider}:ApiKey"]
-            ?? _config?["AI:ApiKey"];
+            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY");
 
-        string? model = Environment.GetEnvironmentVariable("AI_MODEL")
-            ?? _config?[$"AI:{provider}:Model"]
-            ?? _config?["AI:Model"];
-
-        string? endpoint = _config?[$"AI:{provider}:Endpoint"]
-            ?? _config?["AI:Endpoint"];
+        string? model = Environment.GetEnvironmentVariable("AI_MODEL");
+        string? endpoint = Environment.GetEnvironmentVariable("AI_ENDPOINT");
 
         bool hasKey = !string.IsNullOrWhiteSpace(apiKey);
         string? masked = hasKey && apiKey!.Length > 8 
@@ -68,7 +57,7 @@ public class AIEngineService : IAIEngineService
             masked);
     }
 
-    public Task<GeneratedStrategyResult> GenerateStrategyAsync(string userPrompt, string? targetTimeframe = null, CancellationToken ct = default)
+    public Task<GeneratedStrategyResult> GenerateStrategyAsync(string userPrompt, string? targetTimeframe = null, AIProviderConfig? providerConfig = null, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userPrompt);
         string promptLower = userPrompt.ToLowerInvariant();
@@ -385,10 +374,10 @@ public class AIEngineService : IAIEngineService
         return Task.FromResult(result);
     }
 
-    public async Task<CopilotChatResult> ChatAsync(string message, AICopilotContext context, CancellationToken ct = default)
+    public async Task<CopilotChatResult> ChatAsync(string message, AICopilotContext context, AIProviderConfig? providerConfig = null, CancellationToken ct = default)
     {
-        var config = GetConfig();
-        if (config.Provider != "BuiltIn" && (config.HasApiKey || config.Provider == "Ollama"))
+        var config = providerConfig ?? GetConfig();
+        if (config.Provider != "BuiltIn" && (!string.IsNullOrWhiteSpace(config.ApiKey) || config.Provider == "Ollama"))
         {
             try
             {
