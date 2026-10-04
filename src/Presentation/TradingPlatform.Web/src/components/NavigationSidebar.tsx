@@ -80,7 +80,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
           <img
             src="/app-icon.png"
             alt="Trading Platform"
-            className="w-7 h-7 rounded-lg object-cover border border-emerald-500/30 shadow-sm shadow-emerald-950/40"
+            className="w-9 h-9 rounded-lg object-cover border border-cyan-500/30 shadow-md shadow-cyan-950/40"
           />
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-bold tracking-wider text-slate-100 uppercase truncate">
