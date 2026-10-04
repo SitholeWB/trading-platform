@@ -16,6 +16,7 @@ import { Search, Layers, Globe, Coins, TrendingUp, Flame, BarChart3, Sparkles } 
 import { StrategyAlertsModal } from './components/StrategyAlertsModal';
 import { AICopilotDrawer } from './components/AICopilotDrawer';
 import { AIStrategyGeneratorModal } from './components/AIStrategyGeneratorModal';
+import { DocumentationPage } from './components/DocumentationPage';
 import { sendDesktopNotification } from './utils/desktopNotification';
 import { tradingApi } from './api/tradingClient';
 import {
@@ -34,7 +35,7 @@ import {
 } from './types/trading';
 import { getCandleTimeSeconds } from './utils/indicators';
 
-const VALID_PAGES: PageId[] = ['dashboard', 'scanner', 'strategies', 'radar', 'positions', 'sandbox', 'chart'];
+const VALID_PAGES: PageId[] = ['dashboard', 'scanner', 'strategies', 'radar', 'positions', 'sandbox', 'chart', 'docs'];
 
 function getPageFromUrl(): PageId {
   if (typeof window === 'undefined') return 'dashboard';
@@ -568,6 +569,7 @@ export function App() {
     positions: '💼 Positions & Risk Management',
     sandbox: '🔬 Ingestion & Simulation Sandbox',
     chart: '📈 Market Chart & Technical Inspector',
+    docs: '📖 User Manual & Architecture Documentation',
   };
 
   return (
@@ -825,6 +827,16 @@ export function App() {
                 />
               </div>
             </div>
+          )}
+
+          {/* Page 7: Comprehensive Platform Documentation & Architecture Guide */}
+          {activePage === 'docs' && (
+            <DocumentationPage
+              onNavigateTo={handleNavigateTo}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenCopilot={() => setIsCopilotOpen(true)}
+              activeProvider={activeProvider}
+            />
           )}
         </main>
       </div>

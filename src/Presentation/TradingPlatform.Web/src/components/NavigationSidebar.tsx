@@ -1,6 +1,7 @@
 import React from 'react';
+import { BookOpen } from 'lucide-react';
 
-export type PageId = 'dashboard' | 'scanner' | 'strategies' | 'radar' | 'positions' | 'sandbox' | 'chart';
+export type PageId = 'dashboard' | 'scanner' | 'strategies' | 'radar' | 'positions' | 'sandbox' | 'chart' | 'docs';
 
 interface NavigationSidebarProps {
   activePage: PageId;
@@ -133,25 +134,58 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
         </nav>
       </div>
 
-      {/* Bottom: Connection Status & Settings */}
-      <div className="p-3 border-t border-slate-800/80 bg-slate-950 text-[11px] font-mono text-slate-400 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-slate-500">Broker Bridge</span>
-          <span className="text-emerald-400 font-medium flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            Connected
+      {/* Bottom: Documentation Entry, Connection Status & Settings */}
+      <div className="p-2.5 border-t border-slate-800/80 bg-slate-950 text-[11px] font-mono text-slate-400 space-y-2">
+        {/* Prominent, Clearly Visible Documentation Button (Bottom Left on Side Menu) */}
+        <button
+          onClick={() => onSelectPage('docs')}
+          className={`w-full p-2 rounded-xl flex items-center justify-between text-xs font-medium transition-all border cursor-pointer group shadow-sm ${
+            activePage === 'docs'
+              ? 'bg-cyan-950/90 border-cyan-500/80 text-cyan-200 font-semibold ring-1 ring-cyan-500/40 shadow-cyan-950/50'
+              : 'bg-slate-900/90 hover:bg-slate-800/90 border-slate-800 text-slate-300 hover:text-white'
+          }`}
+          title="Open Detailed Platform Documentation & User Guide"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={`p-1.5 rounded-lg transition-all ${
+                activePage === 'docs'
+                  ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                  : 'bg-slate-800 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-950'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex flex-col text-left min-w-0">
+              <span className="font-semibold text-xs leading-none truncate font-sans">User Manual</span>
+              <span className="text-[10px] text-slate-500 font-mono mt-0.5">Documentation</span>
+            </div>
+          </div>
+          <span className="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.5 rounded font-mono font-bold">
+            Docs
           </span>
+        </button>
+
+        <div className="pt-1 border-t border-slate-800/60 space-y-1">
+          <div className="flex items-center justify-between text-[10.5px]">
+            <span className="text-slate-500">Broker Bridge</span>
+            <span className="text-emerald-400 font-medium flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Connected
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-slate-400">
+            <span className="truncate">
+              Feed: {activeProvider === 'KeylessPublic' ? 'Public (Yahoo/Binance)' : activeProvider === 'Oanda' ? 'OANDA v20' : activeProvider === 'ZeroMQ' ? 'MT5 ZeroMQ' : 'Sandbox'}
+            </span>
+            <span className="text-slate-500 font-mono">M5</span>
+          </div>
         </div>
-        <div className="flex items-center justify-between text-[10px] text-slate-400">
-          <span className="truncate">
-            Feed: {activeProvider === 'KeylessPublic' ? 'Public (Yahoo/Binance)' : activeProvider === 'Oanda' ? 'OANDA v20' : activeProvider === 'ZeroMQ' ? 'MT5 ZeroMQ' : 'Sandbox'}
-          </span>
-          <span className="text-slate-500">M5</span>
-        </div>
+
         {onOpenSettings && (
           <button
             onClick={onOpenSettings}
-            className="w-full mt-1 py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-slate-800 hover:text-slate-200 border border-slate-800 text-[11px] font-sans font-medium flex items-center justify-center gap-1.5 text-slate-400 transition-colors"
+            className="w-full py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-slate-800 hover:text-slate-200 border border-slate-800 text-[11px] font-sans font-medium flex items-center justify-center gap-1.5 text-slate-400 transition-colors cursor-pointer"
           >
             <span>⚙️</span>
             <span>Feed & Keys Settings</span>
