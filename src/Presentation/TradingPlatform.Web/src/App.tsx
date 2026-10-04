@@ -283,11 +283,9 @@ export function App() {
     }
   };
 
-  // Relaxed telemetry poll (45s fallback instead of 2.5s high-frequency spam)
+  // Initial telemetry load on mount (no automatic polling - user refreshes via Manual Refresh button)
   useEffect(() => {
     fetchTelemetryData();
-    const interval = setInterval(fetchTelemetryData, 45000);
-    return () => clearInterval(interval);
   }, []);
 
   // Notifications poll (15s lightweight in-memory local endpoint)

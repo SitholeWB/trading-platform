@@ -52,12 +52,24 @@ public class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, 
     public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken ct)
     {
         var requestName = typeof(TRequest).Name;
-        _logger.LogInformation("[CQRS START] Processing command/query: {RequestName}", requestName);
+        bool isQuery = requestName.EndsWith("Query");
+
+        if (isQuery)
+        {
+            _logger.LogDebug("[CQRS QUERY] Processing: {RequestName}", requestName);
+        }
+        else
+        {
+            _logger.LogInformation("[CQRS START] Processing command: {RequestName}", requestName);
+        }
 
         try
         {
             var response = await next();
-            _logger.LogInformation("[CQRS SUCCESS] Successfully processed: {RequestName}", requestName);
+            if (!isQuery)
+            {
+                _logger.LogInformation("[CQRS SUCCESS] Successfully processed: {RequestName}", requestName);
+            }
             return response;
         }
         catch (Exception ex)
