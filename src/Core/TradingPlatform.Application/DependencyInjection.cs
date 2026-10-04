@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using TradingPlatform.AI.Abstractions;
+using TradingPlatform.Application.Common.CQRS;
+using TradingPlatform.Application.Common.Validation;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Application.Services;
 
@@ -12,14 +14,33 @@ public static class DependencyInjection
         // 1. Core Application Singletons
         services.AddSingleton<ICandleBufferService, CandleBufferService>();
 
-        // 2. Direct Application Domain Services (No MediatR indirection)
-        services.AddScoped<IRiskPolicyService, RiskPolicyService>();
-        services.AddScoped<ITradeExecutionService, TradeExecutionService>();
-        services.AddScoped<IStrategyEvaluationService, StrategyEvaluationService>();
-        services.AddScoped<IDynamicExitService, DynamicExitService>();
-        services.AddScoped<ICandleIngestionService, CandleIngestionService>();
+        // 2. CQRS Dispatchers (No MediatR dependency)
+        services.AddScoped<CqrsDispatcher>();
+        services.AddScoped<ICommandDispatcher>(sp => sp.GetRequiredService<CqrsDispatcher>());
+        services.AddScoped<IQueryDispatcher>(sp => sp.GetRequiredService<CqrsDispatcher>());
+        services.AddScoped<ICqrsDispatcher>(sp => sp.GetRequiredService<CqrsDispatcher>());
 
-        // 3. Register Default AI Fallbacks if not overridden
+        // 3. Scan & Register CQRS Command Handlers, Query Handlers, and Validators
+        var assembly = typeof(DependencyInjection).Assembly;
+        foreach (var type in assembly.GetTypes().Where(t => !t.IsAbstract && !t.IsInterface))
+        {
+            foreach (var iface in type.GetInterfaces())
+            {
+                if (iface.IsGenericType)
+                {
+                    var openGeneric = iface.GetGenericTypeDefinition();
+                    if (openGeneric == typeof(ICommandHandler<>) ||
+                        openGeneric == typeof(ICommandHandler<,>) ||
+                        openGeneric == typeof(IQueryHandler<,>) ||
+                        openGeneric == typeof(IValidator<>))
+                    {
+                        services.AddScoped(iface, type);
+                    }
+                }
+            }
+        }
+
+        // 4. Register Default AI Fallbacks if not overridden
         services.AddScoped<IAIReasoningService, DefaultAIReasoningService>();
         services.AddScoped<IAIPatternVerifier, DefaultAIPatternVerifier>();
         services.AddScoped<ITimeSeriesEmbeddingService, DefaultTimeSeriesEmbeddingService>();

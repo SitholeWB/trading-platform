@@ -1,40 +1,45 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using TradingPlatform.Application.Common.CQRS;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
+using TradingPlatform.Domain.Entities;
 using TradingPlatform.Domain.Enums;
 
-namespace TradingPlatform.Application.Services;
+namespace TradingPlatform.Application.Commands.Risk;
 
-public class RiskPolicyService : IRiskPolicyService
+public record RiskEvaluationResult(bool IsPassed, string? RejectionReason = null);
+
+public record ValidateRiskPolicyCommand(
+    string Symbol,
+    OrderType OrderType,
+    decimal Lots,
+    decimal? CurrentSpreadPips = null) : ICommand<RiskEvaluationResult>;
+
+public class ValidateRiskPolicyCommandHandler : ICommandHandler<ValidateRiskPolicyCommand, RiskEvaluationResult>
 {
     private readonly IRiskProfileRepository _riskProfileRepo;
     private readonly IOrderExecutionService _orderExecutionService;
-    private readonly ILogger<RiskPolicyService> _logger;
+    private readonly ILogger<ValidateRiskPolicyCommandHandler> _logger;
 
-    public RiskPolicyService(
+    public ValidateRiskPolicyCommandHandler(
         IRiskProfileRepository riskProfileRepo,
         IOrderExecutionService orderExecutionService,
-        ILogger<RiskPolicyService> logger)
+        ILogger<ValidateRiskPolicyCommandHandler> logger)
     {
         _riskProfileRepo = riskProfileRepo;
         _orderExecutionService = orderExecutionService;
         _logger = logger;
     }
 
-    public async Task<RiskEvaluationResult> ValidatePolicyAsync(
-        string symbol,
-        OrderType orderType,
-        decimal lots,
-        decimal? currentSpreadPips = null,
-        CancellationToken ct = default)
+    public async Task<RiskEvaluationResult> HandleAsync(ValidateRiskPolicyCommand command, CancellationToken ct = default)
     {
         var profile = await _riskProfileRepo.GetOrCreateProfileAsync(ct);
 
         // 1. Kill Switch Check
         if (profile.IsKillSwitchEngaged)
         {
-            _logger.LogWarning("[RISK] Rejected trade for {Symbol}: Kill switch is actively engaged.", symbol);
+            _logger.LogWarning("[RISK] Rejected trade for {Symbol}: Kill switch is actively engaged.", command.Symbol);
             return new RiskEvaluationResult(false, "Kill switch is currently engaged.");
         }
 
@@ -63,15 +68,15 @@ public class RiskPolicyService : IRiskPolicyService
         if (openPositions.Count >= profile.MaxOpenPositionsTotal)
         {
             _logger.LogWarning("[RISK] Rejected trade for {Symbol}: Max open positions reached ({Count}/{Max}).",
-                symbol, openPositions.Count, profile.MaxOpenPositionsTotal);
+                command.Symbol, openPositions.Count, profile.MaxOpenPositionsTotal);
             return new RiskEvaluationResult(false, $"Max open positions reached ({openPositions.Count}/{profile.MaxOpenPositionsTotal}).");
         }
 
         // 4. Currency Exposure Check
-        if (symbol.Length >= 6)
+        if (command.Symbol.Length >= 6)
         {
-            var baseCurrency = symbol.Substring(0, 3).ToUpperInvariant();
-            var quoteCurrency = symbol.Substring(3, 3).ToUpperInvariant();
+            var baseCurrency = command.Symbol.Substring(0, 3).ToUpperInvariant();
+            var quoteCurrency = command.Symbol.Substring(3, 3).ToUpperInvariant();
 
             int baseCount = openPositions.Count(p => p.Symbol.Contains(baseCurrency, StringComparison.OrdinalIgnoreCase));
             int quoteCount = openPositions.Count(p => p.Symbol.Contains(quoteCurrency, StringComparison.OrdinalIgnoreCase));
@@ -79,29 +84,29 @@ public class RiskPolicyService : IRiskPolicyService
             if (baseCount >= profile.MaxCurrencyExposure)
             {
                 _logger.LogWarning("[RISK] Rejected trade for {Symbol}: Max currency exposure reached for {Currency} ({Count}/{Max}).",
-                    symbol, baseCurrency, baseCount, profile.MaxCurrencyExposure);
+                    command.Symbol, baseCurrency, baseCount, profile.MaxCurrencyExposure);
                 return new RiskEvaluationResult(false, $"Max currency exposure reached for {baseCurrency}.");
             }
 
             if (quoteCount >= profile.MaxCurrencyExposure)
             {
                 _logger.LogWarning("[RISK] Rejected trade for {Symbol}: Max currency exposure reached for {Currency} ({Count}/{Max}).",
-                    symbol, quoteCurrency, quoteCount, profile.MaxCurrencyExposure);
+                    command.Symbol, quoteCurrency, quoteCount, profile.MaxCurrencyExposure);
                 return new RiskEvaluationResult(false, $"Max currency exposure reached for {quoteCurrency}.");
             }
         }
 
         // 5. Max Spread Check
-        if (currentSpreadPips.HasValue && !string.IsNullOrWhiteSpace(profile.MaxSpreadPipsPerSymbolJson))
+        if (command.CurrentSpreadPips.HasValue && !string.IsNullOrWhiteSpace(profile.MaxSpreadPipsPerSymbolJson))
         {
             try
             {
                 var spreadLimits = JsonSerializer.Deserialize<Dictionary<string, decimal>>(profile.MaxSpreadPipsPerSymbolJson);
-                if (spreadLimits != null && spreadLimits.TryGetValue(symbol, out var maxSpread) && currentSpreadPips.Value > maxSpread)
+                if (spreadLimits != null && spreadLimits.TryGetValue(command.Symbol, out var maxSpread) && command.CurrentSpreadPips.Value > maxSpread)
                 {
                     _logger.LogWarning("[RISK] Rejected trade for {Symbol}: Current spread ({Spread} pips) exceeds maximum allowed ({MaxSpread} pips).",
-                        symbol, currentSpreadPips.Value, maxSpread);
-                    return new RiskEvaluationResult(false, $"Current spread {currentSpreadPips.Value} exceeds max limit of {maxSpread} pips.");
+                        command.Symbol, command.CurrentSpreadPips.Value, maxSpread);
+                    return new RiskEvaluationResult(false, $"Current spread {command.CurrentSpreadPips.Value} exceeds max limit of {maxSpread} pips.");
                 }
             }
             catch (Exception ex)

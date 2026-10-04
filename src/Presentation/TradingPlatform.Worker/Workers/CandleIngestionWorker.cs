@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using TradingPlatform.Application.Commands.IngestCandle;
+using TradingPlatform.Application.Common.CQRS;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
 using TradingPlatform.Domain.Entities;
@@ -41,10 +43,10 @@ public class CandleIngestionWorker : BackgroundService
         _streamer.OnCandleClosed += async candle =>
         {
             using var scope = _serviceProvider.CreateScope();
-            var ingestionService = scope.ServiceProvider.GetRequiredService<ICandleIngestionService>();
+            var commandDispatcher = scope.ServiceProvider.GetRequiredService<ICommandDispatcher>();
             try
             {
-                await ingestionService.IngestCandleAsync(candle, stoppingToken);
+                await commandDispatcher.DispatchAsync(new IngestCandleCommand(candle), stoppingToken);
             }
             catch (Exception ex)
             {
@@ -88,11 +90,11 @@ public class CandleIngestionWorker : BackgroundService
 
                 using (var scope = _serviceProvider.CreateScope())
                 {
-                    var ingestionService = scope.ServiceProvider.GetRequiredService<ICandleIngestionService>();
+                    var commandDispatcher = scope.ServiceProvider.GetRequiredService<ICommandDispatcher>();
                     _logger.LogInformation("[WORKER: SIMULATOR] Injecting synthetic M5 candle for EURUSD: O={O} H={H} L={L} C={C}",
                         open, high, low, close);
 
-                    await ingestionService.IngestCandleAsync(completedCandle, stoppingToken);
+                    await commandDispatcher.DispatchAsync(new IngestCandleCommand(completedCandle), stoppingToken);
                 }
             }
             catch (OperationCanceledException)

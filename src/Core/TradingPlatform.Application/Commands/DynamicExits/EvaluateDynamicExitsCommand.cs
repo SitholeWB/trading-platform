@@ -1,29 +1,33 @@
 using Microsoft.Extensions.Logging;
+using TradingPlatform.Application.Common.CQRS;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
 using TradingPlatform.Domain.Enums;
 using TradingPlatform.Domain.Models;
 
-namespace TradingPlatform.Application.Services;
+namespace TradingPlatform.Application.Commands.DynamicExits;
 
-public class DynamicExitService : IDynamicExitService
+public record EvaluateDynamicExitsCommand(MarketSnapshot Snapshot) : ICommand<int>;
+
+public class EvaluateDynamicExitsCommandHandler : ICommandHandler<EvaluateDynamicExitsCommand, int>
 {
     private readonly ITradeRepository _tradeRepository;
     private readonly IOrderExecutionService _orderExecutionService;
-    private readonly ILogger<DynamicExitService> _logger;
+    private readonly ILogger<EvaluateDynamicExitsCommandHandler> _logger;
 
-    public DynamicExitService(
+    public EvaluateDynamicExitsCommandHandler(
         ITradeRepository tradeRepository,
         IOrderExecutionService orderExecutionService,
-        ILogger<DynamicExitService> logger)
+        ILogger<EvaluateDynamicExitsCommandHandler> logger)
     {
         _tradeRepository = tradeRepository;
         _orderExecutionService = orderExecutionService;
         _logger = logger;
     }
 
-    public async Task<int> EvaluateExitsAsync(MarketSnapshot snapshot, CancellationToken ct = default)
+    public async Task<int> HandleAsync(EvaluateDynamicExitsCommand command, CancellationToken ct = default)
     {
+        var snapshot = command.Snapshot;
         var openPositions = (await _tradeRepository.GetOpenPositionsAsync(ct))
             .Where(p => p.Symbol.Equals(snapshot.Symbol, StringComparison.OrdinalIgnoreCase))
             .ToList();

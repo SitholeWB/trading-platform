@@ -1,35 +1,51 @@
 using Microsoft.Extensions.Logging;
+using TradingPlatform.Application.Commands.ExecuteTrade;
+using TradingPlatform.Application.Common.CQRS;
+using TradingPlatform.Application.Common.Validation;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Domain.Entities;
 using TradingPlatform.Domain.Enums;
 using TradingPlatform.Domain.Models;
 
-namespace TradingPlatform.Application.Services;
+namespace TradingPlatform.Application.Commands.EvaluateStrategies;
 
-public class StrategyEvaluationService : IStrategyEvaluationService
+public record EvaluateStrategiesCommand(MarketSnapshot Snapshot) : ICommand<IReadOnlyList<SignalResult>>;
+
+public class EvaluateStrategiesCommandValidator : AbstractValidator<EvaluateStrategiesCommand>
+{
+    public EvaluateStrategiesCommandValidator()
+    {
+        RuleFor(x => x.Snapshot).NotNull("MarketSnapshot cannot be null.");
+        RuleFor(x => x.Snapshot.Symbol).NotEmpty("Symbol is required.");
+    }
+}
+
+public class EvaluateStrategiesCommandHandler : ICommandHandler<EvaluateStrategiesCommand, IReadOnlyList<SignalResult>>
 {
     private readonly IStrategyRepository _strategyRepository;
     private readonly IRulesEngineService _rulesEngineService;
     private readonly ISignalAuditRepository _auditRepository;
-    private readonly ITradeExecutionService _tradeExecutionService;
-    private readonly ILogger<StrategyEvaluationService> _logger;
+    private readonly ICommandDispatcher _commandDispatcher;
+    private readonly ILogger<EvaluateStrategiesCommandHandler> _logger;
 
-    public StrategyEvaluationService(
+    public EvaluateStrategiesCommandHandler(
         IStrategyRepository strategyRepository,
         IRulesEngineService rulesEngineService,
         ISignalAuditRepository auditRepository,
-        ITradeExecutionService tradeExecutionService,
-        ILogger<StrategyEvaluationService> logger)
+        ICommandDispatcher commandDispatcher,
+        ILogger<EvaluateStrategiesCommandHandler> logger)
     {
         _strategyRepository = strategyRepository;
         _rulesEngineService = rulesEngineService;
         _auditRepository = auditRepository;
-        _tradeExecutionService = tradeExecutionService;
+        _commandDispatcher = commandDispatcher;
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<SignalResult>> EvaluateAsync(MarketSnapshot snapshot, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SignalResult>> HandleAsync(EvaluateStrategiesCommand command, CancellationToken ct = default)
     {
+        var snapshot = command.Snapshot;
+
         // Fetch active strategies matching timeframe
         var activeStrategies = await _strategyRepository.GetActiveStrategiesAsync(snapshot.Timeframe, ct);
         _logger.LogInformation("[STRATEGY] Found {Count} active strategies configured for timeframe {Timeframe}.", activeStrategies.Count, snapshot.Timeframe);
@@ -50,8 +66,8 @@ public class StrategyEvaluationService : IStrategyEvaluationService
                 _logger.LogInformation("[STRATEGY] Fully Met trade signal generated: Strategy='{Strategy}', Symbol={Symbol}, Side={Side}, Price={Price}",
                     signal.StrategyName, signal.Symbol, signal.RecommendedOrderType, signal.EntryPrice);
 
-                // Dispatch trade execution directly without MediatR
-                await _tradeExecutionService.ExecuteSignalAsync(signal, ct);
+                // Dispatch trade execution command
+                await _commandDispatcher.DispatchAsync(new ExecuteTradeSignalCommand(signal), ct);
             }
             else if (signal.State == SignalState.NearMiss)
             {

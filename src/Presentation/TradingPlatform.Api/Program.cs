@@ -2,7 +2,10 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using TradingPlatform.Api.Hosting;
 using TradingPlatform.Application;
+using TradingPlatform.Application.Commands.IngestCandle;
+using TradingPlatform.Application.Common.CQRS;
 using TradingPlatform.Application.Interfaces;
+using TradingPlatform.Application.Queries;
 using TradingPlatform.Broker.Abstractions;
 using TradingPlatform.Broker.Abstractions.Models;
 using TradingPlatform.Broker.Oanda;
@@ -53,15 +56,15 @@ if (app.Environment.IsDevelopment())
 // ----------------------------------------------------
 var strategiesGroup = app.MapGroup("/api/strategies").WithTags("Strategies");
 
-strategiesGroup.MapGet("/", async (IStrategyRepository repo, CancellationToken ct) =>
+strategiesGroup.MapGet("/", async (IQueryDispatcher queryDispatcher, CancellationToken ct) =>
 {
-    var list = await repo.GetAllAsync(ct);
+    var list = await queryDispatcher.QueryAsync(new GetStrategiesQuery(), ct);
     return Results.Ok(list);
 });
 
-strategiesGroup.MapGet("/{id:guid}", async (IStrategyRepository repo, Guid id, CancellationToken ct) =>
+strategiesGroup.MapGet("/{id:guid}", async (Guid id, IQueryDispatcher queryDispatcher, CancellationToken ct) =>
 {
-    var strategy = await repo.GetByIdAsync(id, ct);
+    var strategy = await queryDispatcher.QueryAsync(new GetStrategyByIdQuery(id), ct);
     return strategy != null ? Results.Ok(strategy) : Results.NotFound();
 });
 
@@ -116,10 +119,10 @@ strategiesGroup.MapDelete("/{id:guid}", async (Guid id, IStrategyRepository repo
 // ----------------------------------------------------
 var auditsGroup = app.MapGroup("/api/audit-logs").WithTags("Audit Logs & Near-Misses");
 
-auditsGroup.MapGet("/", async ([FromQuery] int? count, ISignalAuditRepository repo, CancellationToken ct) =>
+auditsGroup.MapGet("/", async ([FromQuery] int? count, IQueryDispatcher queryDispatcher, CancellationToken ct) =>
 {
     int limit = count.HasValue && count.Value > 0 ? count.Value : 50;
-    var logs = await repo.GetRecentAsync(limit, ct);
+    var logs = await queryDispatcher.QueryAsync(new GetRecentSignalAuditLogsQuery(limit), ct);
     return Results.Ok(logs);
 });
 
@@ -134,9 +137,9 @@ auditsGroup.MapGet("/{fingerprint}", async (string fingerprint, ISignalAuditRepo
 // ----------------------------------------------------
 var positionsGroup = app.MapGroup("/api/positions").WithTags("Positions");
 
-positionsGroup.MapGet("/", async (ITradeRepository repo, CancellationToken ct) =>
+positionsGroup.MapGet("/", async (IQueryDispatcher queryDispatcher, CancellationToken ct) =>
 {
-    var positions = await repo.GetOpenPositionsAsync(ct);
+    var positions = await queryDispatcher.QueryAsync(new GetOpenPositionsQuery(), ct);
     return Results.Ok(positions);
 });
 
@@ -217,9 +220,9 @@ positionsGroup.MapPost("/{ticket:long}/modify", async (long ticket, [FromBody] M
 // ----------------------------------------------------
 var riskGroup = app.MapGroup("/api/risk").WithTags("Risk Management");
 
-riskGroup.MapGet("/", async (IRiskProfileRepository repo, CancellationToken ct) =>
+riskGroup.MapGet("/", async (IQueryDispatcher queryDispatcher, CancellationToken ct) =>
 {
-    var profile = await repo.GetOrCreateProfileAsync(ct);
+    var profile = await queryDispatcher.QueryAsync(new GetRiskProfileQuery(), ct);
     return Results.Ok(profile);
 });
 
@@ -256,16 +259,16 @@ riskGroup.MapPost("/kill-switch", async ([FromBody] KillSwitchToggleDto dto, IRi
 // ----------------------------------------------------
 // 5. Account & Heartbeat Endpoints
 // ----------------------------------------------------
-app.MapGet("/api/account", async (IOrderExecutionService broker, CancellationToken ct) =>
+app.MapGet("/api/account", async (IQueryDispatcher queryDispatcher, CancellationToken ct) =>
 {
-    var summary = await broker.GetAccountSummaryAsync(ct);
+    var summary = await queryDispatcher.QueryAsync(new GetAccountSummaryQuery(), ct);
     return Results.Ok(summary);
 }).WithTags("Account");
 
 // ----------------------------------------------------
 // 6. Candle Simulation / Ingestion Testing Endpoint
 // ----------------------------------------------------
-app.MapPost("/api/simulation/candle", async ([FromBody] IngestCandleDto dto, ICandleIngestionService ingestionService, CancellationToken ct) =>
+app.MapPost("/api/simulation/candle", async ([FromBody] IngestCandleDto dto, ICommandDispatcher commandDispatcher, CancellationToken ct) =>
 {
     var candle = new Candle(
         dto.Symbol,
@@ -278,7 +281,7 @@ app.MapPost("/api/simulation/candle", async ([FromBody] IngestCandleDto dto, ICa
         dto.Volume,
         dto.IsComplete);
 
-    var snapshot = await ingestionService.IngestCandleAsync(candle, ct);
+    var snapshot = await commandDispatcher.DispatchAsync(new IngestCandleCommand(candle), ct);
     return Results.Ok(new
     {
         CandleIngested = candle,
