@@ -16,6 +16,12 @@ using TradingPlatform.Domain.Models;
 using TradingPlatform.Persistence;
 using TradingPlatform.RulesEngine;
 
+// Prevent Linux inotify instance exhaustion (default limit 128) when running in containers, WSL, or IDE debuggers
+if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_USE_POLLING_FILE_WATCHER")))
+{
+    Environment.SetEnvironmentVariable("DOTNET_USE_POLLING_FILE_WATCHER", "true");
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Core Services
