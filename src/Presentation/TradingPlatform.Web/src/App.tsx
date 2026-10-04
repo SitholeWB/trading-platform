@@ -12,8 +12,10 @@ import { SimulatorConsole } from './components/SimulatorConsole';
 import { KillSwitchModal } from './components/KillSwitchModal';
 import { BrokerSettingsModal } from './components/BrokerSettingsModal';
 import { SymbolSearchModal } from './components/chart/SymbolSearchModal';
-import { Search, Layers, Globe, Coins, TrendingUp, Flame, BarChart3 } from 'lucide-react';
+import { Search, Layers, Globe, Coins, TrendingUp, Flame, BarChart3, Sparkles } from 'lucide-react';
 import { StrategyAlertsModal } from './components/StrategyAlertsModal';
+import { AICopilotDrawer } from './components/AICopilotDrawer';
+import { AIStrategyGeneratorModal } from './components/AIStrategyGeneratorModal';
 import { sendDesktopNotification } from './utils/desktopNotification';
 import { tradingApi } from './api/tradingClient';
 import {
@@ -152,6 +154,8 @@ export function App() {
   const [activeProvider, setActiveProvider] = useState('KeylessPublic');
   const [isSymbolSearchOpen, setIsSymbolSearchOpen] = useState(false);
   const [watchlistCategory, setWatchlistCategory] = useState<'all' | 'forex' | 'indices' | 'commodities' | 'crypto' | 'stocks'>('all');
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+  const [isAiStrategyModalOpen, setIsAiStrategyModalOpen] = useState(false);
 
   // Global keyboard shortcut to open symbol search (/ or Ctrl+K)
   useEffect(() => {
@@ -468,6 +472,19 @@ export function App() {
     setStrategies(updated);
   };
 
+  const handleApplyStrategyFromCopilot = async (generated: any) => {
+    handleNavigateTo('strategies');
+    await handleSaveStrategy({
+      name: generated.name,
+      description: generated.description,
+      timeframe: generated.timeframe,
+      rawJsonRules: generated.rawJsonRules,
+      isActive: true,
+      autoTradingEnabled: generated.autoTradingEnabled,
+      aiValidationEnabled: generated.aiValidationEnabled,
+    });
+  };
+
   const handleClosePosition = async (ticket: number) => {
     await tradingApi.closePosition(ticket, 'ManualTerminalClose');
     const updated = await tradingApi.getPositions();
@@ -566,6 +583,8 @@ export function App() {
           unacknowledgedAlertsCount={alerts.filter((a) => !a.isAcknowledged).length}
           onOpenAlertsModal={() => setIsAlertsModalOpen(true)}
           isBackgroundScannerRunning={scannerSettings?.isEnabled ?? true}
+          onToggleCopilot={() => setIsCopilotOpen((prev) => !prev)}
+          isCopilotOpen={isCopilotOpen}
         />
 
         {/* Dedicated Page Viewport */}
@@ -833,6 +852,43 @@ export function App() {
           if (tf) setTimeframe(tf);
           handleNavigateTo('chart');
         }}
+      />
+
+      {/* Floating AI Copilot Trigger Button (Always accessible) */}
+      {!isCopilotOpen && (
+        <button
+          onClick={() => setIsCopilotOpen(true)}
+          className="fixed bottom-5 right-5 z-40 flex items-center gap-2.5 px-3.5 py-2.5 rounded-full bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:via-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-950/60 border border-cyan-400/30 transition-all hover:scale-105 group cursor-pointer"
+          title="Open AI Market Copilot & Quant Assistant"
+        >
+          <Sparkles className="w-4 h-4 text-cyan-200 animate-pulse group-hover:rotate-12 transition-transform" />
+          <span className="text-xs font-semibold tracking-wide font-sans hidden sm:inline">AI Copilot</span>
+        </button>
+      )}
+
+      {/* AI Market Copilot & Quant Assistant Drawer */}
+      <AICopilotDrawer
+        isOpen={isCopilotOpen}
+        onClose={() => setIsCopilotOpen(false)}
+        currentSymbol={selectedSymbol}
+        currentTimeframe={timeframe}
+        openPositionsCount={positions.filter((p) => p.status === 'Open').length}
+        activeStrategiesCount={strategies.filter((s) => s.isActive).length}
+        currentDrawdown={account?.currentDrawdownPercent ?? 0}
+        isKillSwitchEngaged={risk?.isKillSwitchEngaged ?? false}
+        auditLogs={auditLogs}
+        onOpenStrategyGenerator={() => {
+          setIsCopilotOpen(false);
+          setIsAiStrategyModalOpen(true);
+        }}
+      />
+
+      {/* AI Strategy Generator Modal (Platform-wide) */}
+      <AIStrategyGeneratorModal
+        isOpen={isAiStrategyModalOpen}
+        onClose={() => setIsAiStrategyModalOpen(false)}
+        onApplyStrategy={handleApplyStrategyFromCopilot}
+        initialTimeframe={timeframe}
       />
     </div>
   );

@@ -291,6 +291,54 @@ app.MapPost("/api/simulation/candle", async ([FromBody] IngestCandleDto dto, ICo
 }).WithTags("Simulation");
 
 // ----------------------------------------------------
+// 6.5. AI Engine & Copilot Endpoints
+// ----------------------------------------------------
+var aiGroup = app.MapGroup("/api/ai").WithTags("AI Engine & Copilot");
+
+aiGroup.MapPost("/generate-strategy", async ([FromBody] GenerateStrategyAiRequest req, IAIEngineService aiService, CancellationToken ct) =>
+{
+    var result = await aiService.GenerateStrategyAsync(req.Prompt, req.Timeframe, ct);
+    return Results.Ok(result);
+});
+
+aiGroup.MapPost("/analyze-market", async ([FromBody] AnalyzeMarketAiRequest req, IAIEngineService aiService, ICandleBufferService bufferService, IIndicatorCalculationService indicatorCalc, IHistoricalDataProvider dataProvider, CancellationToken ct) =>
+{
+    string sym = string.IsNullOrWhiteSpace(req.Symbol) ? "EURUSD" : req.Symbol.Trim().ToUpperInvariant();
+    string tfStr = string.IsNullOrWhiteSpace(req.Timeframe) ? "M15" : req.Timeframe.Trim().ToUpperInvariant();
+    var tf = Enum.TryParse<Timeframe>(tfStr, true, out var t) ? t : Timeframe.M15;
+
+    var window = bufferService.GetWindow(sym, tf);
+    MarketSnapshot snapshot;
+    if (window != null && window.Count >= 20)
+    {
+        snapshot = indicatorCalc.CalculateSnapshot(window);
+    }
+    else
+    {
+        var historical = await dataProvider.GetHistoricalCandlesAsync(sym, tfStr, 50, ct);
+        snapshot = indicatorCalc.CalculateSnapshot(historical);
+    }
+
+    var result = await aiService.AnalyzeMarketAsync(sym, tfStr, snapshot, ct);
+    return Results.Ok(result);
+});
+
+aiGroup.MapPost("/explain-audit", async ([FromBody] ExplainAuditAiRequest req, IAIEngineService aiService, ISignalAuditRepository auditRepo, CancellationToken ct) =>
+{
+    var audit = await auditRepo.GetByFingerprintAsync(req.Fingerprint, ct);
+    if (audit == null) return Results.NotFound(new { message = "Audit log not found" });
+
+    var result = await aiService.ExplainAuditAsync(audit, ct);
+    return Results.Ok(result);
+});
+
+aiGroup.MapPost("/chat", async ([FromBody] CopilotChatRequest req, IAIEngineService aiService, CancellationToken ct) =>
+{
+    var result = await aiService.ChatAsync(req.Message, req.Context ?? new AICopilotContext(), ct);
+    return Results.Ok(result);
+});
+
+// ----------------------------------------------------
 // 7. Market Data & Multi-Timeframe Feeds
 // ----------------------------------------------------
 var marketDataGroup = app.MapGroup("/api/market-data").WithTags("Market Data");
@@ -1488,6 +1536,11 @@ public record PlaceManualOrderDto(
     decimal Price,
     decimal? StopLoss,
     decimal? TakeProfit);
+
+public record GenerateStrategyAiRequest(string Prompt, string? Timeframe);
+public record AnalyzeMarketAiRequest(string Symbol, string Timeframe);
+public record ExplainAuditAiRequest(string Fingerprint);
+public record CopilotChatRequest(string Message, AICopilotContext? Context);
 
 public partial class Program
 {

@@ -341,3 +341,55 @@ export interface BackgroundScannerSettings {
   reminderIntervalMinutes: number;
   maxRemindersPerAlert: number;
 }
+
+// AI Engine & Copilot Types
+export interface GeneratedStrategyResult {
+  name: string;
+  description: string;
+  timeframe: Timeframe;
+  rawJsonRules: string;
+  autoTradingEnabled: boolean;
+  aiValidationEnabled: boolean;
+  plainEnglishSummary: string;
+  triggerConditions: string[];
+  recommendedIndicators: string[];
+}
+
+export interface MarketAnalysisResult {
+  symbol: string;
+  timeframe: string;
+  trendBias: string;
+  confidenceScore: number;
+  summaryOverview: string;
+  technicalHighlights: string[];
+  supportLevel: string;
+  resistanceLevel: string;
+  actionableSuggestion: string;
+  analyzedAtUtc: string;
+}
+
+export interface AuditExplanationResult {
+  fingerprint: string;
+  strategyId: string;
+  symbol: string;
+  state: string;
+  plainEnglishVerdict: string;
+  rulesPassed: string[];
+  rulesFailedOrNearMiss: string[];
+  optimizationTip: string;
+}
+
+export interface AICopilotContext {
+  currentSymbol?: string;
+  currentTimeframe?: string;
+  openPositionsCount?: number;
+  activeStrategiesCount?: number;
+  currentDrawdown?: number;
+  isKillSwitchEngaged?: boolean;
+}
+
+export interface CopilotChatResult {
+  responseMarkdown: string;
+  suggestedFollowups: string[];
+  contextSymbol?: string;
+}

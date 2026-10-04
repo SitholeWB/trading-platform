@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { IndicatorConfig, StrategyDefinition, Timeframe } from '../types/trading';
+import { GeneratedStrategyResult, IndicatorConfig, StrategyDefinition, Timeframe } from '../types/trading';
+import { AIStrategyGeneratorModal } from './AIStrategyGeneratorModal';
+import { Sparkles } from 'lucide-react';
 
 interface RuleStudioProps {
   strategies: StrategyDefinition[];
@@ -75,6 +77,28 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
   const [autoTrading, setAutoTrading] = useState(false);
   const [aiValidation, setAiValidation] = useState(false);
   const [combinator, setCombinator] = useState<'and' | 'or'>('and');
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+
+  const handleApplyGeneratedStrategy = (generated: GeneratedStrategyResult) => {
+    const syntheticStrat: StrategyDefinition = {
+      id: '',
+      name: generated.name,
+      description: generated.description,
+      timeframe: generated.timeframe,
+      rawJsonRules: generated.rawJsonRules,
+      isActive: true,
+      autoTradingEnabled: generated.autoTradingEnabled,
+      aiValidationEnabled: generated.aiValidationEnabled,
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
+    };
+    loadStrategy(syntheticStrat);
+    setStatusFeedback({
+      type: 'success',
+      message: `✓ AI Strategy "${generated.name}" loaded into studio!`,
+    });
+    setTimeout(() => setStatusFeedback(null), 4000);
+  };
 
   // Indicator Configuration State
   const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG);
@@ -393,6 +417,15 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
               {statusFeedback.message}
             </span>
           )}
+
+          <button
+            onClick={() => setIsAiModalOpen(true)}
+            className="px-3 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-all bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-900/30 cursor-pointer"
+            title="Generate strategy rules using Natural Language AI"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+            <span>AI Architect</span>
+          </button>
 
           <button
             onClick={() => setShowIndicatorSettings(!showIndicatorSettings)}
@@ -1126,6 +1159,14 @@ export const RuleStudio: React.FC<RuleStudioProps> = ({
           </div>
         )}
       </div>
+
+      {/* AI Strategy Generator Modal */}
+      <AIStrategyGeneratorModal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        onApplyStrategy={handleApplyGeneratedStrategy}
+        initialTimeframe={timeframe}
+      />
     </div>
   );
 };

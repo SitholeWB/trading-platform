@@ -15,6 +15,11 @@ import {
   StrategyAlertNotification,
   BackgroundScannerStatus,
   BackgroundScannerSettings,
+  GeneratedStrategyResult,
+  MarketAnalysisResult,
+  AuditExplanationResult,
+  AICopilotContext,
+  CopilotChatResult,
 } from '../types/trading';
 
 const BASE_URL = '/api';
@@ -306,6 +311,28 @@ export const tradingApi = {
   testNotification: () =>
     request<StrategyAlertNotification>('/notifications/test', {
       method: 'POST',
+    }),
+
+  // AI Engine & Copilot
+  generateStrategyAi: (prompt: string, timeframe?: string) =>
+    request<GeneratedStrategyResult>('/ai/generate-strategy', {
+      method: 'POST',
+      body: JSON.stringify({ prompt, timeframe }),
+    }),
+  analyzeMarketAi: (symbol: string, timeframe: string) =>
+    request<MarketAnalysisResult>('/ai/analyze-market', {
+      method: 'POST',
+      body: JSON.stringify({ symbol, timeframe }),
+    }),
+  explainAuditAi: (fingerprint: string) =>
+    request<AuditExplanationResult>('/ai/explain-audit', {
+      method: 'POST',
+      body: JSON.stringify({ fingerprint }),
+    }),
+  copilotChat: (message: string, context?: AICopilotContext) =>
+    request<CopilotChatResult>('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message, context }),
     }),
 };
 

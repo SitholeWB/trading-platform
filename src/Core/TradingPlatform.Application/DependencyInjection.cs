@@ -40,7 +40,8 @@ public static class DependencyInjection
             }
         }
 
-        // 4. Register Default AI Fallbacks if not overridden
+        // 4. Register AI Services
+        services.AddScoped<IAIEngineService, AIEngineService>();
         services.AddScoped<IAIReasoningService, DefaultAIReasoningService>();
         services.AddScoped<IAIPatternVerifier, DefaultAIPatternVerifier>();
         services.AddScoped<ITimeSeriesEmbeddingService, DefaultTimeSeriesEmbeddingService>();

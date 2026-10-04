@@ -1,6 +1,6 @@
 import React from 'react';
 import { AccountSummary, RiskProfile } from '../types/trading';
-import { Search, RefreshCw, Bell } from 'lucide-react';
+import { Search, RefreshCw, Bell, Sparkles } from 'lucide-react';
 
 interface HeaderProps {
   pageTitle: string;
@@ -16,6 +16,8 @@ interface HeaderProps {
   unacknowledgedAlertsCount?: number;
   onOpenAlertsModal?: () => void;
   isBackgroundScannerRunning?: boolean;
+  onToggleCopilot?: () => void;
+  isCopilotOpen?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,6 +34,8 @@ export const Header: React.FC<HeaderProps> = ({
   unacknowledgedAlertsCount = 0,
   onOpenAlertsModal,
   isBackgroundScannerRunning = true,
+  onToggleCopilot,
+  isCopilotOpen = false,
 }) => {
   const isKillSwitchEngaged = risk?.isKillSwitchEngaged ?? false;
   const currentDrawdown = account?.currentDrawdownPercent ?? 0;
@@ -135,6 +139,22 @@ export const Header: React.FC<HeaderProps> = ({
             ) : isBackgroundScannerRunning ? (
               <span className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
             ) : null}
+          </button>
+        )}
+
+        {/* AI Market Copilot Button */}
+        {onToggleCopilot && (
+          <button
+            onClick={onToggleCopilot}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-mono transition-all shadow-sm cursor-pointer ${
+              isCopilotOpen
+                ? 'bg-cyan-950/80 border-cyan-500/60 text-cyan-300 ring-1 ring-cyan-500/50 shadow-cyan-950/50'
+                : 'bg-gradient-to-r from-slate-950 to-indigo-950/50 hover:from-slate-900 hover:to-indigo-900/50 border-indigo-500/30 text-indigo-300 hover:text-white'
+            }`}
+            title="AI Market Copilot: Quantitative market diagnostics, conversational assistant, and trade audit explanations"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+            <span className="font-sans font-semibold hidden md:inline">AI Copilot</span>
           </button>
         )}
 
