@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart2,
+  Bell,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -26,6 +27,8 @@ import {
 } from 'lucide-react';
 import { tradingApi } from '../api/tradingClient';
 import {
+  BackgroundScannerSettings,
+  BackgroundScannerStatus,
   HistoricalScanReport,
   LiveScanReport,
   OrderType,
@@ -39,6 +42,7 @@ interface MarketScannerViewProps {
   onOpenChart: (symbol: string, timeframe?: Timeframe) => void;
   onPlaceQuickOrder?: (symbol: string, side: OrderType, price: number, sl?: number, tp?: number) => void;
   activeProvider?: string;
+  onOpenAlertsModal?: () => void;
 }
 
 const SCANNER_STORAGE_LIVE = 'tp_scanner_live_report';
@@ -54,6 +58,7 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
   onOpenChart,
   onPlaceQuickOrder,
   activeProvider = 'KeylessPublic',
+  onOpenAlertsModal,
 }) => {
   const [activeTab, setActiveTabState] = useState<'live' | 'historical' | 'buckets'>(() => {
     return (localStorage.getItem(SCANNER_STORAGE_TAB) as any) || 'live';
@@ -169,6 +174,115 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
     onOpenChart(symbol, tf);
   };
 
+function getTimeframeCadenceDetails(tf: Timeframe) {
+  switch (tf) {
+    case 'M1':
+      return { label: '1 Minute', description: 'Candle bars close every 60 seconds at :00s' };
+    case 'M5':
+      return { label: '5 Minutes', description: 'Candle bars close every 5 mins (:00, :05, :10, :15, :20, :25, :30, :35, :40, :45, :50, :55)' };
+    case 'M15':
+      return { label: '15 Minutes', description: 'Candle bars close every 15 mins at :00, :15, :30, :45 past the hour' };
+    case 'M30':
+      return { label: '30 Minutes', description: 'Candle bars close every 30 mins at :00 and :30 past the hour' };
+    case 'H1':
+      return { label: '1 Hour', description: 'Candle bars close hourly at :00 (top of each hour UTC)' };
+    case 'H4':
+      return { label: '4 Hours', description: 'Candle bars close every 4 hours at 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC' };
+    case 'D1':
+      return { label: 'Daily (24h)', description: 'Candle bars close once per day at 00:00 UTC' };
+    case 'W1':
+      return { label: 'Weekly', description: 'Candle bars close weekly on Sunday at 00:00 UTC' };
+    case 'MN1':
+      return { label: 'Monthly', description: 'Candle bars close on the 1st of each calendar month at 00:00 UTC' };
+  }
+}
+
+function getSecondsUntilNextBar(tf: Timeframe): number {
+  const now = new Date();
+  const utcSec = now.getUTCSeconds();
+  const utcMin = now.getUTCMinutes();
+  const utcHour = now.getUTCHours();
+  const totalSecOfHour = utcMin * 60 + utcSec;
+  const totalSecOfDay = utcHour * 3600 + totalSecOfHour;
+
+  switch (tf) {
+    case 'M1':
+      return 60 - utcSec;
+    case 'M5':
+      return 300 - (totalSecOfHour % 300);
+    case 'M15':
+      return 900 - (totalSecOfHour % 900);
+    case 'M30':
+      return 1800 - (totalSecOfHour % 1800);
+    case 'H1':
+      return 3600 - totalSecOfHour;
+    case 'H4':
+      return 14400 - (totalSecOfDay % 14400);
+    case 'D1':
+      return 86400 - totalSecOfDay;
+    case 'W1': {
+      const dayOfWeek = now.getUTCDay();
+      const secSinceSunday = dayOfWeek * 86400 + totalSecOfDay;
+      return 604800 - secSinceSunday;
+    }
+    case 'MN1': {
+      const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      return Math.max(0, Math.floor((nextMonth.getTime() - now.getTime()) / 1000));
+    }
+  }
+}
+
+function formatCountdown(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const remSec = seconds % 86400;
+  const hours = Math.floor(remSec / 3600);
+  const minutes = Math.floor((remSec % 3600) / 60);
+  const secs = remSec % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m ${secs.toString().padStart(2, '0')}s`;
+  }
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m ${secs.toString().padStart(2, '0')}s`;
+  }
+  return `${minutes.toString().padStart(2, '0')}m ${secs.toString().padStart(2, '0')}s`;
+}
+
+  const [scannerSettings, setScannerSettings] = useState<BackgroundScannerSettings | null>(null);
+  const [scannerStatus, setScannerStatus] = useState<BackgroundScannerStatus | null>(null);
+  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
+  const [nextBarCountdown, setNextBarCountdown] = useState<string>(() => formatCountdown(getSecondsUntilNextBar(timeframe)));
+
+  useEffect(() => {
+    setNextBarCountdown(formatCountdown(getSecondsUntilNextBar(timeframe)));
+    const timer = setInterval(() => {
+      setNextBarCountdown(formatCountdown(getSecondsUntilNextBar(timeframe)));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [timeframe]);
+
+  const handleToggleBackgroundScanner = async () => {
+    const current = scannerSettings || {
+      isEnabled: true,
+      soundAlertsEnabled: true,
+      desktopNotificationEnabled: true,
+      reminderIntervalMinutes: 2,
+      maxRemindersPerAlert: 5,
+    };
+    setIsUpdatingSettings(true);
+    try {
+      const updated = await tradingApi.updateScannerSettings({
+        ...current,
+        isEnabled: !current.isEnabled,
+      });
+      setScannerSettings(updated);
+    } catch (err) {
+      console.warn('Failed to toggle background scanner:', err);
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
   // Initial load
   useEffect(() => {
     loadData();
@@ -188,6 +302,9 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
       if (strats.length > 0 && !selectedStrategyId) {
         setSelectedStrategyId(strats[0].id);
       }
+
+      tradingApi.getScannerSettings().then(setScannerSettings).catch(() => {});
+      tradingApi.getScannerStatus().then(setScannerStatus).catch(() => {});
 
       // Restore latest scans from backend if not already cached in localStorage
       if (!liveReport) {
@@ -327,6 +444,7 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
   };
 
   const selectedGroup = symbolGroups.find((g) => g.id === selectedGroupId);
+  const cadenceInfo = getTimeframeCadenceDetails(timeframe);
 
   return (
     <div className="flex-1 h-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -399,6 +517,67 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
         {/* ============================================================== */}
         {activeTab === 'live' && (
           <div className="space-y-6">
+            {/* Smart Background Scanner & Candle Cadence Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
+                    <Clock className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Candle Cadence: {timeframe} ({cadenceInfo.label})</span>
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 font-semibold">
+                    Next Bar Closes in {nextBarCountdown}
+                  </span>
+                  {scannerSettings?.isEnabled ? (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Background Scanning Active
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                      Background Scanning Paused
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 font-sans">
+                  {cadenceInfo.description}.
+                  <span className="text-slate-500 ml-1 font-mono hidden sm:inline">
+                    Smart Polling: Scans align with bar cadence ({timeframe}), preventing broker/API rate limit blocks.
+                  </span>
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {/* Background scanning toggle */}
+                <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                  <span className="text-xs text-slate-300 font-medium font-sans">Keep Scanning in Background:</span>
+                  <button
+                    onClick={handleToggleBackgroundScanner}
+                    disabled={isUpdatingSettings}
+                    className={`px-2.5 py-1 rounded text-xs font-mono font-bold transition-all ${
+                      scannerSettings?.isEnabled
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+                    }`}
+                    title="User choice: Enable or disable continuous background scanning & notifications for active strategies"
+                  >
+                    {scannerSettings?.isEnabled ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                {onOpenAlertsModal && (
+                  <button
+                    onClick={onOpenAlertsModal}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-medium font-sans flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="Open Strategy Alerts & Notification Settings"
+                  >
+                    <Bell className="w-3.5 h-3.5" />
+                    <span>Alerts & Notifications</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Control Bar */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-3">

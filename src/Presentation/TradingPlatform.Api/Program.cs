@@ -1378,6 +1378,66 @@ scannerGroup.MapGet("/historical/latest", (IMarketScannerService scanner) =>
     return report != null ? Results.Ok(report) : Results.NoContent();
 });
 
+// ----------------------------------------------------
+// Strategy Notifications & Background Reminders
+// ----------------------------------------------------
+var notificationsGroup = app.MapGroup("/api/notifications").WithTags("Notifications");
+
+notificationsGroup.MapGet("/", (IStrategyNotificationService notificationService) =>
+{
+    var alerts = notificationService.GetActiveAlerts();
+    return Results.Ok(alerts);
+});
+
+notificationsGroup.MapGet("/status", (IStrategyNotificationService notificationService) =>
+{
+    var status = notificationService.GetScannerStatus();
+    return Results.Ok(status);
+});
+
+notificationsGroup.MapPost("/{id:guid}/acknowledge", (Guid id, IStrategyNotificationService notificationService) =>
+{
+    var success = notificationService.AcknowledgeAlert(id);
+    return success ? Results.Ok(new { success = true, id }) : Results.NotFound();
+});
+
+notificationsGroup.MapDelete("/{id:guid}", (Guid id, IStrategyNotificationService notificationService) =>
+{
+    var success = notificationService.DismissAlert(id);
+    return success ? Results.Ok(new { success = true, id }) : Results.NotFound();
+});
+
+notificationsGroup.MapPost("/clear", (IStrategyNotificationService notificationService) =>
+{
+    notificationService.ClearAllAlerts();
+    return Results.Ok(new { success = true });
+});
+
+notificationsGroup.MapGet("/settings", (IStrategyNotificationService notificationService) =>
+{
+    return Results.Ok(notificationService.GetSettings());
+});
+
+notificationsGroup.MapPost("/settings", ([FromBody] BackgroundScannerSettings settings, IStrategyNotificationService notificationService) =>
+{
+    notificationService.UpdateSettings(settings);
+    return Results.Ok(notificationService.GetSettings());
+});
+
+notificationsGroup.MapPost("/test", (IStrategyNotificationService notificationService) =>
+{
+    var testAlert = notificationService.AddAlert(
+        strategyId: Guid.NewGuid(),
+        strategyName: "Test Desktop Notification",
+        symbol: "EURUSD",
+        timeframe: Timeframe.H1,
+        lastPrice: 1.08520m,
+        state: SignalState.FullyMet,
+        matchScore: 100.0,
+        summaryMessage: "Desktop notification test dispatched successfully! Cross-platform notifications operational.");
+    return Results.Ok(testAlert);
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();

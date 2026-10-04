@@ -306,6 +306,38 @@ export interface HistoricalScanReport {
   simulatedTrades: HistoricalTradeSimulation[];
   historicalMatches: ScannerMatchResult[];
   durationMs: number;
+}export interface StrategyAlertNotification {
+  id: string;
+  strategyId: string;
+  strategyName: string;
+  symbol: string;
+  timeframe: Timeframe;
+  lastPrice: number;
+  state: SignalState;
+  matchScore: number;
+  summaryMessage: string;
+  createdAtUtc: string;
+  isAcknowledged: boolean;
+  acknowledgedAtUtc?: string | null;
+  reminderCount: number;
+  lastRemindedAtUtc?: string | null;
 }
 
+export interface BackgroundScannerStatus {
+  isEnabled: boolean;
+  isRunning: boolean;
+  lastScanUtc?: string | null;
+  totalScansCompleted: number;
+  activeAlertCount: number;
+  unacknowledgedAlertCount: number;
+  nextScheduledScanUtc: Record<string, string>;
+  lastError?: string | null;
+}
 
+export interface BackgroundScannerSettings {
+  isEnabled: boolean;
+  soundAlertsEnabled: boolean;
+  desktopNotificationEnabled: boolean;
+  reminderIntervalMinutes: number;
+  maxRemindersPerAlert: number;
+}

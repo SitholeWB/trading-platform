@@ -1,6 +1,6 @@
 import React from 'react';
 import { AccountSummary, RiskProfile } from '../types/trading';
-import { Search } from 'lucide-react';
+import { Search, RefreshCw, Bell } from 'lucide-react';
 
 interface HeaderProps {
   pageTitle: string;
@@ -11,6 +11,11 @@ interface HeaderProps {
   currentPrice: number;
   onOpenSymbolSearch?: () => void;
   openPositionsCount?: number;
+  onManualRefresh?: () => void;
+  isRefreshing?: boolean;
+  unacknowledgedAlertsCount?: number;
+  onOpenAlertsModal?: () => void;
+  isBackgroundScannerRunning?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +27,11 @@ export const Header: React.FC<HeaderProps> = ({
   currentPrice,
   onOpenSymbolSearch,
   openPositionsCount = 0,
+  onManualRefresh,
+  isRefreshing = false,
+  unacknowledgedAlertsCount = 0,
+  onOpenAlertsModal,
+  isBackgroundScannerRunning = true,
 }) => {
   const isKillSwitchEngaged = risk?.isKillSwitchEngaged ?? false;
   const currentDrawdown = account?.currentDrawdownPercent ?? 0;
@@ -88,6 +98,45 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Manual Refresh Button - Eliminates high frequency polling overload */}
+        {onManualRefresh && (
+          <button
+            onClick={onManualRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-all text-xs font-mono shadow-sm group cursor-pointer disabled:opacity-50"
+            title="Manual Data Refresh: Reloads account summary, open positions, risk profile, and market feeds immediately."
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 text-blue-400 group-hover:text-blue-300 transition-colors ${
+                isRefreshing ? 'animate-spin' : ''
+              }`}
+            />
+            <span className="hidden lg:inline text-[11px] font-sans">Refresh</span>
+          </button>
+        )}
+
+        {/* Strategy Alerts & Notifications Bell */}
+        {onOpenAlertsModal && (
+          <button
+            onClick={onOpenAlertsModal}
+            className={`relative p-2 rounded-lg border transition-all cursor-pointer ${
+              unacknowledgedAlertsCount > 0
+                ? 'bg-amber-950/60 border-amber-500/60 text-amber-300 shadow-lg shadow-amber-950/30'
+                : 'bg-slate-950 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+            title="Strategy Alerts & Background Scanner (Cross-Platform Desktop & Web Notifications)"
+          >
+            <Bell className={`w-3.5 h-3.5 ${unacknowledgedAlertsCount > 0 ? 'text-amber-400 animate-pulse' : ''}`} />
+            {unacknowledgedAlertsCount > 0 ? (
+              <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[9px] font-bold px-1 rounded-full min-w-[16px] h-4 flex items-center justify-center font-mono">
+                {unacknowledgedAlertsCount}
+              </span>
+            ) : isBackgroundScannerRunning ? (
+              <span className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            ) : null}
+          </button>
+        )}
 
         {/* Emergency Kill Switch Button - Visible only if there are open positions (or already engaged) */}
         {(openPositionsCount > 0 || isKillSwitchEngaged) && (

@@ -12,6 +12,9 @@ import {
   LiveScanReport,
   HistoricalScanRequest,
   HistoricalScanReport,
+  StrategyAlertNotification,
+  BackgroundScannerStatus,
+  BackgroundScannerSettings,
 } from '../types/trading';
 
 const BASE_URL = '/api';
@@ -277,5 +280,33 @@ export const tradingApi = {
       return null;
     }
   },
+
+  // Background Strategy Scanning & Notifications
+  getNotifications: () =>
+    request<StrategyAlertNotification[]>('/notifications'),
+  getScannerStatus: () =>
+    request<BackgroundScannerStatus>('/notifications/status'),
+  getScannerSettings: () =>
+    request<BackgroundScannerSettings>('/notifications/settings'),
+  updateScannerSettings: (settings: BackgroundScannerSettings) =>
+    request<BackgroundScannerSettings>('/notifications/settings', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    }),
+  acknowledgeNotification: (id: string) =>
+    request<{ success: boolean; id: string }>(`/notifications/${id}/acknowledge`, {
+      method: 'POST',
+    }),
+  dismissNotification: (id: string) =>
+    fetch(`${BASE_URL}/notifications/${id}`, { method: 'DELETE' }),
+  clearNotifications: () =>
+    request<{ success: boolean }>('/notifications/clear', {
+      method: 'POST',
+    }),
+  testNotification: () =>
+    request<StrategyAlertNotification>('/notifications/test', {
+      method: 'POST',
+    }),
 };
+
 

@@ -13,15 +13,20 @@ import { KillSwitchModal } from './components/KillSwitchModal';
 import { BrokerSettingsModal } from './components/BrokerSettingsModal';
 import { SymbolSearchModal } from './components/chart/SymbolSearchModal';
 import { Search, Layers, Globe, Coins, TrendingUp, Flame, BarChart3 } from 'lucide-react';
+import { StrategyAlertsModal } from './components/StrategyAlertsModal';
+import { sendDesktopNotification } from './utils/desktopNotification';
 import { tradingApi } from './api/tradingClient';
 import {
   AccountSummary,
+  BackgroundScannerSettings,
+  BackgroundScannerStatus,
   Candle,
   IndicatorConfig,
   OrderType,
   Position,
   RiskProfile,
   SignalAuditLog,
+  StrategyAlertNotification,
   StrategyDefinition,
   Timeframe,
 } from './types/trading';
@@ -190,36 +195,157 @@ export function App() {
 
   const currentPrice = candles[candles.length - 1]?.close ?? 1.0852;
 
-  // Poll backend API every 2.5s for real-time telemetry
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [alerts, setAlerts] = useState<StrategyAlertNotification[]>([]);
+  const [scannerStatus, setScannerStatus] = useState<BackgroundScannerStatus | null>(null);
+  const [scannerSettings, setScannerSettings] = useState<BackgroundScannerSettings | null>(null);
+  const [isAlertsModalOpen, setIsAlertsModalOpen] = useState(false);
+  const scannerSettingsRef = useRef<BackgroundScannerSettings | null>(null);
+  const notifiedRemindersRef = useRef<Map<string, number>>(new Map());
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [strats, logs, pos, rk, acc, cfg] = await Promise.allSettled([
-          tradingApi.getStrategies(),
-          tradingApi.getAuditLogs(30),
-          tradingApi.getPositions(),
-          tradingApi.getRiskProfile(),
-          tradingApi.getAccountSummary(),
-          tradingApi.getBrokerConfig(),
-        ]);
+    scannerSettingsRef.current = scannerSettings;
+  }, [scannerSettings]);
 
-        if (strats.status === 'fulfilled') setStrategies(strats.value);
-        if (logs.status === 'fulfilled') setAuditLogs(logs.value);
-        if (pos.status === 'fulfilled') setPositions(pos.value);
-        if (rk.status === 'fulfilled') setRisk(rk.value);
-        if (acc.status === 'fulfilled') setAccount(acc.value);
-        if (cfg.status === 'fulfilled' && cfg.value?.activeProvider) {
-          setActiveProvider(cfg.value.activeProvider);
-        }
-      } catch (err) {
-        console.warn('Backend polling warning:', err);
+  const fetchTelemetryData = async () => {
+    try {
+      const [strats, logs, pos, rk, acc, cfg] = await Promise.allSettled([
+        tradingApi.getStrategies(),
+        tradingApi.getAuditLogs(30),
+        tradingApi.getPositions(),
+        tradingApi.getRiskProfile(),
+        tradingApi.getAccountSummary(),
+        tradingApi.getBrokerConfig(),
+      ]);
+
+      if (strats.status === 'fulfilled') setStrategies(strats.value);
+      if (logs.status === 'fulfilled') setAuditLogs(logs.value);
+      if (pos.status === 'fulfilled') setPositions(pos.value);
+      if (rk.status === 'fulfilled') setRisk(rk.value);
+      if (acc.status === 'fulfilled') setAccount(acc.value);
+      if (cfg.status === 'fulfilled' && cfg.value?.activeProvider) {
+        setActiveProvider(cfg.value.activeProvider);
       }
-    };
+    } catch (err) {
+      console.warn('Telemetry fetch warning:', err);
+    }
+  };
 
-    fetchData();
-    const interval = setInterval(fetchData, 2500);
+  const fetchNotificationsData = async () => {
+    try {
+      const [alertsRes, statusRes, settingsRes] = await Promise.allSettled([
+        tradingApi.getNotifications(),
+        tradingApi.getScannerStatus(),
+        tradingApi.getScannerSettings(),
+      ]);
+
+      if (alertsRes.status === 'fulfilled') {
+        const newAlerts = alertsRes.value;
+        setAlerts(newAlerts);
+
+        const currentSettings = scannerSettingsRef.current;
+        if (currentSettings?.isEnabled) {
+          for (const alert of newAlerts) {
+            if (alert.isAcknowledged) continue;
+
+            const prevReminderCount = notifiedRemindersRef.current.get(alert.id);
+            if (prevReminderCount === undefined || prevReminderCount < alert.reminderCount) {
+              notifiedRemindersRef.current.set(alert.id, alert.reminderCount);
+
+              if (currentSettings.desktopNotificationEnabled) {
+                const isReminder = (alert.reminderCount ?? 0) > 0;
+                sendDesktopNotification({
+                  title: isReminder
+                    ? `⏰ [Reminder #${alert.reminderCount}] Strategy Alert: ${alert.strategyName}`
+                    : `🎯 Strategy Opportunity: ${alert.strategyName}`,
+                  body: `${alert.symbol} (${alert.timeframe}) · $${Number(alert.lastPrice).toFixed(4)} · ${alert.summaryMessage}`,
+                  tag: `strategy-alert-${alert.id}`,
+                  playSound: currentSettings.soundAlertsEnabled,
+                  onClick: () => {
+                    setSelectedSymbol(alert.symbol);
+                    setTimeframe(alert.timeframe);
+                    handleNavigateTo('chart');
+                  },
+                });
+              }
+            }
+          }
+        }
+      }
+
+      if (statusRes.status === 'fulfilled') setScannerStatus(statusRes.value);
+      if (settingsRes.status === 'fulfilled') {
+        setScannerSettings(settingsRes.value);
+        scannerSettingsRef.current = settingsRes.value;
+      }
+    } catch (err) {
+      console.warn('Notifications fetch warning:', err);
+    }
+  };
+
+  // Relaxed telemetry poll (45s fallback instead of 2.5s high-frequency spam)
+  useEffect(() => {
+    fetchTelemetryData();
+    const interval = setInterval(fetchTelemetryData, 45000);
     return () => clearInterval(interval);
   }, []);
+
+  // Notifications poll (15s lightweight in-memory local endpoint)
+  useEffect(() => {
+    fetchNotificationsData();
+    const interval = setInterval(fetchNotificationsData, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleAcknowledgeAlert = async (id: string) => {
+    try {
+      await tradingApi.acknowledgeNotification(id);
+      setAlerts((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, isAcknowledged: true, acknowledgedAtUtc: new Date().toISOString() } : a))
+      );
+    } catch (e) {
+      console.warn('Acknowledge alert failed:', e);
+    }
+  };
+
+  const handleDismissAlert = async (id: string) => {
+    try {
+      await tradingApi.dismissNotification(id);
+      setAlerts((prev) => prev.filter((a) => a.id !== id));
+      notifiedRemindersRef.current.delete(id);
+    } catch (e) {
+      console.warn('Dismiss alert failed:', e);
+    }
+  };
+
+  const handleClearAllAlerts = async () => {
+    try {
+      await tradingApi.clearNotifications();
+      setAlerts([]);
+      notifiedRemindersRef.current.clear();
+    } catch (e) {
+      console.warn('Clear alerts failed:', e);
+    }
+  };
+
+  const handleTestNotification = async () => {
+    try {
+      const testAlert = await tradingApi.testNotification();
+      setAlerts((prev) => [testAlert, ...prev]);
+    } catch (e) {
+      console.warn('Test notification failed:', e);
+    }
+  };
+
+  const handleUpdateScannerSettings = async (newSettings: BackgroundScannerSettings) => {
+    try {
+      const updated = await tradingApi.updateScannerSettings(newSettings);
+      setScannerSettings(updated);
+      scannerSettingsRef.current = updated;
+    } catch (e) {
+      console.warn('Update scanner settings failed:', e);
+    }
+  };
 
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
@@ -259,6 +385,20 @@ export function App() {
       }
     } catch (err) {
       console.warn('Live candles fetch warning:', err);
+    }
+  };
+
+  const handleManualRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await Promise.allSettled([
+        fetchTelemetryData(),
+        fetchLiveCandles(false),
+        fetchNotificationsData(),
+      ]);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
     }
   };
 
@@ -423,6 +563,11 @@ export function App() {
           currentPrice={currentPrice}
           onOpenSymbolSearch={() => setIsSymbolSearchOpen(true)}
           openPositionsCount={positions.filter((p) => p.status === 'Open').length}
+          onManualRefresh={handleManualRefresh}
+          isRefreshing={isRefreshing}
+          unacknowledgedAlertsCount={alerts.filter((a) => !a.isAcknowledged).length}
+          onOpenAlertsModal={() => setIsAlertsModalOpen(true)}
+          isBackgroundScannerRunning={scannerSettings?.isEnabled ?? true}
         />
 
         {/* Dedicated Page Viewport */}
@@ -456,6 +601,7 @@ export function App() {
               }}
               onPlaceQuickOrder={handlePlaceQuickOrder}
               activeProvider={activeProvider}
+              onOpenAlertsModal={() => setIsAlertsModalOpen(true)}
             />
           </div>
 
@@ -670,6 +816,25 @@ export function App() {
         selectedSymbol={selectedSymbol}
         onSelectSymbol={(newSym) => setSelectedSymbol(newSym)}
         activeProvider={activeProvider}
+      />
+
+      {/* Strategy Alerts & Background Notification Center Modal */}
+      <StrategyAlertsModal
+        isOpen={isAlertsModalOpen}
+        onClose={() => setIsAlertsModalOpen(false)}
+        alerts={alerts}
+        scannerStatus={scannerStatus}
+        settings={scannerSettings}
+        onUpdateSettings={handleUpdateScannerSettings}
+        onAcknowledgeAlert={handleAcknowledgeAlert}
+        onDismissAlert={handleDismissAlert}
+        onClearAllAlerts={handleClearAllAlerts}
+        onTestNotification={handleTestNotification}
+        onNavigateToChart={(sym, tf) => {
+          setSelectedSymbol(sym);
+          if (tf) setTimeframe(tf);
+          handleNavigateTo('chart');
+        }}
       />
     </div>
   );
