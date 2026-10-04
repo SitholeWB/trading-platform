@@ -77,12 +77,14 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       {/* Top: Clean Robot Identity & Status */}
       <div>
         <div className="h-13 min-h-[52px] px-3.5 border-b border-slate-800 flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-sm shadow-sm">
-            🤖
-          </div>
+          <img
+            src="/app-icon.png"
+            alt="Trading Platform"
+            className="w-7 h-7 rounded-lg object-cover border border-emerald-500/30 shadow-sm shadow-emerald-950/40"
+          />
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-bold tracking-wider text-slate-100 uppercase truncate">
-              Trading Robot
+              Trading Platform
             </span>
             <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
               <span

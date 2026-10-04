@@ -94,7 +94,7 @@ public class SpaHostedService : IHostedService, IDisposable
             primaryUrl = primaryUrl.Replace("0.0.0.0", "localhost").Replace("127.0.0.1", "localhost");
 
             _logger.LogInformation("========================================================================");
-            _logger.LogInformation("[SPA HOST] Antigravity FX Workstation live at: {Url}", primaryUrl);
+            _logger.LogInformation("[SPA HOST] Trading Platform live at: {Url}", primaryUrl);
             _logger.LogInformation("[SPA HOST] REST API and Swagger Docs: {Url}/openapi/v1.json", primaryUrl);
             _logger.LogInformation("========================================================================");
 
