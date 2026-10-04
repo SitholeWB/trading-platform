@@ -393,3 +393,12 @@ export interface CopilotChatResult {
   suggestedFollowups: string[];
   contextSymbol?: string;
 }
+
+export interface AIProviderConfig {
+  provider: string;
+  model?: string | null;
+  apiKey?: string | null;
+  endpoint?: string | null;
+  hasApiKey: boolean;
+  maskedApiKey?: string | null;
+}

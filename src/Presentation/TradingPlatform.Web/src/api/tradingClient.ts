@@ -20,6 +20,7 @@ import {
   AuditExplanationResult,
   AICopilotContext,
   CopilotChatResult,
+  AIProviderConfig,
 } from '../types/trading';
 
 const BASE_URL = '/api';
@@ -333,6 +334,13 @@ export const tradingApi = {
     request<CopilotChatResult>('/ai/chat', {
       method: 'POST',
       body: JSON.stringify({ message, context }),
+    }),
+  getAiConfig: () =>
+    request<AIProviderConfig>('/ai/config'),
+  updateAiConfig: (config: { provider: string; model?: string | null; apiKey?: string | null; endpoint?: string | null }) =>
+    request<AIProviderConfig>('/ai/config', {
+      method: 'POST',
+      body: JSON.stringify(config),
     }),
 };
 

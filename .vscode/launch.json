@@ -7,7 +7,7 @@
       "request": "launch",
       "preLaunchTask": "build",
       "program": "${workspaceFolder}/src/Presentation/TradingPlatform.Api/bin/Debug/net10.0/TradingPlatform.Api.dll",
-      "args": [],
+      "args": ["--urls", "http://localhost:5000"],
       "cwd": "${workspaceFolder}/src/Presentation/TradingPlatform.Api",
       "stopAtEntry": false,
       "serverReadyAction": {

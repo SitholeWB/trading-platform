@@ -1,4 +1,7 @@
+using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Domain.Entities;
@@ -10,10 +13,59 @@ namespace TradingPlatform.Application.Services;
 public class AIEngineService : IAIEngineService
 {
     private readonly ILogger<AIEngineService> _logger;
+    private readonly IConfiguration? _config;
+    private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private static AIProviderConfig? _runtimeConfig;
 
-    public AIEngineService(ILogger<AIEngineService> logger)
+    public AIEngineService(ILogger<AIEngineService> logger, IConfiguration? config = null)
     {
         _logger = logger;
+        _config = config;
+    }
+
+    public AIProviderConfig GetConfig()
+    {
+        if (_runtimeConfig != null) return _runtimeConfig;
+
+        string provider = Environment.GetEnvironmentVariable("AI_PROVIDER") 
+            ?? _config?["AI:Provider"] 
+            ?? "BuiltIn";
+
+        string? apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
+            ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
+            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY")
+            ?? _config?[$"AI:{provider}:ApiKey"]
+            ?? _config?["AI:ApiKey"];
+
+        string? model = Environment.GetEnvironmentVariable("AI_MODEL")
+            ?? _config?[$"AI:{provider}:Model"]
+            ?? _config?["AI:Model"];
+
+        string? endpoint = _config?[$"AI:{provider}:Endpoint"]
+            ?? _config?["AI:Endpoint"];
+
+        bool hasKey = !string.IsNullOrWhiteSpace(apiKey);
+        string? masked = hasKey && apiKey!.Length > 8 
+            ? $"{apiKey[..4]}...{apiKey[^4..]}" 
+            : (hasKey ? "****" : null);
+
+        return new AIProviderConfig(provider, model, apiKey, endpoint, hasKey, masked);
+    }
+
+    public void UpdateConfig(AIProviderConfig config)
+    {
+        bool hasKey = !string.IsNullOrWhiteSpace(config.ApiKey);
+        string? masked = hasKey && config.ApiKey!.Length > 8 
+            ? $"{config.ApiKey[..4]}...{config.ApiKey[^4..]}" 
+            : (hasKey ? "****" : null);
+
+        _runtimeConfig = new AIProviderConfig(
+            config.Provider,
+            config.Model,
+            config.ApiKey,
+            config.Endpoint,
+            hasKey,
+            masked);
     }
 
     public Task<GeneratedStrategyResult> GenerateStrategyAsync(string userPrompt, string? targetTimeframe = null, CancellationToken ct = default)
@@ -333,7 +385,36 @@ public class AIEngineService : IAIEngineService
         return Task.FromResult(result);
     }
 
-    public Task<CopilotChatResult> ChatAsync(string message, AICopilotContext context, CancellationToken ct = default)
+    public async Task<CopilotChatResult> ChatAsync(string message, AICopilotContext context, CancellationToken ct = default)
+    {
+        var config = GetConfig();
+        if (config.Provider != "BuiltIn" && (config.HasApiKey || config.Provider == "Ollama"))
+        {
+            try
+            {
+                var externalResponse = await CallExternalLlmAsync(config, message, context, ct);
+                if (!string.IsNullOrWhiteSpace(externalResponse))
+                {
+                    var followups = new List<string>
+                    {
+                        $"Analyze current {context.CurrentSymbol ?? "EURUSD"} setup",
+                        "Create a strategy from this analysis",
+                        "Check my account risk health"
+                    };
+                    return new CopilotChatResult(externalResponse, followups, context.CurrentSymbol ?? "EURUSD");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[AI ENGINE] External provider {Provider} failed. Falling back to built-in quant engine.", config.Provider);
+            }
+        }
+
+        // Built-in high performance quant engine fallback
+        return GenerateBuiltInChatResponse(message, context);
+    }
+
+    private CopilotChatResult GenerateBuiltInChatResponse(string message, AICopilotContext context)
     {
         string msgLower = message.ToLowerInvariant();
         string response;
@@ -391,6 +472,177 @@ public class AIEngineService : IAIEngineService
             followups.Add("Check my account risk health");
         }
 
-        return Task.FromResult(new CopilotChatResult(response, followups, activeSymbol));
+        return new CopilotChatResult(response, followups, activeSymbol);
+    }
+
+    private async Task<string?> CallExternalLlmAsync(AIProviderConfig config, string userMessage, AICopilotContext context, CancellationToken ct)
+    {
+        string systemPrompt = "You are an institutional quantitative trading analyst and strategy architect on Trading Platform. " +
+            $"The trader is analyzing {context.CurrentSymbol ?? "EURUSD"} on {context.CurrentTimeframe ?? "M15"}. " +
+            $"Current Drawdown: {context.CurrentDrawdown?.ToString("F2") ?? "0.00"}%, Open Positions: {context.OpenPositionsCount ?? 0}. " +
+            "Provide concise, actionable market insights, rule conditions, or risk advice with professional markdown formatting.";
+
+        string provider = config.Provider.ToLowerInvariant();
+
+        if (provider.Contains("claude") || provider.Contains("anthropic"))
+        {
+            return await CallClaudeAsync(config, systemPrompt, userMessage, ct);
+        }
+        else if (provider.Contains("gemini"))
+        {
+            return await CallGeminiAsync(config, systemPrompt, userMessage, ct);
+        }
+        else if (provider.Contains("ollama"))
+        {
+            return await CallOllamaAsync(config, systemPrompt, userMessage, ct);
+        }
+        else
+        {
+            return await CallOpenAiAsync(config, systemPrompt, userMessage, ct);
+        }
+    }
+
+    private async Task<string?> CallOpenAiAsync(AIProviderConfig config, string systemPrompt, string userMessage, CancellationToken ct)
+    {
+        string endpoint = string.IsNullOrWhiteSpace(config.Endpoint)
+            ? "https://api.openai.com/v1/chat/completions"
+            : (config.Endpoint.EndsWith("/chat/completions") ? config.Endpoint : $"{config.Endpoint.TrimEnd('/')}/chat/completions");
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        if (!string.IsNullOrWhiteSpace(config.ApiKey))
+        {
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey);
+        }
+
+        var payload = new
+        {
+            model = string.IsNullOrWhiteSpace(config.Model) ? "gpt-4o" : config.Model,
+            messages = new[]
+            {
+                new { role = "system", content = systemPrompt },
+                new { role = "user", content = userMessage }
+            },
+            temperature = 0.4
+        };
+
+        req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        using var res = await _httpClient.SendAsync(req, ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            var err = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("[AI ENGINE] OpenAI API error ({Status}): {Error}", res.StatusCode, err);
+            return null;
+        }
+
+        using var doc = await JsonDocument.ParseAsync(await res.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        return doc.RootElement
+            .GetProperty("choices")[0]
+            .GetProperty("message")
+            .GetProperty("content")
+            .GetString();
+    }
+
+    private async Task<string?> CallClaudeAsync(AIProviderConfig config, string systemPrompt, string userMessage, CancellationToken ct)
+    {
+        string endpoint = string.IsNullOrWhiteSpace(config.Endpoint)
+            ? "https://api.anthropic.com/v1/messages"
+            : (config.Endpoint.EndsWith("/messages") ? config.Endpoint : $"{config.Endpoint.TrimEnd('/')}/messages");
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        req.Headers.Add("x-api-key", config.ApiKey ?? "");
+        req.Headers.Add("anthropic-version", "2023-06-01");
+
+        var payload = new
+        {
+            model = string.IsNullOrWhiteSpace(config.Model) ? "claude-3-5-sonnet-20241022" : config.Model,
+            max_tokens = 1024,
+            system = systemPrompt,
+            messages = new[]
+            {
+                new { role = "user", content = userMessage }
+            }
+        };
+
+        req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        using var res = await _httpClient.SendAsync(req, ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            var err = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("[AI ENGINE] Claude API error ({Status}): {Error}", res.StatusCode, err);
+            return null;
+        }
+
+        using var doc = await JsonDocument.ParseAsync(await res.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        var contentArray = doc.RootElement.GetProperty("content");
+        if (contentArray.GetArrayLength() > 0)
+        {
+            return contentArray[0].GetProperty("text").GetString();
+        }
+        return null;
+    }
+
+    private async Task<string?> CallGeminiAsync(AIProviderConfig config, string systemPrompt, string userMessage, CancellationToken ct)
+    {
+        string model = string.IsNullOrWhiteSpace(config.Model) ? "gemini-1.5-pro" : config.Model;
+        string endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={config.ApiKey}";
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        var payload = new
+        {
+            contents = new[]
+            {
+                new
+                {
+                    role = "user",
+                    parts = new[]
+                    {
+                        new { text = $"{systemPrompt}\n\nUser Question: {userMessage}" }
+                    }
+                }
+            }
+        };
+
+        req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        using var res = await _httpClient.SendAsync(req, ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            var err = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("[AI ENGINE] Gemini API error ({Status}): {Error}", res.StatusCode, err);
+            return null;
+        }
+
+        using var doc = await JsonDocument.ParseAsync(await res.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        return doc.RootElement
+            .GetProperty("candidates")[0]
+            .GetProperty("content")
+            .GetProperty("parts")[0]
+            .GetProperty("text")
+            .GetString();
+    }
+
+    private async Task<string?> CallOllamaAsync(AIProviderConfig config, string systemPrompt, string userMessage, CancellationToken ct)
+    {
+        string baseUrl = string.IsNullOrWhiteSpace(config.Endpoint) ? "http://localhost:11434" : config.Endpoint.TrimEnd('/');
+        string endpoint = $"{baseUrl}/api/generate";
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        var payload = new
+        {
+            model = string.IsNullOrWhiteSpace(config.Model) ? "llama3.2" : config.Model,
+            prompt = $"{systemPrompt}\n\nUser: {userMessage}",
+            stream = false
+        };
+
+        req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        using var res = await _httpClient.SendAsync(req, ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            var err = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("[AI ENGINE] Ollama API error ({Status}): {Error}", res.StatusCode, err);
+            return null;
+        }
+
+        using var doc = await JsonDocument.ParseAsync(await res.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        return doc.RootElement.GetProperty("response").GetString();
     }
 }

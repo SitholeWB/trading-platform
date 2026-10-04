@@ -344,6 +344,22 @@ aiGroup.MapPost("/chat", async ([FromBody] CopilotChatRequest req, IAIEngineServ
     return Results.Ok(result);
 });
 
+aiGroup.MapGet("/config", (IAIEngineService aiService) =>
+{
+    return Results.Ok(aiService.GetConfig());
+});
+
+aiGroup.MapPost("/config", ([FromBody] UpdateAiConfigRequest req, IAIEngineService aiService) =>
+{
+    var newConfig = new AIProviderConfig(
+        req.Provider,
+        req.Model,
+        req.ApiKey,
+        req.Endpoint);
+    aiService.UpdateConfig(newConfig);
+    return Results.Ok(aiService.GetConfig());
+});
+
 // ----------------------------------------------------
 // 7. Market Data & Multi-Timeframe Feeds
 // ----------------------------------------------------
@@ -1547,6 +1563,7 @@ public record GenerateStrategyAiRequest(string Prompt, string? Timeframe);
 public record AnalyzeMarketAiRequest(string Symbol, string Timeframe);
 public record ExplainAuditAiRequest(string Fingerprint);
 public record CopilotChatRequest(string Message, AICopilotContext? Context);
+public record UpdateAiConfigRequest(string Provider, string? Model, string? ApiKey, string? Endpoint);
 
 public partial class Program
 {

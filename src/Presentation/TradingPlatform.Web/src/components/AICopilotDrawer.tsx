@@ -18,9 +18,14 @@ import {
   ArrowRight,
   ShieldCheck,
   Search,
+  Sliders,
+  Key,
+  Cpu,
+  Globe,
 } from 'lucide-react';
 import {
   AICopilotContext,
+  AIProviderConfig,
   AuditExplanationResult,
   MarketAnalysisResult,
   SignalAuditLog,
@@ -99,6 +104,70 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   const [auditExplanation, setAuditExplanation] = useState<AuditExplanationResult | null>(null);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+
+  // AI Provider Configuration State
+  const [showConfig, setShowConfig] = useState(false);
+  const [aiConfig, setAiConfig] = useState<AIProviderConfig>({
+    provider: 'BuiltIn',
+    model: 'Built-in Quant Engine',
+    hasApiKey: false,
+  });
+  const [selectedProvider, setSelectedProvider] = useState('BuiltIn');
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [modelInput, setModelInput] = useState('');
+  const [endpointInput, setEndpointInput] = useState('');
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configFeedback, setConfigFeedback] = useState<string | null>(null);
+
+  // Load AI configuration on drawer open
+  useEffect(() => {
+    if (isOpen) {
+      tradingApi
+        .getAiConfig()
+        .then((cfg) => {
+          if (cfg) {
+            setAiConfig(cfg);
+            setSelectedProvider(cfg.provider || 'BuiltIn');
+            setModelInput(cfg.model || '');
+            setEndpointInput(cfg.endpoint || '');
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
+  const handleProviderSelect = (prov: string) => {
+    setSelectedProvider(prov);
+    if (prov === 'OpenAI') setModelInput('gpt-4o');
+    else if (prov === 'Claude') setModelInput('claude-3-5-sonnet-20241022');
+    else if (prov === 'Gemini') setModelInput('gemini-1.5-pro');
+    else if (prov === 'Ollama') setModelInput('llama3.2');
+    else setModelInput('');
+  };
+
+  const handleSaveAiConfig = async () => {
+    setIsSavingConfig(true);
+    setConfigFeedback(null);
+    try {
+      const updated = await tradingApi.updateAiConfig({
+        provider: selectedProvider,
+        model: modelInput || null,
+        apiKey: apiKeyInput || null,
+        endpoint: endpointInput || null,
+      });
+      setAiConfig(updated);
+      setApiKeyInput('');
+      setConfigFeedback('✓ Saved & active!');
+      setTimeout(() => {
+        setConfigFeedback(null);
+        setShowConfig(false);
+      }, 1200);
+    } catch (err: any) {
+      setConfigFeedback(`Failed: ${err?.message || 'Error saving'}`);
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
 
   // Scroll chat to bottom
   useEffect(() => {
@@ -222,7 +291,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-slate-100 font-sans tracking-wide">AI Market Copilot</h2>
               <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                Live
+                {aiConfig.provider === 'BuiltIn' ? 'Built-in' : aiConfig.provider}
               </span>
             </div>
             <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 font-mono">
@@ -237,14 +306,155 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 transition-colors"
-          title="Close Copilot"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setShowConfig(!showConfig)}
+            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+              showConfig
+                ? 'bg-cyan-950/80 border-cyan-500/60 text-cyan-300 ring-1 ring-cyan-500/40'
+                : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'
+            }`}
+            title="Configure AI Provider (Built-in, OpenAI, Claude, Gemini, Ollama)"
+          >
+            <Sliders className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 transition-colors cursor-pointer"
+            title="Close Copilot"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       </div>
+
+      {/* Provider Configuration Panel */}
+      {showConfig && (
+        <div className="p-4 bg-slate-900 border-b border-slate-800 space-y-3.5 animate-in slide-in-from-top-2 duration-150">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-bold text-slate-200">AI Engine Provider</span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-mono">
+              Active: <strong className="text-cyan-300">{aiConfig.provider}</strong>
+            </span>
+          </div>
+
+          {/* Provider Selection Chips */}
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 font-sans">
+            {[
+              { id: 'BuiltIn', label: '🧠 Built-in' },
+              { id: 'OpenAI', label: '🟢 OpenAI' },
+              { id: 'Claude', label: '🟣 Claude' },
+              { id: 'Gemini', label: '🔵 Gemini' },
+              { id: 'Ollama', label: '🦙 Ollama' },
+            ].map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => handleProviderSelect(p.id)}
+                className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
+                  selectedProvider === p.id
+                    ? 'bg-cyan-950/80 border-cyan-500/80 text-cyan-200 shadow-sm'
+                    : 'bg-slate-950 hover:bg-slate-800/80 border-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {selectedProvider === 'BuiltIn' ? (
+            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
+              ⚡ <strong>Built-in Quant Engine:</strong> 100% offline, zero API keys required, instant sub-millisecond strategy synthesis and technical diagnostics.
+            </div>
+          ) : (
+            <div className="space-y-2.5 text-xs">
+              <div>
+                <label className="text-[10px] text-slate-400 font-mono uppercase block mb-1">
+                  Model Name:
+                </label>
+                <input
+                  type="text"
+                  value={modelInput}
+                  onChange={(e) => setModelInput(e.target.value)}
+                  placeholder={
+                    selectedProvider === 'OpenAI'
+                      ? 'gpt-4o or gpt-4o-mini'
+                      : selectedProvider === 'Claude'
+                      ? 'claude-3-5-sonnet-20241022'
+                      : selectedProvider === 'Gemini'
+                      ? 'gemini-1.5-pro'
+                      : 'llama3.2'
+                  }
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {selectedProvider !== 'Ollama' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-slate-400 font-mono uppercase">API Key:</label>
+                    {aiConfig.hasApiKey && (
+                      <span className="text-[10px] text-emerald-400 font-mono">
+                        Saved: {aiConfig.maskedApiKey}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="password"
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    placeholder={aiConfig.hasApiKey ? 'Enter new key to replace' : 'sk-...'}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="text-[10px] text-slate-400 font-mono uppercase block mb-1">
+                  Custom Endpoint URL (Optional):
+                </label>
+                <input
+                  type="text"
+                  value={endpointInput}
+                  onChange={(e) => setEndpointInput(e.target.value)}
+                  placeholder={
+                    selectedProvider === 'Ollama'
+                      ? 'http://localhost:11434'
+                      : 'Leave blank for official API endpoint'
+                  }
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-1">
+            {configFeedback && (
+              <span className="text-xs text-cyan-400 font-mono">{configFeedback}</span>
+            )}
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                type="button"
+                onClick={() => setShowConfig(false)}
+                className="px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveAiConfig}
+                disabled={isSavingConfig}
+                className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isSavingConfig ? 'Saving...' : 'Save Settings'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       <div className="flex border-b border-slate-800/80 bg-slate-900/30 px-3 flex-shrink-0">

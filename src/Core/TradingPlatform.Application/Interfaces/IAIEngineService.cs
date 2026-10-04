@@ -50,10 +50,20 @@ public record CopilotChatResult(
     IReadOnlyList<string> SuggestedFollowups,
     string? ContextSymbol = null);
 
+public record AIProviderConfig(
+    string Provider,
+    string? Model,
+    string? ApiKey,
+    string? Endpoint,
+    bool HasApiKey = false,
+    string? MaskedApiKey = null);
+
 public interface IAIEngineService
 {
     Task<GeneratedStrategyResult> GenerateStrategyAsync(string userPrompt, string? targetTimeframe = null, CancellationToken ct = default);
     Task<MarketAnalysisResult> AnalyzeMarketAsync(string symbol, string timeframe, MarketSnapshot snapshot, CancellationToken ct = default);
     Task<AuditExplanationResult> ExplainAuditAsync(SignalAuditLog auditLog, CancellationToken ct = default);
     Task<CopilotChatResult> ChatAsync(string message, AICopilotContext context, CancellationToken ct = default);
+    AIProviderConfig GetConfig();
+    void UpdateConfig(AIProviderConfig config);
 }
