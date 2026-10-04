@@ -489,20 +489,37 @@ export function App() {
     await tradingApi.closePosition(ticket, 'ManualTerminalClose');
     const updated = await tradingApi.getPositions();
     setPositions(updated);
+    try {
+      const acc = await tradingApi.getAccountSummary();
+      setAccount(acc);
+    } catch {}
   };
 
-  const handlePlaceOrder = async (side: 'Buy' | 'Sell', lots: number, price: number) => {
+  const handlePlaceOrder = async (
+    side: 'Buy' | 'Sell',
+    lots: number,
+    price: number,
+    stopLoss?: number,
+    takeProfit?: number
+  ) => {
     try {
       await tradingApi.placeOrder({
         symbol: selectedSymbol,
         orderType: side,
         lots,
         price,
+        stopLoss,
+        takeProfit,
       });
       const updated = await tradingApi.getPositions();
       setPositions(updated);
+      try {
+        const acc = await tradingApi.getAccountSummary();
+        setAccount(acc);
+      } catch {}
     } catch (err) {
       console.warn('Manual order placement fallback:', err);
+      throw err;
     }
   };
 
@@ -585,6 +602,8 @@ export function App() {
           isBackgroundScannerRunning={scannerSettings?.isEnabled ?? true}
           onToggleCopilot={() => setIsCopilotOpen((prev) => !prev)}
           isCopilotOpen={isCopilotOpen}
+          activeProvider={activeProvider}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
         {/* Dedicated Page Viewport */}
@@ -802,6 +821,7 @@ export function App() {
                   onLoadOlderCandles={handleLoadOlderCandles}
                   isLoadingHistory={isLoadingHistory}
                   activeProvider={activeProvider}
+                  account={account}
                 />
               </div>
             </div>

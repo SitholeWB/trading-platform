@@ -12,6 +12,7 @@ import {
   LogicalRange,
 } from 'lightweight-charts';
 import {
+  AccountSummary,
   Candle,
   IndicatorConfig,
   Position,
@@ -66,11 +67,18 @@ interface TradingChartProps {
   indicatorConfig?: IndicatorConfig;
   positions?: Position[];
   auditLogs?: SignalAuditLog[];
-  onPlaceOrder?: (side: 'Buy' | 'Sell', lots: number, price: number) => Promise<void>;
+  onPlaceOrder?: (
+    side: 'Buy' | 'Sell',
+    lots: number,
+    price: number,
+    stopLoss?: number,
+    takeProfit?: number
+  ) => Promise<void>;
   onClosePosition?: (ticket: number) => Promise<void>;
   onLoadOlderCandles?: () => Promise<HistoryLoadResult>;
   isLoadingHistory?: boolean;
   activeProvider?: string;
+  account?: AccountSummary | null;
 }
 
 export interface HistoryLoadResult {
@@ -100,6 +108,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   onLoadOlderCandles,
   isLoadingHistory = false,
   activeProvider = 'KeylessPublic',
+  account = null,
 }) => {
   // Chart layout and state
   const [chartType, setChartType] = useState<ChartType>('candlestick');
@@ -1331,6 +1340,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         activeAlertsCount={
           alerts.filter((a) => a.symbol.toUpperCase() === symbol.toUpperCase() && !a.triggered).length
         }
+        showOrderWidget={showOrderWidget}
+        onToggleOrderWidget={() => setShowOrderWidget(!showOrderWidget)}
         onFitContent={handleFitContent}
         onTakeSnapshot={handleTakeSnapshot}
         isFullscreen={isFullscreen}
@@ -1408,7 +1419,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               <QuickOrderWidget
                 symbol={symbol}
                 currentPrice={currentPrice}
+                activeProvider={activeProvider}
+                account={account}
                 onPlaceOrder={onPlaceOrder}
+                onClose={() => setShowOrderWidget(false)}
               />
             )}
 
@@ -1514,7 +1528,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 currentPrice={currentPrice}
                 onClosePosition={onClosePosition}
                 onModifyPosition={handleModifyPosition}
-                onPlaceQuickOrder={onPlaceOrder}
               />
 
               {/* History page boundaries + persistent history status */}

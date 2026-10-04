@@ -34,6 +34,9 @@ interface ChartToolbarProps {
   onLayoutModeChange: (mode: ChartLayoutMode) => void;
   currentPrice: number;
   priceChange: { diff: number; pct: number };
+  // Quick order execution dock
+  showOrderWidget?: boolean;
+  onToggleOrderWidget?: () => void;
   // Historical pagination
   candlesCount?: number;
   isLoadingHistory?: boolean;
@@ -54,6 +57,8 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
   activeIndicatorsCount,
   onOpenAlertsModal,
   activeAlertsCount = 0,
+  showOrderWidget = true,
+  onToggleOrderWidget,
   onFitContent,
   onTakeSnapshot,
   isFullscreen,
@@ -329,6 +334,21 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
               </>
             )}
           </div>
+
+          {/* Quick Trade Dock Toggle */}
+          {onToggleOrderWidget && (
+            <button
+              onClick={onToggleOrderWidget}
+              className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                showOrderWidget
+                  ? 'bg-blue-600/90 text-white shadow-sm ring-1 ring-blue-400/40'
+                  : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800'
+              }`}
+              title={showOrderWidget ? 'Hide 1-Click Order Dock' : 'Show 1-Click Order Dock'}
+            >
+              <span>⚡ Trade</span>
+            </button>
+          )}
 
           {/* Fit Content / Reset View */}
           <button

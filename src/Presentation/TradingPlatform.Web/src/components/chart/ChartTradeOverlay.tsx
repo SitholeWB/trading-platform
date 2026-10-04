@@ -12,7 +12,6 @@ interface ChartTradeOverlayProps {
   currentPrice: number;
   onClosePosition?: (ticket: number) => Promise<void>;
   onModifyPosition?: (ticket: number, stopLoss?: number, takeProfit?: number) => Promise<void>;
-  onPlaceQuickOrder?: (side: 'Buy' | 'Sell', lots: number, price: number) => Promise<void>;
 }
 
 export const ChartTradeOverlay: React.FC<ChartTradeOverlayProps> = ({
@@ -23,7 +22,6 @@ export const ChartTradeOverlay: React.FC<ChartTradeOverlayProps> = ({
   currentPrice,
   onClosePosition,
   onModifyPosition,
-  onPlaceQuickOrder,
 }) => {
   const [, setTick] = useState(0);
 
@@ -46,10 +44,6 @@ export const ChartTradeOverlay: React.FC<ChartTradeOverlayProps> = ({
     takeProfit: string;
     orderType: string;
   } | null>(null);
-
-  // Quick 1-click order bar state
-  const [quickLots, setQuickLots] = useState<number>(0.1);
-  const [isSubmittingQuick, setIsSubmittingQuick] = useState(false);
 
   const getY = useCallback(
     (price: number): number | null => {
@@ -76,75 +70,9 @@ export const ChartTradeOverlay: React.FC<ChartTradeOverlayProps> = ({
     setEditingProtection(null);
   };
 
-  const handleQuickBuy = async () => {
-    if (!onPlaceQuickOrder || isSubmittingQuick) return;
-    setIsSubmittingQuick(true);
-    try {
-      await onPlaceQuickOrder('Buy', quickLots, currentPrice);
-    } finally {
-      setIsSubmittingQuick(false);
-    }
-  };
-
-  const handleQuickSell = async () => {
-    if (!onPlaceQuickOrder || isSubmittingQuick) return;
-    setIsSubmittingQuick(true);
-    try {
-      await onPlaceQuickOrder('Sell', quickLots, currentPrice);
-    } finally {
-      setIsSubmittingQuick(false);
-    }
-  };
-
-  // Synthetic Bid / Ask spread for quick trading widget
-  const spreadDelta = currentPrice >= 100 ? 0.05 : 0.00015;
-  const bidPrice = currentPrice - spreadDelta;
-  const askPrice = currentPrice + spreadDelta;
-
   return (
     <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden font-sans">
-      {/* 1. Quick 1-Click Buy / Sell Floating Widget (TradingView Style) */}
-      <div className="absolute top-12 left-4 pointer-events-auto bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-xl p-1.5 shadow-2xl flex items-center gap-1.5 z-30 select-none animate-fade-in">
-        <button
-          onClick={handleQuickSell}
-          disabled={isSubmittingQuick}
-          className="px-2.5 py-1.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white font-mono text-xs flex flex-col items-center transition-all disabled:opacity-50 shadow-md shadow-red-600/20"
-          title="Instant 1-Click Market SELL"
-        >
-          <span className="text-[10px] font-sans font-bold text-red-100 flex items-center gap-1">
-            <ArrowDownRight className="w-3 h-3" /> SELL
-          </span>
-          <span className="font-bold text-xs">{formatPrice(bidPrice, symbol)}</span>
-        </button>
-
-        <div className="flex flex-col items-center px-1">
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            max="100"
-            value={quickLots}
-            onChange={(e) => setQuickLots(Math.max(0.01, parseFloat(e.target.value) || 0.1))}
-            className="w-14 text-center py-1 bg-slate-900 border border-slate-700 rounded text-slate-100 font-mono text-xs font-bold focus:outline-none focus:border-blue-500"
-            title="Trade Lots"
-          />
-          <span className="text-[9px] text-slate-400 mt-0.5 font-mono">LOTS</span>
-        </div>
-
-        <button
-          onClick={handleQuickBuy}
-          disabled={isSubmittingQuick}
-          className="px-2.5 py-1.5 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white font-mono text-xs flex flex-col items-center transition-all disabled:opacity-50 shadow-md shadow-blue-600/20"
-          title="Instant 1-Click Market BUY"
-        >
-          <span className="text-[10px] font-sans font-bold text-blue-100 flex items-center gap-1">
-            <ArrowUpRight className="w-3 h-3" /> BUY
-          </span>
-          <span className="font-bold text-xs">{formatPrice(askPrice, symbol)}</span>
-        </button>
-      </div>
-
-      {/* 2. Interactive Position Overlays (Entry, Stop Loss, Take Profit lines & badges) */}
+      {/* Interactive Position Overlays (Entry, Stop Loss, Take Profit lines & badges) */}
       {activePositions.map((pos) => {
         const yEntry = getY(pos.entryPrice);
         const ySL = pos.stopLossPrice ? getY(pos.stopLossPrice) : null;

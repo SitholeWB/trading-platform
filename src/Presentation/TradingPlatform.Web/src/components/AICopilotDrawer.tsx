@@ -22,6 +22,8 @@ import {
   Key,
   Cpu,
   Globe,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   AICopilotContext,
@@ -32,6 +34,58 @@ import {
   Timeframe,
 } from '../types/trading';
 import { tradingApi } from '../api/tradingClient';
+
+interface ProviderInfo {
+  name: string;
+  shortName: string;
+  icon: string;
+  badge: string;
+  modelPlaceholder: string;
+  desc: string;
+}
+
+export const PROVIDER_METADATA: Record<string, ProviderInfo> = {
+  BuiltIn: {
+    name: 'Built-in Quant Engine',
+    shortName: 'Built-in',
+    icon: '🧠',
+    badge: 'Free & Local',
+    modelPlaceholder: 'Built-in Quant Engine',
+    desc: 'Local high-speed algorithmic quant intelligence • 100% Free • Zero API key needed',
+  },
+  OpenAI: {
+    name: 'OpenAI (GPT-4o)',
+    shortName: 'OpenAI',
+    icon: '🟢',
+    badge: 'BYOK Active',
+    modelPlaceholder: 'gpt-4o or gpt-4o-mini',
+    desc: 'Reasoning & market insights via OpenAI API with your personal API key',
+  },
+  Claude: {
+    name: 'Claude (Sonnet 3.5)',
+    shortName: 'Claude',
+    icon: '🟣',
+    badge: 'BYOK Active',
+    modelPlaceholder: 'claude-3-5-sonnet-20241022',
+    desc: 'Deep strategy code analysis via Anthropic API with your personal API key',
+  },
+  Gemini: {
+    name: 'Gemini (1.5 Pro)',
+    shortName: 'Gemini',
+    icon: '🔵',
+    badge: 'BYOK Active',
+    modelPlaceholder: 'gemini-1.5-pro',
+    desc: 'High-speed multimodal and deep market context via Google AI API',
+  },
+  Ollama: {
+    name: 'Ollama (Local LLM)',
+    shortName: 'Ollama',
+    icon: '🦙',
+    badge: 'Self-Hosted',
+    modelPlaceholder: 'llama3.2 or mistral',
+    desc: 'Privacy-focused self-hosted local model on your own local server',
+  },
+};
 
 interface AICopilotDrawerProps {
   isOpen: boolean;
@@ -51,6 +105,8 @@ interface ChatMessage {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: string;
+  provider?: string;
+  model?: string;
   suggestedFollowups?: string[];
 }
 
@@ -80,8 +136,10 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     {
       id: 'welcome',
       sender: 'assistant',
-      text: `Hello! I am your **AI Trading Copilot**. I analyze live market structure for **${currentSymbol} (${currentTimeframe})**, evaluate quantitative strategy performance, and diagnose trade executions in plain English.\n\nHow can I help your trading right now?`,
+      text: `Hello! I am your **AI Trading Copilot**. I analyze live market structure for **${currentSymbol} (${currentTimeframe})**, evaluate quantitative strategy performance, and diagnose trade executions in plain English.\n\n⚡ **Active Engine:** Built-in Quant Engine (Free & Offline)\n💡 Want to use **OpenAI (GPT-4o)**, **Claude (Sonnet 3.5)**, **Gemini**, or **Ollama**? Click **"Switch AI Provider"** above to insert your own private API key!`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      provider: 'BuiltIn',
+      model: 'Built-in Quant Engine',
       suggestedFollowups: [
         `Analyze ${currentSymbol} structure`,
         'Assess current drawdown risk',
@@ -234,6 +292,8 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
         sender: 'assistant',
         text: res.responseMarkdown,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        provider: aiConfig.provider,
+        model: aiConfig.model || undefined,
         suggestedFollowups: res.suggestedFollowups,
       };
       setMessages((prev) => [...prev, assistantMsg]);
@@ -241,8 +301,9 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
       const errorMsg: ChatMessage = {
         id: `e-${Date.now()}`,
         sender: 'assistant',
-        text: `⚠️ **Error communicating with AI Engine:** ${err?.message || 'Unable to connect to service. Please check API status.'}`,
+        text: `⚠️ **Error communicating with ${PROVIDER_METADATA[aiConfig.provider]?.name || aiConfig.provider}:** ${err?.message || 'Unable to connect to service. Please check your network or API key.'}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        provider: aiConfig.provider,
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -286,19 +347,31 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   return (
     <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[480px] md:w-[540px] bg-slate-950/95 backdrop-blur-xl border-l border-slate-800 shadow-2xl flex flex-col transition-all duration-300 animate-in slide-in-from-right">
       {/* Top Header */}
-      <div className="p-4 border-b border-slate-800/80 bg-slate-900/60 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-900/40">
+      <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-900/60 flex items-center justify-between flex-shrink-0 gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-900/40 flex-shrink-0">
             <Sparkles className="w-5 h-5 text-white animate-pulse" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-sm font-bold text-slate-100 font-sans tracking-wide">AI Market Copilot</h2>
-              <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                {aiConfig.provider === 'BuiltIn' ? 'Built-in' : aiConfig.provider}
-              </span>
+              
+              {/* Interactive Provider Switcher Pill in Header */}
+              <button
+                type="button"
+                onClick={() => setShowConfig(!showConfig)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 hover:border-cyan-400 transition-all cursor-pointer group shadow-sm"
+                title="Click to Switch AI Engine (Built-in, OpenAI, Claude, Gemini, Ollama)"
+              >
+                <span>{PROVIDER_METADATA[aiConfig.provider]?.icon || '🧠'}</span>
+                <span className="font-semibold">{PROVIDER_METADATA[aiConfig.provider]?.shortName || aiConfig.provider}</span>
+                <span className="text-[9.5px] text-cyan-400 font-mono flex items-center gap-0.5 bg-cyan-900/60 group-hover:bg-cyan-800/90 px-1 py-0.2 rounded border border-cyan-500/30">
+                  {showConfig ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                  <span>{showConfig ? 'Close' : 'Switch'}</span>
+                </span>
+              </button>
             </div>
-            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 font-mono">
+            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 font-mono truncate">
               <span className="text-slate-200 font-semibold">{currentSymbol}</span>
               <span>•</span>
               <span className="text-cyan-300">{currentTimeframe}</span>
@@ -310,17 +383,25 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Prominent, Labeled "Switch AI Provider" Action Button */}
           <button
             onClick={() => setShowConfig(!showConfig)}
-            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-sm ${
               showConfig
-                ? 'bg-cyan-950/80 border-cyan-500/60 text-cyan-300 ring-1 ring-cyan-500/40'
-                : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'
+                ? 'bg-cyan-950/90 border-cyan-500/70 text-cyan-200 ring-1 ring-cyan-500/50'
+                : 'bg-slate-800/90 hover:bg-slate-700 border-slate-700/80 text-slate-200 hover:text-white'
             }`}
-            title="Configure AI Provider (Built-in, OpenAI, Claude, Gemini, Ollama)"
+            title="Switch AI Provider or update your API keys"
           >
-            <Sliders className="w-4 h-4" />
+            <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">{showConfig ? 'Close Provider' : 'Switch AI Provider'}</span>
+            <span className="sm:hidden">{showConfig ? 'Close' : 'Switch'}</span>
+            {showConfig ? (
+              <ChevronUp className="w-3 h-3 text-cyan-300" />
+            ) : (
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            )}
           </button>
           <button
             onClick={onClose}
@@ -338,40 +419,47 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Cpu className="w-4 h-4 text-cyan-400" />
-              <span className="text-xs font-bold text-slate-200">AI Engine Provider</span>
+              <span className="text-xs font-bold text-slate-200">Switch AI Engine Provider</span>
             </div>
             <span className="text-[10px] text-slate-400 font-mono">
-              Active: <strong className="text-cyan-300">{aiConfig.provider}</strong>
+              Active: <strong className="text-cyan-300">{PROVIDER_METADATA[aiConfig.provider]?.shortName || aiConfig.provider}</strong>
             </span>
           </div>
 
           {/* Provider Selection Chips */}
-          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 font-sans">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 font-sans">
             {[
-              { id: 'BuiltIn', label: '🧠 Built-in' },
-              { id: 'OpenAI', label: '🟢 OpenAI' },
-              { id: 'Claude', label: '🟣 Claude' },
-              { id: 'Gemini', label: '🔵 Gemini' },
-              { id: 'Ollama', label: '🦙 Ollama' },
+              { id: 'BuiltIn', label: '🧠 Built-in', sub: 'Free & Local' },
+              { id: 'OpenAI', label: '🟢 OpenAI', sub: 'GPT-4o' },
+              { id: 'Claude', label: '🟣 Claude', sub: 'Sonnet 3.5' },
+              { id: 'Gemini', label: '🔵 Gemini', sub: '1.5 Pro' },
+              { id: 'Ollama', label: '🦙 Ollama', sub: 'Local LLM' },
             ].map((p) => (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => handleProviderSelect(p.id)}
-                className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
+                className={`py-2 px-1.5 rounded-xl text-xs font-medium border text-center transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
                   selectedProvider === p.id
-                    ? 'bg-cyan-950/80 border-cyan-500/80 text-cyan-200 shadow-sm'
-                    : 'bg-slate-950 hover:bg-slate-800/80 border-slate-800 text-slate-400 hover:text-slate-200'
+                    ? 'bg-cyan-950/90 border-cyan-500 text-cyan-200 shadow-md ring-1 ring-cyan-500/50'
+                    : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
-                {p.label}
+                <span className="font-semibold text-[11.5px]">{p.label}</span>
+                <span className="text-[9.5px] text-slate-400 font-mono">{p.sub}</span>
               </button>
             ))}
           </div>
 
           {selectedProvider === 'BuiltIn' ? (
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
-              ⚡ <strong>Built-in Quant Engine (Free):</strong> 100% offline, zero API keys required, instant sub-millisecond strategy synthesis and technical diagnostics.
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-300 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-cyan-400 font-semibold">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Built-in Quant Engine (100% Free & Offline)</span>
+              </div>
+              <p className="text-slate-400 leading-relaxed text-[10.5px]">
+                Deterministic mathematical reasoning running locally on your workstation. Computes real-time RSI, MACD, Ichimoku cloud, ATR volatility, and risk metrics with zero API keys and zero cost.
+              </p>
             </div>
           ) : (
             <div className="space-y-2.5 text-xs">
@@ -387,7 +475,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
 
               <div>
                 <label className="text-[10px] text-slate-400 font-mono uppercase block mb-1">
-                  Model Name:
+                  Model Identifier:
                 </label>
                 <input
                   type="text"
@@ -463,7 +551,11 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                 disabled={isSavingConfig}
                 className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
               >
-                {isSavingConfig ? 'Saving...' : 'Save Settings'}
+                {isSavingConfig
+                  ? 'Saving...'
+                  : selectedProvider === 'BuiltIn'
+                  ? 'Activate Free Built-in Engine'
+                  : `Save & Activate ${selectedProvider}`}
               </button>
             </div>
           </div>
@@ -511,7 +603,49 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* ==================== TAB 1: COPILOT CHAT ==================== */}
         {activeTab === 'chat' && (
-          <div className="flex flex-col h-full space-y-4">
+          <div className="flex flex-col h-full space-y-3">
+            {/* Active AI Provider Status & Quick Switch Affordance */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800/90 rounded-xl p-3 flex items-center justify-between gap-3 shadow-md font-sans flex-shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-base flex-shrink-0 shadow-inner">
+                  {PROVIDER_METADATA[aiConfig.provider]?.icon || '🧠'}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11.5px] font-bold text-slate-100 flex items-center gap-1.5 flex-wrap">
+                    <span>Active Engine:</span>
+                    <span className="text-cyan-300 font-semibold">
+                      {PROVIDER_METADATA[aiConfig.provider]?.name || aiConfig.provider}
+                    </span>
+                    {aiConfig.hasApiKey ? (
+                      <span className="text-[9px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/30 font-mono">
+                        BYOK Active
+                      </span>
+                    ) : aiConfig.provider === 'BuiltIn' ? (
+                      <span className="text-[9px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.2 rounded border border-cyan-500/30 font-mono">
+                        Free & Offline
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/30 font-mono">
+                        Key Required
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate">
+                    {PROVIDER_METADATA[aiConfig.provider]?.desc || 'Local quant algorithmic intelligence'}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowConfig(!showConfig)}
+                className="px-2.5 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/35 border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 hover:text-white text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer flex-shrink-0 shadow-sm"
+                title="Switch AI Provider (Built-in, OpenAI, Claude, Gemini, Ollama)"
+              >
+                <span>{showConfig ? 'Close Settings ▲' : 'Switch Engine ▼'}</span>
+              </button>
+            </div>
+
             <div className="flex-1 space-y-3 overflow-y-auto pr-1">
               {messages.map((m) => (
                 <div
@@ -525,6 +659,22 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                         : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none shadow-sm'
                     }`}
                   >
+                    {/* Assistant engine identification header */}
+                    {m.sender === 'assistant' && (
+                      <div className="flex items-center gap-1.5 pb-2 mb-2 border-b border-slate-800/80 text-[10px] text-cyan-400 font-medium">
+                        <span>{PROVIDER_METADATA[m.provider || aiConfig.provider]?.icon || '🧠'}</span>
+                        <span className="font-semibold text-slate-200">
+                          {PROVIDER_METADATA[m.provider || aiConfig.provider]?.shortName || 'AI Engine'}
+                        </span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-400 font-mono text-[9.5px]">
+                          {(m.provider || aiConfig.provider) === 'BuiltIn'
+                            ? 'Free Offline Engine'
+                            : (m.model || aiConfig.model || 'BYOK Model')}
+                        </span>
+                      </div>
+                    )}
+
                     {/* Render message with line breaks and basic formatting */}
                     <div className="space-y-2 whitespace-pre-wrap font-sans">
                       {m.text}
@@ -635,6 +785,24 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                   <Send className="w-3.5 h-3.5" />
                 </button>
               </form>
+
+              {/* Provider Quick Switch Hint Strip */}
+              <div className="mt-2 px-1 flex items-center justify-between text-[11px] text-slate-400">
+                <span className="flex items-center gap-1 text-slate-400 truncate">
+                  <span className="text-slate-500">Engine:</span>
+                  <strong className="text-cyan-300 font-medium">
+                    {PROVIDER_METADATA[aiConfig.provider]?.icon} {PROVIDER_METADATA[aiConfig.provider]?.shortName}
+                  </strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowConfig(!showConfig)}
+                  className="text-cyan-400 hover:text-cyan-200 underline underline-offset-2 font-medium cursor-pointer transition-colors flex items-center gap-1 flex-shrink-0"
+                >
+                  <span>Switch to OpenAI / Claude / Gemini / Ollama</span>
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+              </div>
             </div>
           </div>
         )}

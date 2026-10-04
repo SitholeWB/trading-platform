@@ -1,6 +1,6 @@
 import React from 'react';
 import { AccountSummary, RiskProfile } from '../types/trading';
-import { Search, RefreshCw, Bell, Sparkles } from 'lucide-react';
+import { Search, RefreshCw, Bell, Sparkles, Settings } from 'lucide-react';
 
 interface HeaderProps {
   pageTitle: string;
@@ -18,6 +18,8 @@ interface HeaderProps {
   isBackgroundScannerRunning?: boolean;
   onToggleCopilot?: () => void;
   isCopilotOpen?: boolean;
+  activeProvider?: string;
+  onOpenSettings?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -36,6 +38,8 @@ export const Header: React.FC<HeaderProps> = ({
   isBackgroundScannerRunning = true,
   onToggleCopilot,
   isCopilotOpen = false,
+  activeProvider,
+  onOpenSettings,
 }) => {
   const isKillSwitchEngaged = risk?.isKillSwitchEngaged ?? false;
   const currentDrawdown = account?.currentDrawdownPercent ?? 0;
@@ -142,6 +146,24 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
+        {/* Account / Broker Provider Identity Badge */}
+        {activeProvider && (
+          <div
+            onClick={onOpenSettings}
+            className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-mono border cursor-pointer transition-all ${
+              activeProvider === 'Oanda'
+                ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 shadow-sm'
+                : activeProvider === 'TwelveData'
+                ? 'bg-purple-950/70 border-purple-500/40 text-purple-300 hover:bg-purple-900/60 shadow-sm'
+                : 'bg-blue-950/70 border-blue-500/40 text-blue-300 hover:bg-blue-900/60 shadow-sm'
+            }`}
+            title="Active Broker Account: Click to configure broker API credentials or switch to OANDA/TwelveData"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+            <span className="font-semibold">{activeProvider === 'Demo' ? 'DEMO SIMULATOR' : activeProvider.toUpperCase()}</span>
+          </div>
+        )}
+
         {/* AI Market Copilot Button */}
         {onToggleCopilot && (
           <button
@@ -155,6 +177,17 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
             <span className="font-sans font-semibold hidden md:inline">AI Copilot</span>
+          </button>
+        )}
+
+        {/* Platform Settings Button */}
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+            title="Configure Broker, API Keys & AI Provider"
+          >
+            <Settings className="w-3.5 h-3.5" />
           </button>
         )}
 
