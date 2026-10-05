@@ -79,6 +79,9 @@ interface TradingChartProps {
   isLoadingHistory?: boolean;
   activeProvider?: string;
   account?: AccountSummary | null;
+  secondsUntilSync?: number;
+  isRefreshingCandles?: boolean;
+  onManualSyncCandles?: () => void;
 }
 
 export interface HistoryLoadResult {
@@ -109,6 +112,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   isLoadingHistory = false,
   activeProvider = 'KeylessPublic',
   account = null,
+  secondsUntilSync,
+  isRefreshingCandles = false,
+  onManualSyncCandles,
 }) => {
   // Chart layout and state
   const [chartType, setChartType] = useState<ChartType>('candlestick');
@@ -301,6 +307,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     atrPeriod: indicatorConfig?.atr?.period ?? 14,
     supertrendPeriod: 10,
     supertrendMultiplier: 3,
+    showIndicatorPriceLines: false,
   });
 
   // Crosshair hover inspection values
@@ -807,10 +814,27 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       title?: string
     ) => {
       let series = indicatorSeriesMapRef.current.get(key);
+      const showPriceLine = Boolean(indicatorSettings.showIndicatorPriceLines);
       if (isActive) {
         if (!series) {
-          series = chart.addLineSeries({ color, lineWidth, lineStyle, title });
+          series = chart.addLineSeries({
+            color,
+            lineWidth,
+            lineStyle,
+            title: showPriceLine ? title : undefined,
+            priceLineVisible: showPriceLine,
+            lastValueVisible: showPriceLine,
+          });
           indicatorSeriesMapRef.current.set(key, series);
+        } else {
+          series.applyOptions({
+            color,
+            lineWidth,
+            lineStyle,
+            title: showPriceLine ? title : undefined,
+            priceLineVisible: showPriceLine,
+            lastValueVisible: showPriceLine,
+          });
         }
         try {
           series.setData(points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
@@ -1356,6 +1380,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         hasMoreHistory={hasMoreHistory}
         historyNotice={historyNotice}
         onDismissHistoryNotice={() => setHistoryNotice(null)}
+        secondsUntilSync={secondsUntilSync}
+        isRefreshingCandles={isRefreshingCandles}
+        onManualSyncCandles={onManualSyncCandles}
       />
 
       {/* Alert Trigger Toast Notification */}

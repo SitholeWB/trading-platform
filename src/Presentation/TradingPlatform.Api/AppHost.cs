@@ -390,6 +390,7 @@ public static class AppHost
             [FromQuery] string? timeframe,
             [FromQuery] int? count,
             [FromQuery] long? before,
+            [FromQuery] bool? forceRefresh,
             IHistoricalDataProvider dataProvider,
             CancellationToken ct) =>
         {
@@ -404,8 +405,29 @@ public static class AppHost
                 return Results.Ok(olderCandles);
             }
 
-            var candles = await dataProvider.GetHistoricalCandlesAsync(sym, tf, limit, ct);
+            var candles = await dataProvider.GetHistoricalCandlesAsync(sym, tf, limit, forceRefresh ?? false, ct);
             return Results.Ok(candles);
+        });
+
+        marketDataGroup.MapGet("/quotes", async (
+            [FromQuery] string? symbols,
+            IHistoricalDataProvider dataProvider,
+            CancellationToken ct) =>
+        {
+            IEnumerable<string>? parsedSymbols = null;
+            if (!string.IsNullOrWhiteSpace(symbols))
+            {
+                parsedSymbols = symbols.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
+
+            if (dataProvider is CompositeMarketDataProvider composite)
+            {
+                var quotes = await composite.GetQuotesAsync(parsedSymbols, ct);
+                return Results.Ok(quotes);
+            }
+
+            var fallbackQuotes = DeterministicMarketDataSynthesizer.GetLiveQuotes(parsedSymbols, DateTime.UtcNow);
+            return Results.Ok(fallbackQuotes);
         });
 
         marketDataGroup.MapGet("/providers", async (
@@ -1533,6 +1555,13 @@ public static class AppHost
         return app;
     }
 
+    public static string MaskSecret(string? secret)
+    {
+        if (string.IsNullOrWhiteSpace(secret)) return string.Empty;
+        if (secret.Length <= 8) return "********";
+        return $"{secret[..4]}...{secret[^4..]}";
+    }
+}
 
 // DTO records
 public record ModifyPositionDto(decimal? StopLoss, decimal? TakeProfit);
@@ -1586,12 +1615,3 @@ public record AnalyzeMarketAiRequest(string Symbol, string Timeframe);
 public record ExplainAuditAiRequest(string Fingerprint);
 public record CopilotChatRequest(string Message, AICopilotContext? Context, AIProviderConfig? ProviderConfig = null);
 public record UpdateAiConfigRequest(string Provider, string? Model, string? ApiKey, string? Endpoint);
-
-    public static string MaskSecret(string? secret)
-    {
-        if (string.IsNullOrWhiteSpace(secret)) return string.Empty;
-        if (secret.Length <= 8) return "********";
-        return $"{secret[..4]}...{secret[^4..]}";
-    }
-
-}

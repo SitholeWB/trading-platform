@@ -404,6 +404,39 @@ export const IndicatorsModal: React.FC<IndicatorsModalProps> = ({
           })}
         </div>
 
+        {/* Opt-in Display Controls */}
+        <div className="p-3 bg-slate-900/90 border-t border-slate-800/80 flex items-center justify-between text-xs font-sans">
+          <div>
+            <div className="text-slate-200 font-semibold flex items-center gap-2">
+              <span>Show Indicator Tracking Lines & Scale Labels</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">Opt-in</span>
+            </div>
+            <div className="text-[11px] text-slate-400">
+              Display horizontal projection lines and axis badges for active overlay indicators
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const updated = {
+                ...localSettings,
+                showIndicatorPriceLines: !localSettings.showIndicatorPriceLines,
+              };
+              setLocalSettings(updated);
+              onUpdateSettings(updated);
+            }}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+              localSettings.showIndicatorPriceLines ? 'bg-blue-600' : 'bg-slate-700'
+            }`}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                localSettings.showIndicatorPriceLines ? 'translate-x-4' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
         {/* Footer */}
         <div className="p-3 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 font-mono">
           <span>Active: {Object.values(activeIndicators).filter(Boolean).length} indicators</span>

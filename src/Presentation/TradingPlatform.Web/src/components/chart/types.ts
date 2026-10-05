@@ -73,6 +73,7 @@ export interface IndicatorSettings {
   atrPeriod: number;
   supertrendPeriod: number;
   supertrendMultiplier: number;
+  showIndicatorPriceLines?: boolean;
 }
 
 export type ChartLayoutMode = 'single' | 'split-h' | 'split-v' | 'grid-4';

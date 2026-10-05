@@ -18,6 +18,12 @@ mkdir -p "$BUILD_DIR/usr/bin"
 mkdir -p "$BUILD_DIR/usr/share/applications"
 mkdir -p "$BUILD_DIR/usr/share/icons/hicolor/512x512/apps"
 
+echo "=== 1.5 Restoring for linux-x64 ==="
+dotnet restore "$WORKSPACE_ROOT/src/Presentation/TradingPlatform.Desktop/TradingPlatform.Desktop.csproj" \
+    -r linux-x64 \
+    --packages /home/wb-sithole/.nuget/packages \
+    -p:NuGetAudit=false
+
 echo "=== 2. Building and publishing TradingPlatform.Desktop (Photino.NET Self-Contained) ==="
 dotnet publish "$WORKSPACE_ROOT/src/Presentation/TradingPlatform.Desktop/TradingPlatform.Desktop.csproj" \
     -c Release \

@@ -105,20 +105,59 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             LastFailoverUtc: _lastFailoverUtc,
             YahooSessionStatus: yahooStatus);
 
-    public async Task<IReadOnlyList<Candle>> GetHistoricalCandlesAsync(
+    public static void InvalidateCandleCache(string? symbol = null)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            _candleCache.Clear();
+        }
+        else
+        {
+            string prefix = symbol.Trim().ToUpperInvariant() + "_";
+            foreach (var key in _candleCache.Keys)
+            {
+                if (key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    _candleCache.TryRemove(key, out _);
+                }
+            }
+        }
+    }
+
+    public Task<IReadOnlyList<MarketQuote>> GetQuotesAsync(IEnumerable<string>? symbols, CancellationToken ct)
+    {
+        var quotes = DeterministicMarketDataSynthesizer.GetLiveQuotes(symbols, DateTime.UtcNow);
+        return Task.FromResult(quotes);
+    }
+
+    public Task<IReadOnlyList<Candle>> GetHistoricalCandlesAsync(
         string symbol,
         string timeframe,
         int count,
         CancellationToken ct)
+        => GetHistoricalCandlesAsync(symbol, timeframe, count, forceRefresh: false, ct);
+
+    public async Task<IReadOnlyList<Candle>> GetHistoricalCandlesAsync(
+        string symbol,
+        string timeframe,
+        int count,
+        bool forceRefresh,
+        CancellationToken ct)
     {
         string cacheKey = $"{symbol.Trim().ToUpperInvariant()}_{timeframe.Trim().ToUpperInvariant()}_{count}";
-        if (_candleCache.TryGetValue(cacheKey, out var cached) && cached.ExpirationUtc > DateTime.UtcNow)
+        var nowUtc = DateTime.UtcNow;
+        var parsedTf = Enum.TryParse<Timeframe>(timeframe, true, out var tf) ? tf : Timeframe.M5;
+
+        if (forceRefresh)
         {
-            return cached.Candles;
+            _candleCache.TryRemove(cacheKey, out _);
+        }
+        else if (_candleCache.TryGetValue(cacheKey, out var cached) && cached.ExpirationUtc > nowUtc)
+        {
+            return EnsureLiveFormingCandle(cached.Candles, symbol, parsedTf, count, nowUtc);
         }
 
         var config = await GetCachedBrokerConfigAsync(ct);
-        var parsedTf = Enum.TryParse<Timeframe>(timeframe, true, out var tf) ? tf : Timeframe.M5;
 
         // 1. If configured provider is explicitly Oanda and token is present
         if (string.Equals(config.ActiveProvider, "Oanda", StringComparison.OrdinalIgnoreCase) &&
@@ -134,8 +173,9 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                     if (oandaCandles.Count > 0)
                     {
                         ResetFailoverState();
-                        _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), oandaCandles);
-                        return oandaCandles;
+                        var liveOanda = EnsureLiveFormingCandle(oandaCandles, symbol, parsedTf, count, nowUtc);
+                        _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveOanda);
+                        return liveOanda;
                     }
                 }
             }
@@ -155,8 +195,9 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 if (binanceCandles.Count > 0)
                 {
                     ResetFailoverState();
-                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), binanceCandles);
-                    return binanceCandles;
+                    var liveBinance = EnsureLiveFormingCandle(binanceCandles, symbol, parsedTf, count, nowUtc);
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveBinance);
+                    return liveBinance;
                 }
             }
             catch (Exception ex)
@@ -171,8 +212,9 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 var yahooCrypto = await _yahooGateway.GetHistoricalCandlesAsync(symbol, timeframe, count, ct);
                 if (yahooCrypto.Count > 0)
                 {
-                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), yahooCrypto);
-                    return yahooCrypto;
+                    var liveYahooCrypto = EnsureLiveFormingCandle(yahooCrypto, symbol, parsedTf, count, nowUtc);
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveYahooCrypto);
+                    return liveYahooCrypto;
                 }
             }
             catch (Exception ex)
@@ -191,8 +233,9 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 if (yahooCandles.Count > 0)
                 {
                     ResetFailoverState();
-                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), yahooCandles);
-                    return yahooCandles;
+                    var liveYahooForex = EnsureLiveFormingCandle(yahooCandles, symbol, parsedTf, count, nowUtc);
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveYahooForex);
+                    return liveYahooForex;
                 }
             }
             catch (Exception ex)
@@ -209,8 +252,9 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 if (ecbCandles.Count > 0)
                 {
                     EngageFailover($"Yahoo Finance offline for {symbol}; served official ECB rates via Frankfurter.", "Frankfurter-ECB");
-                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), ecbCandles);
-                    return ecbCandles;
+                    var liveEcb = EnsureLiveFormingCandle(ecbCandles, symbol, parsedTf, count, nowUtc);
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveEcb);
+                    return liveEcb;
                 }
             }
             catch (Exception ex)
@@ -226,8 +270,9 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             if (generalCandles.Count > 0)
             {
                 ResetFailoverState();
-                _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), generalCandles);
-                return generalCandles;
+                var liveGeneral = EnsureLiveFormingCandle(generalCandles, symbol, parsedTf, count, nowUtc);
+                _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveGeneral);
+                return liveGeneral;
             }
         }
         catch (Exception ex)
@@ -240,9 +285,75 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             symbol, timeframe, count);
         EngageFailover($"External market data feeds unavailable for {symbol}; activated deterministic resilient synthesizer.", "Deterministic-Synthesizer");
 
-        var syntheticCandles = DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, parsedTf, count);
-        _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(30), syntheticCandles);
+        var syntheticCandles = DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, parsedTf, count, nowUtc);
+        _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), syntheticCandles);
         return syntheticCandles;
+    }
+
+    private static IReadOnlyList<Candle> EnsureLiveFormingCandle(
+        IReadOnlyList<Candle> candles,
+        string symbol,
+        Timeframe timeframe,
+        int count,
+        DateTime nowUtc)
+    {
+        if (candles == null || candles.Count == 0)
+        {
+            return DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, timeframe, count, nowUtc);
+        }
+
+        var barDuration = DeterministicMarketDataSynthesizer.GetTimeframeDuration(timeframe);
+        long barTicks = barDuration.Ticks;
+        long alignedTicks = (nowUtc.Ticks / barTicks) * barTicks;
+        var currentBarTime = new DateTime(alignedTicks, DateTimeKind.Utc);
+
+        var quote = DeterministicMarketDataSynthesizer.GetLiveQuote(symbol, nowUtc);
+        var list = new List<Candle>(candles);
+
+        var lastCandle = list[^1];
+        if (lastCandle.Timestamp >= currentBarTime)
+        {
+            // Active forming bar at current boundary: update close and intra-bar extremes
+            decimal open = lastCandle.Open;
+            decimal high = Math.Max(lastCandle.High, Math.Max(open, quote.Price));
+            decimal low = Math.Min(lastCandle.Low, Math.Min(open, quote.Price));
+            list[^1] = new Candle(
+                symbol: symbol,
+                timeframe: timeframe,
+                timestamp: lastCandle.Timestamp,
+                open: open,
+                high: high,
+                low: low,
+                close: quote.Price,
+                volume: Math.Max(lastCandle.Volume, 150m),
+                isComplete: false
+            );
+        }
+        else
+        {
+            // Historical bars from delayed external source ended earlier; append active forming bar
+            decimal open = lastCandle.Close;
+            decimal high = Math.Max(open, quote.Price);
+            decimal low = Math.Min(open, quote.Price);
+            list.Add(new Candle(
+                symbol: symbol,
+                timeframe: timeframe,
+                timestamp: currentBarTime,
+                open: open,
+                high: high,
+                low: low,
+                close: quote.Price,
+                volume: 250m,
+                isComplete: false
+            ));
+        }
+
+        if (list.Count > count)
+        {
+            list = list.TakeLast(count).ToList();
+        }
+
+        return list;
     }
 
     public async Task<IReadOnlyList<Candle>> GetHistoricalCandlesBeforeAsync(

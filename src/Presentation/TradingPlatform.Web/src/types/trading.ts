@@ -54,6 +54,20 @@ export interface Candle {
   isComplete: boolean;
 }
 
+export interface MarketQuote {
+  symbol: string;
+  name: string;
+  category: string;
+  price: number;
+  change24h: number;
+  changePct: number;
+  high24h: number;
+  low24h: number;
+  isPositive: boolean;
+  decimals: number;
+  updatedAtUtc: string;
+}
+
 export interface MarketSnapshot {
   symbol: string;
   timeframe: Timeframe;

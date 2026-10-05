@@ -1,6 +1,7 @@
 import {
   AccountSummary,
   Candle,
+  MarketQuote,
   MarketSnapshot,
   Position,
   RiskProfile,
@@ -271,12 +272,17 @@ export const tradingApi = {
     }),
 
   // Market Data & Public Multi-Timeframe Feeds
-  getCandles: (symbol: string, timeframe: string, count = 120, before?: number) =>
+  getCandles: (symbol: string, timeframe: string, count = 120, before?: number, forceRefresh = false) =>
     request<Candle[]>(
       `/market-data/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&count=${count}${
         before ? `&before=${before}` : ''
-      }`
+      }${forceRefresh ? '&forceRefresh=true' : ''}`
     ),
+
+  getQuotes: (symbols?: string[]) => {
+    const qs = symbols && symbols.length > 0 ? `?symbols=${encodeURIComponent(symbols.join(','))}` : '';
+    return request<MarketQuote[]>(`/market-data/quotes${qs}`);
+  },
 
   getProviders: () =>
     request<{ activeProvider: string; providers: any[] }>('/market-data/providers'),

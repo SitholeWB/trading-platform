@@ -44,6 +44,10 @@ interface ChartToolbarProps {
   hasMoreHistory?: boolean;
   historyNotice?: string | null;
   onDismissHistoryNotice?: () => void;
+  // Live Feed Cadence & Server Protection
+  secondsUntilSync?: number;
+  isRefreshingCandles?: boolean;
+  onManualSyncCandles?: () => void;
 }
 
 export const ChartToolbar: React.FC<ChartToolbarProps> = ({
@@ -73,6 +77,9 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
   hasMoreHistory = true,
   historyNotice,
   onDismissHistoryNotice,
+  secondsUntilSync,
+  isRefreshingCandles = false,
+  onManualSyncCandles,
 }) => {
   const [showLayoutDropdown, setShowLayoutDropdown] = useState(false);
 
@@ -221,8 +228,41 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           )}
         </div>
 
-        {/* Right Segment: Load History Button, Tools, Split View, Snapshot, Fullscreen, Reset */}
+        {/* Right Segment: Live Feed Cadence, Load History Button, Tools, Split View, Snapshot, Fullscreen, Reset */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Live Feed Cadence & Server Rate-Limit Protection Badge */}
+          <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-[11px] font-mono flex-shrink-0 group relative shadow-inner">
+            <span className="relative flex h-2 w-2">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isRefreshingCandles ? 'bg-blue-400' : 'bg-emerald-400'} opacity-75`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${isRefreshingCandles ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+            </span>
+            <span className="text-slate-300 font-semibold hidden md:inline">
+              {isRefreshingCandles ? 'Syncing...' : 'Live'}
+            </span>
+            <span className="text-slate-500 text-[10px] hidden xl:inline">1m feed</span>
+            <span className="text-emerald-400 font-bold text-[10px] bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-900/60">
+              {secondsUntilSync !== undefined ? `${secondsUntilSync}s` : '60s'}
+            </span>
+            {onManualSyncCandles && (
+              <button
+                onClick={onManualSyncCandles}
+                disabled={isRefreshingCandles}
+                className="p-0.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title="Immediate Sync: Pull latest market tick & candles now (bypasses 60s cache)"
+              >
+                <RefreshCw className={`w-3 h-3 ${isRefreshingCandles ? 'animate-spin text-blue-400' : ''}`} />
+              </button>
+            )}
+
+            {/* Rate-Limit / Server Load Protection Tooltip */}
+            <div className="absolute top-8 right-0 hidden group-hover:block z-50 w-72 p-2.5 bg-slate-900/95 backdrop-blur border border-slate-700/80 rounded-xl shadow-2xl text-[11px] font-sans text-slate-300 pointer-events-none leading-relaxed">
+              <div className="font-bold text-white flex items-center gap-1.5 mb-1">
+                <span className="text-emerald-400">●</span> 1-Minute Live Auto-Sync
+              </div>
+              Candles and watchlist quotes refresh every 1 minute (60s) for all timeframes to avoid rate-limiting and protect market data servers. Click the sync icon to fetch immediate updates anytime.
+            </div>
+          </div>
+
           {/* Historical Data Loading Trigger */}
           {onLoadOlderHistory && (
             <button

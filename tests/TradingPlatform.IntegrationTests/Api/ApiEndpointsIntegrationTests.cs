@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
+using TradingPlatform.Api;
+using TradingPlatform.Broker.Public;
 using TradingPlatform.Domain.Enums;
 using TradingPlatform.Domain.Models;
 using Xunit;
@@ -113,6 +115,27 @@ public class ApiEndpointsIntegrationTests : IClassFixture<WebApplicationFactory<
             Assert.Equal(report1.NearMisses[i].MatchPercentage, report2.NearMisses[i].MatchPercentage);
             Assert.Equal(report1.NearMisses[i].EntryPrice, report2.NearMisses[i].EntryPrice);
         }
+    }
+
+    [Fact]
+    public async Task GetCandles_ReturnsValidCandles()
+    {
+        var response = await _client.GetAsync("/api/market-data/candles?symbol=US500&timeframe=M1&count=10");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var candles = await response.Content.ReadFromJsonAsync<List<Candle>>();
+        Assert.NotNull(candles);
+        Assert.NotEmpty(candles);
+    }
+
+    [Fact]
+    public async Task GetQuotes_ReturnsWatchlistQuotes()
+    {
+        var response = await _client.GetAsync("/api/market-data/quotes");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var quotes = await response.Content.ReadFromJsonAsync<List<MarketQuote>>();
+        Assert.NotNull(quotes);
+        Assert.NotEmpty(quotes);
+        Assert.Contains(quotes, q => q.Symbol == "US500");
     }
 
     private record StrategyResponseDto(Guid Id, string Name, string RawJsonRules);

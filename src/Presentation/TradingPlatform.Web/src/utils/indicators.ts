@@ -51,25 +51,21 @@ export function getCandleTimeSeconds(timestamp: string | number): number {
 }
 
 /**
- * Sorts and deduplicates candles chronologically
+ * Sorts and deduplicates candles chronologically.
+ * If multiple candles share the same second timestamp (e.g., historical vs. updated live forming bar),
+ * the most recently updated candle is preserved.
  */
 export function sanitizeCandles(candles: Candle[]): Candle[] {
   if (!candles || candles.length === 0) return [];
-  const sorted = [...candles].sort(
+  const map = new Map<number, Candle>();
+  for (const c of candles) {
+    if (!c || !c.timestamp || isNaN(c.close)) continue;
+    const t = getCandleTimeSeconds(c.timestamp);
+    map.set(t, c);
+  }
+  return Array.from(map.values()).sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
-  
-  // Deduplicate by second timestamp
-  const seen = new Set<number>();
-  const result: Candle[] = [];
-  for (const c of sorted) {
-    const t = getCandleTimeSeconds(c.timestamp);
-    if (!seen.has(t)) {
-      seen.add(t);
-      result.push(c);
-    }
-  }
-  return result;
 }
 
 /**

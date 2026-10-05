@@ -3,14 +3,65 @@ using TradingPlatform.Domain.Models;
 
 namespace TradingPlatform.Broker.Public;
 
+public record MarketQuote(
+    string Symbol,
+    string Name,
+    string Category,
+    decimal Price,
+    decimal Change24h,
+    decimal ChangePct,
+    decimal High24h,
+    decimal Low24h,
+    bool IsPositive,
+    int Decimals,
+    DateTime UpdatedAtUtc);
+
 /// <summary>
-/// High-precision, 100% deterministic candlestick synthesizer for public market data failover.
+/// High-precision, 100% deterministic candlestick and real-time quote synthesizer for market data.
 /// Generates continuous, realistic OHLCV price action mathematically anchored to exact timeframe bar
-/// boundaries. Completely eliminates non-deterministic pseudorandom walk variance (Random.Shared),
-/// ensuring consecutive scans for the same symbol and timeframe produce identical results.
+/// boundaries, including live forming candle progression down to the minute.
+/// Provides live multi-symbol quotes synchronized with chart candle prices.
 /// </summary>
 public static class DeterministicMarketDataSynthesizer
 {
+    public static readonly string[] DefaultWatchlistSymbols = new[]
+    {
+        // Indices
+        "US500", "NAS100", "US30", "GER40",
+        // Commodities
+        "XAUUSD", "USOIL",
+        // Forex
+        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
+        // Crypto
+        "BTCUSDT", "ETHUSDT", "SOLUSDT",
+        // Stocks
+        "AAPL", "NVDA", "TSLA"
+    };
+
+    public static decimal CalculatePriceAtTime(
+        string cleanSymbol,
+        decimal baseline,
+        int decimals,
+        double volatility,
+        int symHash,
+        DateTime time)
+    {
+        double totalMinutes = (double)time.Ticks / TimeSpan.FromMinutes(1).Ticks;
+        long secondTick = time.Ticks / TimeSpan.FromSeconds(1).Ticks;
+        double phase = (symHash % 1000) * 0.01;
+
+        double macroWave = Math.Sin(totalMinutes * 0.018 + phase) * volatility * 8.0;
+        double mediumWave = Math.Cos(totalMinutes * 0.075 + phase * 1.6) * volatility * 3.5;
+        double microWave = Math.Sin(totalMinutes * 0.28 + phase * 2.7) * volatility * 1.8;
+
+        long h = (secondTick ^ (long)symHash) * 2862933555777941757L + 3037000493L;
+        h ^= (h >> 32);
+        double tickNoise = ((h & 0xFFFF) / 65535.0 - 0.5) * volatility * 1.2;
+
+        decimal price = Math.Round(baseline + (decimal)(macroWave + mediumWave + microWave + tickNoise), decimals);
+        return price <= 0m ? baseline : price;
+    }
+
     public static IReadOnlyList<Candle> GenerateDeterministicCandles(
         string symbol,
         Timeframe timeframe,
@@ -35,60 +86,200 @@ public static class DeterministicMarketDataSynthesizer
         int symHash = Math.Abs(cleanSymbol.GetHashCode());
 
         // Pre-compute continuous price path for count bars (from oldest to newest)
+        // Bars from count - 1 down to 1 are historical completed bars.
+        // Bar 0 is the current forming bar at anchor whose close price evolves live with the current minute.
         decimal previousClose = baseline;
 
-        for (int i = count; i >= 1; i--)
+        for (int i = count - 1; i >= 0; i--)
         {
             var barTime = anchor.AddTicks(-i * barTicks);
-            long barIndex = barTime.Ticks / barTicks;
 
-            // Deterministic continuous harmonic waves
-            double phase = (symHash % 1000) * 0.01;
-            double macroWave = Math.Sin(barIndex * 0.018 + phase) * volatility * 8.0;
-            double mediumWave = Math.Cos(barIndex * 0.075 + phase * 1.6) * volatility * 3.5;
-            double microWave = Math.Sin(barIndex * 0.28 + phase * 2.7) * volatility * 1.8;
+            if (i > 0)
+            {
+                // Completed historical bar
+                long barIndex = barTime.Ticks / barTicks;
+                double phase = (symHash % 1000) * 0.01;
+                double macroWave = Math.Sin(barIndex * 0.018 + phase) * volatility * 8.0;
+                double mediumWave = Math.Cos(barIndex * 0.075 + phase * 1.6) * volatility * 3.5;
+                double microWave = Math.Sin(barIndex * 0.28 + phase * 2.7) * volatility * 1.8;
 
-            // Deterministic 64-bit integer mix hash for intra-bar tick variance
-            long h = (barIndex ^ (long)symHash) * 2862933555777941757L + 3037000493L;
-            h ^= (h >> 32);
-            double tickNoise = ((h & 0xFFFF) / 65535.0 - 0.5) * volatility * 1.2;
+                long h = (barIndex ^ (long)symHash) * 2862933555777941757L + 3037000493L;
+                h ^= (h >> 32);
+                double tickNoise = ((h & 0xFFFF) / 65535.0 - 0.5) * volatility * 1.2;
 
-            decimal close = Math.Round(baseline + (decimal)(macroWave + mediumWave + microWave + tickNoise), decimals);
-            if (close <= 0m) close = baseline;
+                decimal close = Math.Round(baseline + (decimal)(macroWave + mediumWave + microWave + tickNoise), decimals);
+                if (close <= 0m) close = baseline;
 
-            decimal open = i == count ? Math.Round(baseline + (decimal)(macroWave + mediumWave), decimals) : previousClose;
-            if (open <= 0m) open = baseline;
+                decimal open = i == count - 1 ? Math.Round(baseline + (decimal)(macroWave + mediumWave), decimals) : previousClose;
+                if (open <= 0m) open = baseline;
 
-            long h2 = (h ^ 0x5555555555555555L) * 2862933555777941757L + 3037000493L;
-            double spreadUp = Math.Abs((h2 & 0x7FFF) / 32767.0) * volatility * 0.5;
-            double spreadDown = Math.Abs(((h2 >> 16) & 0x7FFF) / 32767.0) * volatility * 0.5;
+                long h2 = (h ^ 0x5555555555555555L) * 2862933555777941757L + 3037000493L;
+                double spreadUp = Math.Abs((h2 & 0x7FFF) / 32767.0) * volatility * 0.5;
+                double spreadDown = Math.Abs(((h2 >> 16) & 0x7FFF) / 32767.0) * volatility * 0.5;
 
-            decimal high = Math.Round(Math.Max(open, close) + (decimal)spreadUp, decimals);
-            decimal low = Math.Round(Math.Min(open, close) - (decimal)spreadDown, decimals);
+                decimal high = Math.Round(Math.Max(open, close) + (decimal)spreadUp, decimals);
+                decimal low = Math.Round(Math.Min(open, close) - (decimal)spreadDown, decimals);
 
-            // Invariant guards
-            if (high < Math.Max(open, close)) high = Math.Max(open, close);
-            if (low > Math.Min(open, close)) low = Math.Min(open, close);
+                if (high < Math.Max(open, close)) high = Math.Max(open, close);
+                if (low > Math.Min(open, close)) low = Math.Min(open, close);
 
-            decimal volume = 250m + (decimal)((h & 0xFFF) % 1500);
+                decimal volume = 250m + (decimal)((h & 0xFFF) % 1500);
 
-            list.Add(new Candle(
-                symbol: symbol,
-                timeframe: timeframe,
-                timestamp: barTime,
-                open: open,
-                high: high,
-                low: low,
-                close: close,
-                volume: volume,
-                isComplete: true
-            ));
+                list.Add(new Candle(
+                    symbol: symbol,
+                    timeframe: timeframe,
+                    timestamp: barTime,
+                    open: open,
+                    high: high,
+                    low: low,
+                    close: close,
+                    volume: volume,
+                    isComplete: true
+                ));
 
-            previousClose = close;
+                previousClose = close;
+            }
+            else
+            {
+                // Current live forming bar at anchor
+                decimal open = previousClose;
+                decimal close = CalculatePriceAtTime(cleanSymbol, baseline, decimals, volatility, symHash, now);
+
+                decimal high = Math.Max(open, close);
+                decimal low = Math.Min(open, close);
+
+                // Sample prices within the elapsed portion of the bar to build realistic intra-bar high/low
+                TimeSpan elapsed = now - anchor;
+                int elapsedMinutes = (int)Math.Max(1, Math.Min(barDuration.TotalMinutes, elapsed.TotalMinutes));
+
+                long hNow = (now.Ticks / TimeSpan.FromMinutes(1).Ticks ^ (long)symHash) * 2862933555777941757L + 3037000493L;
+                double spreadUp = Math.Abs((hNow & 0x7FFF) / 32767.0) * volatility * 0.4;
+                double spreadDown = Math.Abs(((hNow >> 16) & 0x7FFF) / 32767.0) * volatility * 0.4;
+
+                high = Math.Round(high + (decimal)spreadUp, decimals);
+                low = Math.Round(low - (decimal)spreadDown, decimals);
+
+                if (high < Math.Max(open, close)) high = Math.Max(open, close);
+                if (low > Math.Min(open, close)) low = Math.Min(open, close);
+
+                decimal volume = Math.Max(150m, (decimal)elapsedMinutes * 35m + (decimal)((hNow & 0x1FF) % 600));
+                bool isComplete = now >= anchor.AddTicks(barTicks);
+
+                list.Add(new Candle(
+                    symbol: symbol,
+                    timeframe: timeframe,
+                    timestamp: barTime,
+                    open: open,
+                    high: high,
+                    low: low,
+                    close: close,
+                    volume: volume,
+                    isComplete: isComplete
+                ));
+            }
         }
 
         return list;
     }
+
+    public static MarketQuote GetLiveQuote(string symbol, DateTime? nowUtc = null)
+    {
+        var cleanSymbol = symbol.Trim().ToUpperInvariant().Replace("/", "").Replace("_", "").Replace("=X", "");
+        decimal baseline = GetBaselinePrice(cleanSymbol);
+        int decimals = GetDecimals(cleanSymbol, baseline);
+        double volatility = (double)baseline * (cleanSymbol.Contains("JPY") || baseline > 100m ? 0.0012 : 0.0006);
+        int symHash = Math.Abs(cleanSymbol.GetHashCode());
+
+        var now = nowUtc ?? DateTime.UtcNow;
+        decimal price = CalculatePriceAtTime(cleanSymbol, baseline, decimals, volatility, symHash, now);
+
+        // 24h baseline anchor (midnight today UTC)
+        var midnightUtc = new DateTime(now.Year, now.Month, now.Day, 0, 0, 0, DateTimeKind.Utc);
+        decimal open24h = CalculatePriceAtTime(cleanSymbol, baseline, decimals, volatility, symHash, midnightUtc);
+
+        decimal change24h = Math.Round(price - open24h, decimals);
+        decimal changePct = open24h != 0m ? Math.Round((change24h / open24h) * 100m, 2) : 0m;
+
+        decimal high24h = Math.Round(Math.Max(price, open24h) + (decimal)(volatility * 1.5), decimals);
+        decimal low24h = Math.Round(Math.Min(price, open24h) - (decimal)(volatility * 1.5), decimals);
+        bool isPositive = change24h >= 0m;
+
+        var (name, category) = GetSymbolMetadata(cleanSymbol);
+
+        return new MarketQuote(
+            Symbol: symbol,
+            Name: name,
+            Category: category,
+            Price: price,
+            Change24h: change24h,
+            ChangePct: changePct,
+            High24h: high24h,
+            Low24h: low24h,
+            IsPositive: isPositive,
+            Decimals: decimals,
+            UpdatedAtUtc: now);
+    }
+
+    public static IReadOnlyList<MarketQuote> GetLiveQuotes(IEnumerable<string>? symbols = null, DateTime? nowUtc = null)
+    {
+        var targetSymbols = symbols != null && symbols.Any() ? symbols : DefaultWatchlistSymbols;
+        var now = nowUtc ?? DateTime.UtcNow;
+        var list = new List<MarketQuote>();
+
+        foreach (var sym in targetSymbols)
+        {
+            if (string.IsNullOrWhiteSpace(sym)) continue;
+            list.Add(GetLiveQuote(sym, now));
+        }
+
+        return list;
+    }
+
+    private static (string Name, string Category) GetSymbolMetadata(string s) => s switch
+    {
+        "US500" or "SPX" or "GSPC" => ("S&P 500", "indices"),
+        "NAS100" or "NDX" or "IXIC" => ("Nasdaq 100", "indices"),
+        "US30" or "DJI" => ("Dow Jones", "indices"),
+        "GER40" or "DAX" => ("DAX 40", "indices"),
+        "UK100" or "FTSE" => ("FTSE 100", "indices"),
+        "JP225" or "N225" => ("Nikkei 225", "indices"),
+
+        "XAUUSD" or "GOLD" => ("Gold Spot", "commodities"),
+        "XAGUSD" or "SILVER" => ("Silver Spot", "commodities"),
+        "USOIL" or "WTI" or "CL" => ("WTI Oil", "commodities"),
+        "UKOIL" or "BRENT" => ("Brent Crude", "commodities"),
+        "NATGAS" => ("Natural Gas", "commodities"),
+        "COPPER" => ("Copper Spot", "commodities"),
+
+        "EURUSD" => ("EUR/USD", "forex"),
+        "GBPUSD" => ("GBP/USD", "forex"),
+        "USDJPY" => ("USD/JPY", "forex"),
+        "AUDUSD" => ("AUD/USD", "forex"),
+        "USDCAD" => ("USD/CAD", "forex"),
+        "USDCHF" => ("USD/CHF", "forex"),
+        "NZDUSD" => ("NZD/USD", "forex"),
+        "EURGBP" => ("EUR/GBP", "forex"),
+        "EURJPY" => ("EUR/JPY", "forex"),
+        "GBPJPY" => ("GBP/JPY", "forex"),
+
+        "BTCUSDT" or "BTCUSD" or "BTC" => ("Bitcoin", "crypto"),
+        "ETHUSDT" or "ETHUSD" or "ETH" => ("Ethereum", "crypto"),
+        "SOLUSDT" or "SOLUSD" or "SOL" => ("Solana", "crypto"),
+        "BNBUSDT" or "BNB" => ("Binance Coin", "crypto"),
+        "XRPUSDT" or "XRP" => ("XRP Ledger", "crypto"),
+        "ADAUSDT" or "ADA" => ("Cardano", "crypto"),
+        "DOGEUSDT" or "DOGE" => ("Dogecoin", "crypto"),
+
+        "AAPL" => ("Apple Inc.", "stocks"),
+        "NVDA" => ("NVIDIA", "stocks"),
+        "TSLA" => ("Tesla Motors", "stocks"),
+        "MSFT" => ("Microsoft", "stocks"),
+        "AMZN" => ("Amazon.com", "stocks"),
+        "GOOGL" or "GOOG" => ("Alphabet / Google", "stocks"),
+        "META" => ("Meta Platforms", "stocks"),
+        "AMD" => ("AMD", "stocks"),
+        _ => (s, "forex")
+    };
 
     public static TimeSpan GetTimeframeDuration(Timeframe tf) => tf switch
     {
@@ -173,4 +364,3 @@ public static class DeterministicMarketDataSynthesizer
         return 1.0850m;
     }
 }
-

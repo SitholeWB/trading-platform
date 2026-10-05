@@ -25,6 +25,8 @@ public interface IOrderExecutionService
 public interface IHistoricalDataProvider
 {
     Task<IReadOnlyList<Candle>> GetHistoricalCandlesAsync(string symbol, string timeframe, int count, CancellationToken ct);
+    Task<IReadOnlyList<Candle>> GetHistoricalCandlesAsync(string symbol, string timeframe, int count, bool forceRefresh, CancellationToken ct)
+        => GetHistoricalCandlesAsync(symbol, timeframe, count, ct);
     Task<IReadOnlyList<Candle>> GetHistoricalCandlesBeforeAsync(string symbol, string timeframe, int count, DateTime beforeUtc, CancellationToken ct)
         => GetHistoricalCandlesAsync(symbol, timeframe, count, ct);
 }

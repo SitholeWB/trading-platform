@@ -25,6 +25,7 @@ import {
   BackgroundScannerStatus,
   Candle,
   IndicatorConfig,
+  MarketQuote,
   OrderType,
   Position,
   RiskProfile,
@@ -198,9 +199,12 @@ export function App() {
     return list;
   });
 
-  const currentPrice = candles[candles.length - 1]?.close ?? 1.0852;
-
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, MarketQuote>>({});
+  const [secondsUntilSync, setSecondsUntilSync] = useState<number>(60);
+
+  const currentPrice = watchlistQuotes[selectedSymbol]?.price ?? candles[candles.length - 1]?.close ?? 1.0852;
+  const [isSyncingCandles, setIsSyncingCandles] = useState<boolean>(false);
   const [alerts, setAlerts] = useState<StrategyAlertNotification[]>([]);
   const [scannerStatus, setScannerStatus] = useState<BackgroundScannerStatus | null>(null);
   const [scannerSettings, setScannerSettings] = useState<BackgroundScannerSettings | null>(null);
@@ -211,6 +215,19 @@ export function App() {
   useEffect(() => {
     scannerSettingsRef.current = scannerSettings;
   }, [scannerSettings]);
+
+  const fetchQuotesData = async () => {
+    try {
+      const quotesList = await tradingApi.getQuotes();
+      if (quotesList && quotesList.length > 0) {
+        const map: Record<string, MarketQuote> = {};
+        quotesList.forEach((q) => { map[q.symbol] = q; });
+        setWatchlistQuotes((prev) => ({ ...prev, ...map }));
+      }
+    } catch (err) {
+      console.warn('Watchlist quotes fetch warning:', err);
+    }
+  };
 
   const fetchTelemetryData = async () => {
     try {
@@ -231,6 +248,7 @@ export function App() {
       if (cfg.status === 'fulfilled' && cfg.value?.activeProvider) {
         setActiveProvider(cfg.value.activeProvider);
       }
+      fetchQuotesData();
     } catch (err) {
       console.warn('Telemetry fetch warning:', err);
     }
@@ -352,9 +370,16 @@ export function App() {
 
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  // Identity of the currently displayed series. NOTE: the backend serializes the
-  // Timeframe enum as a number, so candle.timeframe can never be compared to 'M5'.
-  // Comparing it previously caused every 8s live poll to wipe all loaded history.
+  const selectedSymbolRef = useRef(selectedSymbol);
+  const timeframeRef = useRef(timeframe);
+  const activeProviderRef = useRef(activeProvider);
+
+  useEffect(() => {
+    selectedSymbolRef.current = selectedSymbol;
+    timeframeRef.current = timeframe;
+    activeProviderRef.current = activeProvider;
+  }, [selectedSymbol, timeframe, activeProvider]);
+
   const seriesKey = `${selectedSymbol}|${timeframe}|${activeProvider}`;
   const seriesKeyRef = useRef(seriesKey);
   const candlesRef = useRef<Candle[]>(candles);
@@ -375,29 +400,36 @@ export function App() {
   };
 
   // Fetch real-time / public multi-timeframe candles from active provider
-  const fetchLiveCandles = async (isInitial = false, key?: string) => {
+  const fetchLiveCandles = async (isInitial = false, key?: string, force = true) => {
+    const targetSymbol = selectedSymbolRef.current;
+    const targetTimeframe = timeframeRef.current;
+    const targetKey = key || `${targetSymbol}|${targetTimeframe}|${activeProviderRef.current}`;
     try {
-      const targetKey = key || seriesKeyRef.current;
-      const countToFetch = isInitial ? 300 : 30;
-      const realCandles = await tradingApi.getCandles(selectedSymbol, timeframe, countToFetch);
+      setIsSyncingCandles(true);
+      const countToFetch = isInitial ? 300 : 60;
+      const realCandles = await tradingApi.getCandles(targetSymbol, targetTimeframe, countToFetch, undefined, force);
       // Drop responses for a symbol/timeframe the user has already navigated away from
-      if (targetKey !== seriesKeyRef.current) return;
+      if (targetKey !== `${selectedSymbolRef.current}|${timeframeRef.current}|${activeProviderRef.current}`) return;
       if (realCandles && realCandles.length > 0) {
-        // Initial load replaces; live polls only merge (never discard loaded history)
+        // Initial load replaces; live polls merge (overwriting the forming bar with the latest quote price)
         setCandles((prev) => (isInitial ? mergeCandles([], realCandles) : mergeCandles(prev, realCandles)));
       }
     } catch (err) {
       console.warn('Live candles fetch warning:', err);
+    } finally {
+      setIsSyncingCandles(false);
     }
   };
 
   const handleManualRefresh = async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
+    setSecondsUntilSync(60);
     try {
       await Promise.allSettled([
         fetchTelemetryData(),
-        fetchLiveCandles(false),
+        fetchQuotesData(),
+        fetchLiveCandles(false, undefined, true),
         fetchNotificationsData(),
       ]);
     } finally {
@@ -405,16 +437,33 @@ export function App() {
     }
   };
 
+  // Immediate initial candle fetch on series change & reset 60s countdown
   useEffect(() => {
     seriesKeyRef.current = seriesKey;
     hasMoreHistoryRef.current = true;
     isLoadingHistoryRef.current = false;
     candlesRef.current = [];
     setCandles([]);
-    fetchLiveCandles(true, seriesKey);
-    const interval = setInterval(() => fetchLiveCandles(false, seriesKey), 8000);
-    return () => clearInterval(interval);
+    setSecondsUntilSync(60);
+    fetchLiveCandles(true, seriesKey, true);
+    fetchQuotesData();
   }, [seriesKey]);
+
+  // Synchronized 1-minute (60s) cadence ticker for all timeframes & watchlist quotes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSecondsUntilSync((prev) => {
+        if (prev <= 1) {
+          fetchLiveCandles(false, undefined, true);
+          fetchQuotesData();
+          fetchTelemetryData();
+          return 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   /**
    * Loads one page of real older bars from the provider.
@@ -700,9 +749,18 @@ export function App() {
               <aside className="w-64 bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col font-mono text-xs hidden md:flex flex-shrink-0">
                 {/* Watchlist Header + Browse Button */}
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Watchlist
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                      Watchlist
+                    </span>
+                    <span
+                      className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 flex items-center gap-1 font-semibold"
+                      title="Auto-refreshes every 1 min (60s) to protect market data servers from rate-limiting"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      1m sync
+                    </span>
+                  </div>
                   <button
                     onClick={() => setIsSymbolSearchOpen(true)}
                     className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 text-[10px] font-sans font-medium transition-all"
@@ -741,55 +799,83 @@ export function App() {
                 <div className="space-y-1.5 flex-1 overflow-y-auto pr-0.5">
                   {[
                     // Indices
-                    { s: 'US500', name: 'S&P 500', cat: 'indices', p: '5,782.40', chg: '+0.52%', up: true },
-                    { s: 'NAS100', name: 'Nasdaq 100', cat: 'indices', p: '20,140.50', chg: '+0.88%', up: true },
-                    { s: 'US30', name: 'Dow Jones', cat: 'indices', p: '42,352.00', chg: '+0.35%', up: true },
-                    { s: 'GER40', name: 'DAX 40', cat: 'indices', p: '19,450.20', chg: '+0.28%', up: true },
+                    { s: 'US500', name: 'S&P 500', cat: 'indices', defaultPrice: '5,782.40', defaultChange: '+0.52%', defaultUp: true },
+                    { s: 'NAS100', name: 'Nasdaq 100', cat: 'indices', defaultPrice: '20,140.50', defaultChange: '+0.88%', defaultUp: true },
+                    { s: 'US30', name: 'Dow Jones', cat: 'indices', defaultPrice: '42,352.00', defaultChange: '+0.35%', defaultUp: true },
+                    { s: 'GER40', name: 'DAX 40', cat: 'indices', defaultPrice: '19,450.20', defaultChange: '+0.28%', defaultUp: true },
                     // Commodities
-                    { s: 'XAUUSD', name: 'Gold Spot', cat: 'commodities', p: '2,654.80', chg: '+0.74%', up: true },
-                    { s: 'USOIL', name: 'WTI Oil', cat: 'commodities', p: '71.50', chg: '-1.40%', up: false },
+                    { s: 'XAUUSD', name: 'Gold Spot', cat: 'commodities', defaultPrice: '2,654.80', defaultChange: '+0.74%', defaultUp: true },
+                    { s: 'USOIL', name: 'WTI Oil', cat: 'commodities', defaultPrice: '71.50', defaultChange: '-1.40%', defaultUp: false },
                     // Forex
-                    { s: 'EURUSD', name: 'EUR/USD', cat: 'forex', p: currentPrice < 10 ? currentPrice.toFixed(5) : '1.08520', chg: '+0.18%', up: true },
-                    { s: 'GBPUSD', name: 'GBP/USD', cat: 'forex', p: '1.26420', chg: '-0.12%', up: false },
-                    { s: 'USDJPY', name: 'USD/JPY', cat: 'forex', p: '154.210', chg: '+0.45%', up: true },
-                    { s: 'AUDUSD', name: 'AUD/USD', cat: 'forex', p: '0.65340', chg: '+0.04%', up: true },
-                    { s: 'USDCAD', name: 'USD/CAD', cat: 'forex', p: '1.38120', chg: '-0.22%', up: false },
+                    { s: 'EURUSD', name: 'EUR/USD', cat: 'forex', defaultPrice: '1.08520', defaultChange: '+0.18%', defaultUp: true },
+                    { s: 'GBPUSD', name: 'GBP/USD', cat: 'forex', defaultPrice: '1.26420', defaultChange: '-0.12%', defaultUp: false },
+                    { s: 'USDJPY', name: 'USD/JPY', cat: 'forex', defaultPrice: '154.210', defaultChange: '+0.45%', defaultUp: true },
+                    { s: 'AUDUSD', name: 'AUD/USD', cat: 'forex', defaultPrice: '0.65340', defaultChange: '+0.04%', defaultUp: true },
+                    { s: 'USDCAD', name: 'USD/CAD', cat: 'forex', defaultPrice: '1.38120', defaultChange: '-0.22%', defaultUp: false },
                     // Crypto
-                    { s: 'BTCUSDT', name: 'Bitcoin', cat: 'crypto', p: '68,450.00', chg: '+1.85%', up: true },
-                    { s: 'ETHUSDT', name: 'Ethereum', cat: 'crypto', p: '3,520.50', chg: '+0.95%', up: true },
-                    { s: 'SOLUSDT', name: 'Solana', cat: 'crypto', p: '178.40', chg: '+4.20%', up: true },
+                    { s: 'BTCUSDT', name: 'Bitcoin', cat: 'crypto', defaultPrice: '68,450.00', defaultChange: '+1.85%', defaultUp: true },
+                    { s: 'ETHUSDT', name: 'Ethereum', cat: 'crypto', defaultPrice: '3,520.50', defaultChange: '+0.95%', defaultUp: true },
+                    { s: 'SOLUSDT', name: 'Solana', cat: 'crypto', defaultPrice: '178.40', defaultChange: '+4.20%', defaultUp: true },
                     // Stocks
-                    { s: 'AAPL', name: 'Apple', cat: 'stocks', p: '232.50', chg: '+0.65%', up: true },
-                    { s: 'NVDA', name: 'NVIDIA', cat: 'stocks', p: '126.40', chg: '+2.15%', up: true },
-                    { s: 'TSLA', name: 'Tesla', cat: 'stocks', p: '254.20', chg: '-1.20%', up: false },
+                    { s: 'AAPL', name: 'Apple', cat: 'stocks', defaultPrice: '232.50', defaultChange: '+0.65%', defaultUp: true },
+                    { s: 'NVDA', name: 'NVIDIA', cat: 'stocks', defaultPrice: '126.40', defaultChange: '+2.15%', defaultUp: true },
+                    { s: 'TSLA', name: 'Tesla', cat: 'stocks', defaultPrice: '254.20', defaultChange: '-1.20%', defaultUp: false },
                   ]
                     .filter((item) => watchlistCategory === 'all' || item.cat === watchlistCategory)
-                    .map((item) => (
-                      <button
-                        key={item.s}
-                        onClick={() => setSelectedSymbol(item.s)}
-                        className={`w-full p-2 rounded-lg flex items-center justify-between text-left transition-colors border ${
-                          selectedSymbol === item.s
-                            ? 'bg-blue-600/20 border-blue-500/40 text-blue-300 font-bold'
-                            : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-800/60 text-slate-300'
-                        }`}
-                      >
-                        <div>
-                          <div className="font-bold flex items-center gap-1.5">
-                            <span>{item.s}</span>
-                            <span className="text-[9px] font-sans text-slate-500 font-normal">{item.name}</span>
-                          </div>
-                          <div className="text-[10px] text-slate-500">{item.p}</div>
-                        </div>
-                        <div
-                          className={`text-[11px] font-bold ${
-                            item.up ? 'text-emerald-400' : 'text-red-400'
+                    .map((item) => {
+                      const quote = watchlistQuotes[item.s];
+                      let displayPrice = item.defaultPrice;
+                      let displayChange = item.defaultChange;
+                      let isUp = item.defaultUp;
+
+                      if (quote) {
+                        displayPrice = quote.price >= 100
+                          ? quote.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                          : quote.price > 10
+                          ? quote.price.toFixed(3)
+                          : quote.price.toFixed(quote.decimals || 5);
+                        displayChange = `${quote.changePct >= 0 ? '+' : ''}${quote.changePct.toFixed(2)}%`;
+                        isUp = quote.isPositive;
+                      } else if (item.s === selectedSymbol && currentPrice) {
+                        displayPrice = currentPrice >= 100
+                          ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                          : currentPrice > 10
+                          ? currentPrice.toFixed(3)
+                          : currentPrice.toFixed(5);
+                      }
+
+                      return (
+                        <button
+                          key={item.s}
+                          onClick={() => setSelectedSymbol(item.s)}
+                          className={`w-full p-2 rounded-lg flex items-center justify-between text-left transition-all border ${
+                            selectedSymbol === item.s
+                              ? 'bg-blue-600/20 border-blue-500/40 text-blue-300 font-bold shadow-sm'
+                              : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-800/60 text-slate-300'
                           }`}
                         >
-                          {item.chg}
-                        </div>
-                      </button>
-                    ))}
+                          <div>
+                            <div className="font-bold flex items-center gap-1.5">
+                              <span>{item.s}</span>
+                              <span className="text-[9px] font-sans text-slate-500 font-normal">{item.name}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                              <span>{displayPrice}</span>
+                              {quote && (
+                                <span className="w-1 h-1 rounded-full bg-emerald-400/80 inline-block" title="Live dynamic price feed" />
+                              )}
+                            </div>
+                          </div>
+                          <div
+                            className={`text-[11px] font-bold font-mono ${
+                              isUp ? 'text-emerald-400' : 'text-red-400'
+                            }`}
+                          >
+                            {displayChange}
+                          </div>
+                        </button>
+                      );
+                    })}
                 </div>
 
                 {/* Bottom Browse Full Catalog Link */}
@@ -801,8 +887,15 @@ export function App() {
                     <Search className="w-3 h-3 text-blue-400" />
                     <span>Browse All 45+ Symbols</span>
                   </button>
-                  <div className="text-[10px] text-slate-500 text-center font-sans">
-                    Feed: <span className="text-slate-400">{activeProvider}</span>
+                  <div className="text-[10px] text-slate-500 text-center font-sans space-y-0.5">
+                    <div>
+                      Feed: <span className="text-slate-400 font-mono">{activeProvider}</span>
+                    </div>
+                    <div className="text-[9px] text-slate-500 flex items-center justify-center gap-1">
+                      <span>Next sync in {secondsUntilSync}s</span>
+                      <span className="text-slate-600">·</span>
+                      <span className="text-emerald-500/80">Rate-limit protected</span>
+                    </div>
                   </div>
                 </div>
               </aside>
@@ -824,6 +917,13 @@ export function App() {
                   isLoadingHistory={isLoadingHistory}
                   activeProvider={activeProvider}
                   account={account}
+                  secondsUntilSync={secondsUntilSync}
+                  isRefreshingCandles={isSyncingCandles}
+                  onManualSyncCandles={() => {
+                    setSecondsUntilSync(60);
+                    fetchLiveCandles(false, undefined, true);
+                    fetchQuotesData();
+                  }}
                 />
               </div>
             </div>
