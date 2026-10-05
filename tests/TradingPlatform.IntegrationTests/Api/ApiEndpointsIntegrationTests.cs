@@ -120,11 +120,17 @@ public class ApiEndpointsIntegrationTests : IClassFixture<WebApplicationFactory<
     [Fact]
     public async Task GetCandles_ReturnsValidCandles()
     {
-        var response = await _client.GetAsync("/api/market-data/candles?symbol=US500&timeframe=M1&count=10");
+        var response = await _client.GetAsync("/api/market-data/candles?symbol=EURUSD&timeframe=M5&count=20&forceRefresh=true");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var rawJson = await response.Content.ReadAsStringAsync();
+        Console.WriteLine($"Raw JSON last 300 chars: {rawJson[^Math.Min(300, rawJson.Length)..]}");
         var candles = await response.Content.ReadFromJsonAsync<List<Candle>>();
         Assert.NotNull(candles);
         Assert.NotEmpty(candles);
+        var last = candles[^1];
+        Console.WriteLine($"[LAST CANDLE] Time={last.Timestamp} O={last.Open} H={last.High} L={last.Low} C={last.Close} V={last.Volume} Complete={last.IsComplete}");
+        Assert.True(last.Low > 0m, $"Low must be > 0 but was {last.Low}");
+        Assert.True(last.Close > 0.5m, $"Close must be > 0.5 but was {last.Close}");
     }
 
     [Fact]

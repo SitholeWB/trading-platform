@@ -44,19 +44,21 @@ public static class DeterministicMarketDataSynthesizer
         int decimals,
         double volatility,
         int symHash,
-        DateTime time)
+        DateTime time,
+        Timeframe timeframe = Timeframe.M1)
     {
-        double totalMinutes = (double)time.Ticks / TimeSpan.FromMinutes(1).Ticks;
+        var barDuration = GetTimeframeDuration(timeframe);
+        double continuousIndex = (double)time.Ticks / barDuration.Ticks;
         long secondTick = time.Ticks / TimeSpan.FromSeconds(1).Ticks;
         double phase = (symHash % 1000) * 0.01;
 
-        double macroWave = Math.Sin(totalMinutes * 0.018 + phase) * volatility * 8.0;
-        double mediumWave = Math.Cos(totalMinutes * 0.075 + phase * 1.6) * volatility * 3.5;
-        double microWave = Math.Sin(totalMinutes * 0.28 + phase * 2.7) * volatility * 1.8;
+        double macroWave = Math.Sin(continuousIndex * 0.018 + phase) * volatility * 8.0;
+        double mediumWave = Math.Cos(continuousIndex * 0.075 + phase * 1.6) * volatility * 3.5;
+        double microWave = Math.Sin(continuousIndex * 0.28 + phase * 2.7) * volatility * 1.8;
 
         long h = (secondTick ^ (long)symHash) * 2862933555777941757L + 3037000493L;
         h ^= (h >> 32);
-        double tickNoise = ((h & 0xFFFF) / 65535.0 - 0.5) * volatility * 1.2;
+        double tickNoise = ((h & 0xFFFF) / 65535.0 - 0.5) * volatility * 0.35;
 
         decimal price = Math.Round(baseline + (decimal)(macroWave + mediumWave + microWave + tickNoise), decimals);
         return price <= 0m ? baseline : price;
@@ -86,8 +88,6 @@ public static class DeterministicMarketDataSynthesizer
         int symHash = Math.Abs(cleanSymbol.GetHashCode());
 
         // Pre-compute continuous price path for count bars (from oldest to newest)
-        // Bars from count - 1 down to 1 are historical completed bars.
-        // Bar 0 is the current forming bar at anchor whose close price evolves live with the current minute.
         decimal previousClose = baseline;
 
         for (int i = count - 1; i >= 0; i--)
@@ -141,27 +141,41 @@ public static class DeterministicMarketDataSynthesizer
             }
             else
             {
-                // Current live forming bar at anchor
+                // Current live forming bar at anchor: strictly continuous with previousClose
                 decimal open = previousClose;
-                decimal close = CalculatePriceAtTime(cleanSymbol, baseline, decimals, volatility, symHash, now);
+
+                // Continuous index progresses within the timeframe bar interval
+                TimeSpan elapsed = now - anchor;
+                double fractionElapsed = Math.Clamp(elapsed.TotalSeconds / Math.Max(1.0, barDuration.TotalSeconds), 0.0, 1.0);
+                double continuousIndex = (double)anchor.Ticks / barTicks + fractionElapsed;
+                double phase = (symHash % 1000) * 0.01;
+
+                double macroWave = Math.Sin(continuousIndex * 0.018 + phase) * volatility * 8.0;
+                double mediumWave = Math.Cos(continuousIndex * 0.075 + phase * 1.6) * volatility * 3.5;
+                double microWave = Math.Sin(continuousIndex * 0.28 + phase * 2.7) * volatility * 1.8;
+
+                long secondTick = now.Ticks / TimeSpan.FromSeconds(1).Ticks;
+                long hNow = (secondTick ^ (long)symHash) * 2862933555777941757L + 3037000493L;
+                hNow ^= (hNow >> 32);
+                double tickNoise = ((hNow & 0xFFFF) / 65535.0 - 0.5) * volatility * 0.35;
+
+                decimal close = Math.Round(baseline + (decimal)(macroWave + mediumWave + microWave + tickNoise), decimals);
+                if (close <= 0m) close = baseline;
 
                 decimal high = Math.Max(open, close);
                 decimal low = Math.Min(open, close);
 
-                // Sample prices within the elapsed portion of the bar to build realistic intra-bar high/low
-                TimeSpan elapsed = now - anchor;
-                int elapsedMinutes = (int)Math.Max(1, Math.Min(barDuration.TotalMinutes, elapsed.TotalMinutes));
-
-                long hNow = (now.Ticks / TimeSpan.FromMinutes(1).Ticks ^ (long)symHash) * 2862933555777941757L + 3037000493L;
-                double spreadUp = Math.Abs((hNow & 0x7FFF) / 32767.0) * volatility * 0.4;
-                double spreadDown = Math.Abs(((hNow >> 16) & 0x7FFF) / 32767.0) * volatility * 0.4;
+                double spreadUp = Math.Abs((hNow & 0x7FFF) / 32767.0) * volatility * 0.3;
+                double spreadDown = Math.Abs(((hNow >> 16) & 0x7FFF) / 32767.0) * volatility * 0.3;
 
                 high = Math.Round(high + (decimal)spreadUp, decimals);
                 low = Math.Round(low - (decimal)spreadDown, decimals);
 
                 if (high < Math.Max(open, close)) high = Math.Max(open, close);
                 if (low > Math.Min(open, close)) low = Math.Min(open, close);
+                if (low <= 0m) low = Math.Min(open, close);
 
+                int elapsedMinutes = (int)Math.Max(1, Math.Min(barDuration.TotalMinutes, elapsed.TotalMinutes));
                 decimal volume = Math.Max(150m, (decimal)elapsedMinutes * 35m + (decimal)((hNow & 0x1FF) % 600));
                 bool isComplete = now >= anchor.AddTicks(barTicks);
 
@@ -182,7 +196,7 @@ public static class DeterministicMarketDataSynthesizer
         return list;
     }
 
-    public static MarketQuote GetLiveQuote(string symbol, DateTime? nowUtc = null)
+    public static MarketQuote GetLiveQuote(string symbol, DateTime? nowUtc = null, decimal? overridePrice = null)
     {
         var cleanSymbol = symbol.Trim().ToUpperInvariant().Replace("/", "").Replace("_", "").Replace("=X", "");
         decimal baseline = GetBaselinePrice(cleanSymbol);
@@ -191,11 +205,11 @@ public static class DeterministicMarketDataSynthesizer
         int symHash = Math.Abs(cleanSymbol.GetHashCode());
 
         var now = nowUtc ?? DateTime.UtcNow;
-        decimal price = CalculatePriceAtTime(cleanSymbol, baseline, decimals, volatility, symHash, now);
+        decimal price = overridePrice ?? CalculatePriceAtTime(cleanSymbol, baseline, decimals, volatility, symHash, now, Timeframe.M1);
 
         // 24h baseline anchor (midnight today UTC)
         var midnightUtc = new DateTime(now.Year, now.Month, now.Day, 0, 0, 0, DateTimeKind.Utc);
-        decimal open24h = CalculatePriceAtTime(cleanSymbol, baseline, decimals, volatility, symHash, midnightUtc);
+        decimal open24h = CalculatePriceAtTime(cleanSymbol, baseline, decimals, volatility, symHash, midnightUtc, Timeframe.D1);
 
         decimal change24h = Math.Round(price - open24h, decimals);
         decimal changePct = open24h != 0m ? Math.Round((change24h / open24h) * 100m, 2) : 0m;

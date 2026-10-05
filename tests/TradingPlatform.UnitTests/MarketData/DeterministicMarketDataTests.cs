@@ -93,18 +93,42 @@ public class DeterministicMarketDataTests
     }
 
     [Theory]
-    [InlineData(Timeframe.M1)]
-    [InlineData(Timeframe.M5)]
-    [InlineData(Timeframe.M15)]
-    [InlineData(Timeframe.H1)]
-    [InlineData(Timeframe.D1)]
-    public void GenerateDeterministicCandles_ShouldSupportAllTimeframes(Timeframe tf)
+    [InlineData("EURUSD", Timeframe.M1)]
+    [InlineData("EURUSD", Timeframe.M5)]
+    [InlineData("EURUSD", Timeframe.M15)]
+    [InlineData("EURUSD", Timeframe.H1)]
+    [InlineData("EURUSD", Timeframe.D1)]
+    [InlineData("USDJPY", Timeframe.M5)]
+    [InlineData("BTCUSDT", Timeframe.M1)]
+    [InlineData("BTCUSDT", Timeframe.M5)]
+    [InlineData("BTCUSDT", Timeframe.H1)]
+    [InlineData("US500", Timeframe.M5)]
+    [InlineData("AAPL", Timeframe.M5)]
+    [InlineData("NVDA", Timeframe.H1)]
+    public void Diagnostic_CheckCandlesAndQuote(string symbol, Timeframe tf)
     {
-        // Act
-        var candles = DeterministicMarketDataSynthesizer.GenerateDeterministicCandles("NVDA", tf, 20);
+        var now = DateTime.UtcNow;
+        var candles = DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, tf, 20, now);
+        var quote = DeterministicMarketDataSynthesizer.GetLiveQuote(symbol, now);
+        var lastCompleted = candles[^2];
+        var forming = candles[^1];
 
-        // Assert
-        Assert.Equal(20, candles.Count);
-        Assert.All(candles, c => Assert.True(c.Close > 0m));
+        // 1. Forming bar open must be perfectly continuous with previous bar close
+        Assert.Equal(lastCompleted.Close, forming.Open);
+
+        // 2. High and low must wrap open and close properly
+        Assert.True(forming.High >= forming.Open);
+        Assert.True(forming.High >= forming.Close);
+        Assert.True(forming.Low <= forming.Open);
+        Assert.True(forming.Low <= forming.Close);
+        Assert.True(forming.Low > 0m);
+
+        // 3. The forming bar close must NOT jump wildly (strictly < 1% jump)
+        decimal jumpPct = Math.Abs((forming.Close - lastCompleted.Close) / lastCompleted.Close) * 100m;
+        Assert.True(jumpPct < 1.0m, $"Candle jump was {jumpPct}%! prev={lastCompleted.Close}, forming={forming.Close}");
+
+        // 4. Quote price must be within reasonable bounds of forming candle
+        decimal quoteDeltaPct = Math.Abs((quote.Price - forming.Close) / forming.Close) * 100m;
+        Assert.True(quoteDeltaPct < 2.0m, $"Quote delta was {quoteDeltaPct}%");
     }
 }

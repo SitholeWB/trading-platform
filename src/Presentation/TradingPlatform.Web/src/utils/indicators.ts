@@ -59,9 +59,33 @@ export function sanitizeCandles(candles: Candle[]): Candle[] {
   if (!candles || candles.length === 0) return [];
   const map = new Map<number, Candle>();
   for (const c of candles) {
-    if (!c || !c.timestamp || isNaN(c.close)) continue;
+    if (!c || !c.timestamp) continue;
+    const open = Number(c.open);
+    const high = Number(c.high);
+    const low = Number(c.low);
+    const close = Number(c.close);
+
+    // Reject non-numeric, null, undefined, or non-positive candles
+    if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) continue;
+    if (open <= 0 || high <= 0 || low <= 0 || close <= 0) continue;
+
+    // Protect against corrupt candles where close or low has plunged to near 0 relative to open
+    if (close < open * 0.25 || low < open * 0.25) continue;
+
+    const safeHigh = Math.max(high, open, close);
+    const safeLow = Math.min(low, open, close);
+
+    const safeCandle: Candle = {
+      ...c,
+      open,
+      high: safeHigh,
+      low: safeLow,
+      close,
+      volume: Number(c.volume) || 100,
+    };
+
     const t = getCandleTimeSeconds(c.timestamp);
-    map.set(t, c);
+    map.set(t, safeCandle);
   }
   return Array.from(map.values()).sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()

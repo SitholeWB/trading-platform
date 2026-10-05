@@ -45,6 +45,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
     private static readonly SemaphoreSlim _configLock = new(1, 1);
 
     private static readonly ConcurrentDictionary<string, (DateTime ExpirationUtc, IReadOnlyList<Candle> Candles)> _candleCache = new();
+    private static readonly ConcurrentDictionary<string, decimal> _latestQuotes = new(StringComparer.OrdinalIgnoreCase);
 
     public static void InvalidateConfigCache()
     {
@@ -126,8 +127,18 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
 
     public Task<IReadOnlyList<MarketQuote>> GetQuotesAsync(IEnumerable<string>? symbols, CancellationToken ct)
     {
-        var quotes = DeterministicMarketDataSynthesizer.GetLiveQuotes(symbols, DateTime.UtcNow);
-        return Task.FromResult(quotes);
+        var targetSymbols = symbols != null && symbols.Any() ? symbols : DeterministicMarketDataSynthesizer.DefaultWatchlistSymbols;
+        var now = DateTime.UtcNow;
+        var list = new List<MarketQuote>();
+
+        foreach (var sym in targetSymbols)
+        {
+            if (string.IsNullOrWhiteSpace(sym)) continue;
+            decimal? currentPrice = _latestQuotes.TryGetValue(sym.Trim().ToUpperInvariant(), out var p) ? p : null;
+            list.Add(DeterministicMarketDataSynthesizer.GetLiveQuote(sym, now, currentPrice));
+        }
+
+        return Task.FromResult<IReadOnlyList<MarketQuote>>(list);
     }
 
     public Task<IReadOnlyList<Candle>> GetHistoricalCandlesAsync(
@@ -299,7 +310,12 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
     {
         if (candles == null || candles.Count == 0)
         {
-            return DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, timeframe, count, nowUtc);
+            var syn = DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, timeframe, count, nowUtc);
+            if (syn.Count > 0)
+            {
+                _latestQuotes[symbol.ToUpperInvariant()] = syn[^1].Close;
+            }
+            return syn;
         }
 
         var barDuration = DeterministicMarketDataSynthesizer.GetTimeframeDuration(timeframe);
@@ -307,16 +323,26 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
         long alignedTicks = (nowUtc.Ticks / barTicks) * barTicks;
         var currentBarTime = new DateTime(alignedTicks, DateTimeKind.Utc);
 
-        var quote = DeterministicMarketDataSynthesizer.GetLiveQuote(symbol, nowUtc);
         var list = new List<Candle>(candles);
-
         var lastCandle = list[^1];
+        int decimals = DeterministicMarketDataSynthesizer.GetDecimals(symbol, lastCandle.Close);
+        double volatility = (double)lastCandle.Close * (symbol.Contains("JPY") || lastCandle.Close > 100m ? 0.0006 : 0.0003);
+        int symHash = Math.Abs(symbol.GetHashCode());
+
+        // Micro-tick drift strictly bounded to within fractions of a pip / cent of lastCandle.Close
+        long secondTick = nowUtc.Ticks / TimeSpan.FromSeconds(1).Ticks;
+        long hTick = (secondTick ^ (long)symHash) * 2862933555777941757L + 3037000493L;
+        hTick ^= (hTick >> 32);
+        double microDrift = ((hTick & 0xFFFF) / 65535.0 - 0.5) * volatility * 0.35;
+        decimal liveClose = Math.Round(lastCandle.Close + (decimal)microDrift, decimals);
+        if (liveClose <= 0m) liveClose = lastCandle.Close;
+
         if (lastCandle.Timestamp >= currentBarTime)
         {
-            // Active forming bar at current boundary: update close and intra-bar extremes
+            // Active forming bar at current boundary: update close and keep intra-bar extremes realistic
             decimal open = lastCandle.Open;
-            decimal high = Math.Max(lastCandle.High, Math.Max(open, quote.Price));
-            decimal low = Math.Min(lastCandle.Low, Math.Min(open, quote.Price));
+            decimal high = Math.Max(lastCandle.High, Math.Max(open, liveClose));
+            decimal low = Math.Min(lastCandle.Low, Math.Min(open, liveClose));
             list[^1] = new Candle(
                 symbol: symbol,
                 timeframe: timeframe,
@@ -324,17 +350,22 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 open: open,
                 high: high,
                 low: low,
-                close: quote.Price,
+                close: liveClose,
                 volume: Math.Max(lastCandle.Volume, 150m),
                 isComplete: false
             );
         }
         else
         {
-            // Historical bars from delayed external source ended earlier; append active forming bar
+            // Historical bars from delayed external source ended earlier; append active forming bar strictly anchored to lastCandle.Close
             decimal open = lastCandle.Close;
-            decimal high = Math.Max(open, quote.Price);
-            decimal low = Math.Min(open, quote.Price);
+            double spread = Math.Abs(microDrift) * 0.5;
+            decimal high = Math.Round(Math.Max(open, liveClose) + (decimal)spread, decimals);
+            decimal low = Math.Round(Math.Min(open, liveClose) - (decimal)spread, decimals);
+            if (high < Math.Max(open, liveClose)) high = Math.Max(open, liveClose);
+            if (low > Math.Min(open, liveClose)) low = Math.Min(open, liveClose);
+            if (low <= 0m) low = Math.Min(open, liveClose);
+
             list.Add(new Candle(
                 symbol: symbol,
                 timeframe: timeframe,
@@ -342,7 +373,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 open: open,
                 high: high,
                 low: low,
-                close: quote.Price,
+                close: liveClose,
                 volume: 250m,
                 isComplete: false
             ));
@@ -352,6 +383,9 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
         {
             list = list.TakeLast(count).ToList();
         }
+
+        // Cache latest price so watchlist and quick order widgets match the chart candle close
+        _latestQuotes[symbol.ToUpperInvariant()] = liveClose;
 
         return list;
     }
