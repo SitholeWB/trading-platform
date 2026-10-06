@@ -6,7 +6,7 @@ WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STAGE_DIR="$WORKSPACE_ROOT/dist/snap-stage"
 PAYLOAD_DIR="$WORKSPACE_ROOT/dist/snap-payload"
 SNAP_NAME="trading-platform"
-SNAP_VERSION="1.0.0"
+SNAP_VERSION="${1:-1.0.1}"
 SNAP_ARCH="amd64"
 OUTPUT_SNAP="${WORKSPACE_ROOT}/${SNAP_NAME}_${SNAP_VERSION}_${SNAP_ARCH}.snap"
 ARCH_TRIPLET="x86_64-linux-gnu"
@@ -24,10 +24,8 @@ mkdir -p "$STAGE_DIR/bin"
 mkdir -p "$PAYLOAD_DIR"
 
 # 2. Verify or build Web SPA
-if [ ! -f "$WORKSPACE_ROOT/src/Presentation/TradingPlatform.Api/wwwroot/index.html" ]; then
-    echo "--> 2. Building Web SPA frontend..."
-    (cd "$WORKSPACE_ROOT/src/Presentation/TradingPlatform.Web" && npm run build)
-fi
+echo "--> 2. Building Web SPA frontend..."
+(cd "$WORKSPACE_ROOT/src/Presentation/TradingPlatform.Web" && npm run build)
 
 # 3. Publish Self-Contained Photino.NET Desktop Application
 echo "--> 3. Publishing self-contained .NET Desktop application (linux-x64)..."
@@ -105,7 +103,6 @@ plugs:
 apps:
   trading-platform:
     command: bin/launcher.sh
-    desktop: meta/gui/trading-platform.desktop
     environment:
       WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
       WEBKIT_DISABLE_COMPOSITING_MODE: "1"

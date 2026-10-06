@@ -1,6 +1,6 @@
 name: trading-platform
 base: core22
-version: '1.0.0'
+version: '1.0.1'
 summary: Institutional Algorithmic Trading Platform, Live Charts & AI Copilot
 description: |
   Trading Platform is an institutional-grade desktop trading terminal featuring:
