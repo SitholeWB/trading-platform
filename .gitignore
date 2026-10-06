@@ -31,3 +31,11 @@ src/Presentation/TradingPlatform.Api/wwwroot/assets/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Release packages
+*.snap
+*.deb
+*.AppImage
+*.exe
+*.dmg
+*.zip

@@ -13,10 +13,10 @@
     "start": "electron .",
     "build:backend": "dotnet publish ../TradingPlatform.Api/TradingPlatform.Api.csproj -c Release -r linux-x64 --self-contained true -o dist/backend",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "dist:snap": "electron-builder --linux snap",
-    "dist:deb": "electron-builder --linux deb",
-    "dist:appimage": "electron-builder --linux AppImage"
+    "dist": "electron-builder --publish never",
+    "dist:snap": "electron-builder --linux snap --publish never",
+    "dist:deb": "electron-builder --linux deb --publish never",
+    "dist:appimage": "electron-builder --linux AppImage --publish never"
   },
   "devDependencies": {
     "electron": "^33.2.1",

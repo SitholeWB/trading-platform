@@ -83,7 +83,7 @@ fi
 
 # 4. Package Desktop Distribution with electron-builder
 echo "--> 4. Packaging distribution: ${BUILDER_FLAG}..."
-npx electron-builder $BUILDER_FLAG
+npx electron-builder $BUILDER_FLAG --publish never
 
 # 5. Copy artifacts to workspace root for convenient access
 cp "$ELECTRON_DIR"/dist/release/*.snap "$WORKSPACE_ROOT/" 2>/dev/null || true
