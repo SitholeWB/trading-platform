@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using TradingPlatform.Api.Hosting;
 using TradingPlatform.Application;
+using TradingPlatform.Application.Common;
 using TradingPlatform.Application.Commands.IngestCandle;
 using TradingPlatform.Application.Common.CQRS;
 using TradingPlatform.Application.Interfaces;
@@ -1373,8 +1374,7 @@ public static class AppHost
         // ----------------------------------------------------
         // 7. Chart Drawings & Level Alerts Persistence
         // ----------------------------------------------------
-        var chartStorageDir = Path.Combine(AppContext.BaseDirectory, "Data", "Charts");
-        Directory.CreateDirectory(chartStorageDir);
+        var chartStorageDir = AppStoragePaths.ChartsDirectory;
 
         var drawingsGroup = app.MapGroup("/api/chart-drawings").WithTags("Chart Drawings");
 

@@ -9,18 +9,21 @@ public class SpaHostedService : IHostedService, IDisposable
     private readonly IHostApplicationLifetime _lifetime;
     private readonly IConfiguration _config;
     private readonly ILogger<SpaHostedService> _logger;
+    private readonly IServiceProvider _serviceProvider;
     private Process? _spaProcess;
 
     public SpaHostedService(
         IWebHostEnvironment env,
         IHostApplicationLifetime lifetime,
         IConfiguration config,
-        ILogger<SpaHostedService> logger)
+        ILogger<SpaHostedService> logger,
+        IServiceProvider serviceProvider)
     {
         _env = env;
         _lifetime = lifetime;
         _config = config;
         _logger = logger;
+        _serviceProvider = serviceProvider;
     }
 
     public Task StartAsync(CancellationToken ct)
@@ -89,8 +92,18 @@ public class SpaHostedService : IHostedService, IDisposable
         // 3. Register auto-launch browser on ApplicationStarted
         _lifetime.ApplicationStarted.Register(() =>
         {
-            var rawUrls = _config["ASPNETCORE_URLS"] ?? "http://localhost:5000";
-            var primaryUrl = rawUrls.Split(';').FirstOrDefault() ?? "http://localhost:5000";
+            string primaryUrl;
+            try
+            {
+                var server = _serviceProvider.GetService<Microsoft.AspNetCore.Hosting.Server.IServer>();
+                var addresses = server?.Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()?.Addresses;
+                primaryUrl = addresses?.FirstOrDefault() ?? _config["ASPNETCORE_URLS"] ?? "http://localhost:5000";
+            }
+            catch
+            {
+                var rawUrls = _config["ASPNETCORE_URLS"] ?? "http://localhost:5000";
+                primaryUrl = rawUrls.Split(';').FirstOrDefault() ?? "http://localhost:5000";
+            }
             primaryUrl = primaryUrl.Replace("0.0.0.0", "localhost").Replace("127.0.0.1", "localhost");
 
             _logger.LogInformation("========================================================================");

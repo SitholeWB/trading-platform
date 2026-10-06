@@ -1,0 +1,89 @@
+{
+  "name": "trading-platform",
+  "version": "1.0.0",
+  "description": "Institutional Algorithmic Trading Platform, Live Charts & AI Copilot",
+  "homepage": "https://github.com/tradingplatform/tradingplatform",
+  "main": "main.cjs",
+  "author": {
+    "name": "Trading Platform Team",
+    "email": "support@tradingplatform.local"
+  },
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build:backend": "dotnet publish ../TradingPlatform.Api/TradingPlatform.Api.csproj -c Release -r linux-x64 --self-contained true -o dist/backend",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:snap": "electron-builder --linux snap",
+    "dist:deb": "electron-builder --linux deb",
+    "dist:appimage": "electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.tradingplatform.desktop",
+    "productName": "Trading Platform",
+    "directories": {
+      "output": "dist/release"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/backend",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "linux": {
+      "maintainer": "Trading Platform Team <support@tradingplatform.local>",
+      "target": [
+        "snap",
+        "deb",
+        "AppImage"
+      ],
+      "category": "Office;Finance;",
+      "icon": "assets/icon.png"
+    },
+    "snap": {
+      "confinement": "strict",
+      "grade": "stable",
+      "summary": "Institutional Algorithmic Trading Platform, Live Charts & AI Copilot",
+      "plugs": [
+        "browser-support",
+        "desktop",
+        "desktop-legacy",
+        "wayland",
+        "x11",
+        "network",
+        "network-bind",
+        "opengl",
+        "audio-playback",
+        "home",
+        "removable-media"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/icon.png"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.finance",
+      "icon": "assets/icon.png"
+    }
+  }
+}

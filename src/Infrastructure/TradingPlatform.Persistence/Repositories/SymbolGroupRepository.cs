@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TradingPlatform.Application.Common;
 using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Domain.Entities;
 
@@ -11,8 +12,7 @@ public class SymbolGroupRepository : ISymbolGroupRepository
 
     public SymbolGroupRepository()
     {
-        var dataDir = Path.Combine(AppContext.BaseDirectory, "Data");
-        Directory.CreateDirectory(dataDir);
+        var dataDir = AppStoragePaths.DataDirectory;
         _filePath = Path.Combine(dataDir, "symbol_groups.json");
         EnsureDefaultGroupsSeeded();
     }
