@@ -27,6 +27,8 @@ jobs:
   build-desktop-terminal:
     name: Build Desktop (${{ matrix.target_name }})
     runs-on: ${{ matrix.os }}
+    env:
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
     strategy:
       fail-fast: false
       matrix:
@@ -103,9 +105,9 @@ jobs:
           prerelease: false
 
       - name: Publish to Snap Store (Ubuntu only)
-        if: matrix.os == 'ubuntu-latest' && secrets.SNAPCRAFT_STORE_CREDENTIALS != ''
+        if: matrix.os == 'ubuntu-latest' && env.SNAPCRAFT_STORE_CREDENTIALS != ''
         uses: canonical/action-publish@v1
         with:
-          store_token: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+          store_token: ${{ env.SNAPCRAFT_STORE_CREDENTIALS }}
           snap: src/Presentation/TradingPlatform.Electron/dist/release/trading-platform_*.snap
           channel: stable
