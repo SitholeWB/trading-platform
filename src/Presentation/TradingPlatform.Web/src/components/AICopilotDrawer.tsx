@@ -34,6 +34,7 @@ import {
   Timeframe,
 } from '../types/trading';
 import { tradingApi } from '../api/tradingClient';
+import { useTimezone } from '../context/TimezoneContext';
 
 interface ProviderInfo {
   name: string;
@@ -129,6 +130,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   auditLogs = [],
   onOpenStrategyGenerator,
 }) => {
+  const { formatTime } = useTimezone();
   const [activeTab, setActiveTab] = useState<'chat' | 'market' | 'audit'>('chat');
 
   // Chat State
@@ -137,7 +139,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
       id: 'welcome',
       sender: 'assistant',
       text: `Hello! I am your **AI Trading Copilot**. I analyze live market structure for **${currentSymbol} (${currentTimeframe})**, evaluate quantitative strategy performance, and diagnose trade executions in plain English.\n\n⚡ **Active Engine:** Built-in Quant Engine (Free & Offline)\n💡 Want to use **OpenAI (GPT-4o)**, **Claude (Sonnet 3.5)**, **Gemini**, or **Ollama**? Click **"Switch AI Provider"** above to insert your own private API key!`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: formatTime(new Date(), { withSeconds: false }),
       provider: 'BuiltIn',
       model: 'Built-in Quant Engine',
       suggestedFollowups: [
@@ -278,7 +280,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
       id: `u-${Date.now()}`,
       sender: 'user',
       text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: formatTime(new Date(), { withSeconds: false }),
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -291,7 +293,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
         id: `a-${Date.now()}`,
         sender: 'assistant',
         text: res.responseMarkdown,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: formatTime(new Date(), { withSeconds: false }),
         provider: aiConfig.provider,
         model: aiConfig.model || undefined,
         suggestedFollowups: res.suggestedFollowups,
@@ -302,7 +304,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
         id: `e-${Date.now()}`,
         sender: 'assistant',
         text: `⚠️ **Error communicating with ${PROVIDER_METADATA[aiConfig.provider]?.name || aiConfig.provider}:** ${err?.message || 'Unable to connect to service. Please check your network or API key.'}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: formatTime(new Date(), { withSeconds: false }),
         provider: aiConfig.provider,
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -974,7 +976,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                 >
                   {auditLogs.map((log, i) => (
                     <option key={log.signalFingerprint || i} value={log.signalFingerprint}>
-                      [{log.state}] {log.strategyId} - {log.symbol} ({new Date(log.createdAtUtc).toLocaleTimeString()})
+                      [{log.state}] {log.strategyId} - {log.symbol} ({formatTime(log.createdAtUtc, { withSeconds: false, withAbbr: true })})
                     </option>
                   ))}
                 </select>

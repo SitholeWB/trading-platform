@@ -9,6 +9,7 @@ import {
   Timeframe,
 } from '../types/trading';
 import { DashboardMiniChart } from './DashboardMiniChart';
+import { useTimezone } from '../context/TimezoneContext';
 
 interface BotOverviewProps {
   account: AccountSummary | null;
@@ -41,6 +42,7 @@ export const BotOverview: React.FC<BotOverviewProps> = ({
   onSelectSymbol,
   onSelectTimeframe,
 }) => {
+  const { formatTime } = useTimezone();
   const isKillSwitch = risk?.isKillSwitchEngaged ?? false;
   const activeStrategies = strategies.filter((s) => s.isActive && s.autoTradingEnabled);
   const openPositions = positions.filter((p) => p.status === 'Open');
@@ -416,7 +418,7 @@ export const BotOverview: React.FC<BotOverviewProps> = ({
 
                   <div className="flex items-center gap-4 text-[11px] text-slate-400">
                     <span>
-                      {new Date(log.candleTimestampUtc).toLocaleTimeString()}
+                      {formatTime(log.candleTimestampUtc)}
                     </span>
                     <button
                       onClick={() => onNavigateTo('radar')}

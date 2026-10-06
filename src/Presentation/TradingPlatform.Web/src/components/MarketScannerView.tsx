@@ -37,6 +37,7 @@ import {
   SymbolGroup,
   Timeframe,
 } from '../types/trading';
+import { useTimezone } from '../context/TimezoneContext';
 
 interface MarketScannerViewProps {
   onOpenChart: (symbol: string, timeframe?: Timeframe) => void;
@@ -60,6 +61,8 @@ export const MarketScannerView: React.FC<MarketScannerViewProps> = ({
   activeProvider = 'KeylessPublic',
   onOpenAlertsModal,
 }) => {
+  const { formatTime, formatDate, currentAbbr } = useTimezone();
+
   const [activeTab, setActiveTabState] = useState<'live' | 'historical' | 'buckets'>(() => {
     return (localStorage.getItem(SCANNER_STORAGE_TAB) as any) || 'live';
   });
@@ -738,10 +741,10 @@ function formatCountdown(seconds: number): string {
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
                   <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
-                    Last Scan Time (UTC)
+                    Last Scan Time ({currentAbbr})
                   </div>
                   <div className="text-sm font-bold font-mono text-slate-200 mt-2 truncate">
-                    {new Date(liveReport.scannedAtUtc).toLocaleTimeString()}
+                    {formatTime(liveReport.scannedAtUtc, { withSeconds: true, withAbbr: false })}
                   </div>
                   <div className="text-[10px] text-slate-500 mt-0.5">
                     Timeframe: {liveReport.timeframe}
@@ -1198,8 +1201,7 @@ function formatCountdown(seconds: number): string {
                     </div>
 
                     <div className="text-[11px] font-mono text-slate-400">
-                      Period: {new Date(histReport.periodStartUtc).toLocaleDateString()} —{' '}
-                      {new Date(histReport.periodEndUtc).toLocaleDateString()}
+                      Period: {formatDate(histReport.periodStartUtc)} — {formatDate(histReport.periodEndUtc)}
                     </div>
                   </div>
 

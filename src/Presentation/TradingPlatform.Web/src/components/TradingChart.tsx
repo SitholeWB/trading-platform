@@ -57,6 +57,7 @@ import { SecondaryChartPane } from './chart/SecondaryChartPane';
 import { playAlertChime } from '../utils/audioAlert';
 import { tradingApi } from '../api/tradingClient';
 import { Clock, X, Bell } from 'lucide-react';
+import { useTimezone } from '../context/TimezoneContext';
 
 interface TradingChartProps {
   candles: Candle[];
@@ -116,6 +117,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   isRefreshingCandles = false,
   onManualSyncCandles,
 }) => {
+  const { formatDateTime, formatTime, resolvedIana } = useTimezone();
+
   // Chart layout and state
   const [chartType, setChartType] = useState<ChartType>('candlestick');
   const [layoutMode, setLayoutMode] = useState<ChartLayoutMode>('single');
@@ -573,10 +576,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         autoScale: true,
         scaleMargins: { top: 0.1, bottom: 0.15 },
       },
+      localization: {
+        timeFormatter: (time: any) => formatDateTime(time, { withSeconds: false, withAbbr: true }),
+      },
       timeScale: {
         borderColor: '#1e293b',
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: (time: any) => formatTime(time, { withSeconds: false, withAbbr: false }),
       },
     });
 
@@ -666,6 +673,22 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       priceLinesRef.current = [];
     };
   }, []);
+
+  // Re-apply timezone formatting options on chart when user changes timezone
+  useEffect(() => {
+    if (mainChartRef.current) {
+      try {
+        mainChartRef.current.applyOptions({
+          localization: {
+            timeFormatter: (time: any) => formatDateTime(time, { withSeconds: false, withAbbr: true }),
+          },
+          timeScale: {
+            tickMarkFormatter: (time: any) => formatTime(time, { withSeconds: false, withAbbr: false }),
+          },
+        });
+      } catch {}
+    }
+  }, [resolvedIana, formatDateTime, formatTime]);
 
   // ----------------------------------------------------
   // 2. Synchronize Data, Series Type, and Overlays smoothly
@@ -1460,6 +1483,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                   <span className="font-bold text-slate-100">{symbol}</span>
                   <span className="text-slate-400 font-semibold">{timeframe}</span>
                   <span className="text-slate-500">|</span>
+                  <span className="text-slate-400 hidden md:inline">
+                    <strong className="text-cyan-300 font-mono">
+                      {formatDateTime(displayCandle.timestamp, { withSeconds: false, withAbbr: true })}
+                    </strong>
+                  </span>
+                  <span className="text-slate-500 hidden md:inline">|</span>
                   <span className="text-slate-400">
                     O: <strong className="text-slate-200">{formatPrice(displayCandle.open, symbol)}</strong>
                   </span>

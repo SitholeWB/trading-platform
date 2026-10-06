@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { SignalAuditLog, SignalState } from '../types/trading';
+import { useTimezone } from '../context/TimezoneContext';
 
 interface NearMissRadarProps {
   logs: SignalAuditLog[];
 }
 
 export const NearMissRadar: React.FC<NearMissRadarProps> = ({ logs }) => {
+  const { formatTime } = useTimezone();
   const [filter, setFilter] = useState<string>('All');
   const [selectedLog, setSelectedLog] = useState<SignalAuditLog | null>(null);
 
@@ -90,7 +92,7 @@ export const NearMissRadar: React.FC<NearMissRadarProps> = ({ logs }) => {
                     }`}
                   >
                     <td className="py-2 px-3 text-slate-400 text-[11px]">
-                      {new Date(log.createdAtUtc).toLocaleTimeString()}
+                      {formatTime(log.createdAtUtc)}
                     </td>
                     <td className="py-2 px-3 font-bold text-slate-200">{log.symbol}</td>
                     <td className="py-2 px-3 text-slate-400">{log.timeframe}</td>

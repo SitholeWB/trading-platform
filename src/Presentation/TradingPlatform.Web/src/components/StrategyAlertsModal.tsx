@@ -22,6 +22,7 @@ import {
   StrategyAlertNotification,
   Timeframe,
 } from '../types/trading';
+import { useTimezone } from '../context/TimezoneContext';
 import {
   getNotificationPermission,
   isNotificationSupported,
@@ -56,6 +57,7 @@ export const StrategyAlertsModal: React.FC<StrategyAlertsModalProps> = ({
   onTestNotification,
   onNavigateToChart,
 }) => {
+  const { formatDateTime } = useTimezone();
   const [isUpdating, setIsUpdating] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>(() => getNotificationPermission());
   const [testSent, setTestSent] = useState(false);
@@ -384,7 +386,7 @@ export const StrategyAlertsModal: React.FC<StrategyAlertsModalProps> = ({
                         <div className="flex items-center gap-3 text-[10px] text-slate-500 font-mono pt-0.5">
                           <span>Price: ${Number(alert.lastPrice).toFixed(5)}</span>
                           <span>•</span>
-                          <span>{new Date(alert.createdAtUtc).toLocaleTimeString()}</span>
+                          <span>{formatDateTime(alert.createdAtUtc, { withSeconds: true, withAbbr: true })}</span>
                           {alert.reminderCount > 0 && !alert.isAcknowledged && (
                             <>
                               <span>•</span>

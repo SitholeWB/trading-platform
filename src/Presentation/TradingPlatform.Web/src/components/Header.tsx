@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AccountSummary, RiskProfile } from '../types/trading';
-import { Search, RefreshCw, Bell, Sparkles, Settings } from 'lucide-react';
+import { Search, RefreshCw, Bell, Sparkles, Settings, Clock, Globe } from 'lucide-react';
+import { useTimezone } from '../context/TimezoneContext';
+import { TimezoneSelectorModal } from './TimezoneSelectorModal';
 
 interface HeaderProps {
   pageTitle: string;
@@ -41,6 +43,9 @@ export const Header: React.FC<HeaderProps> = ({
   activeProvider,
   onOpenSettings,
 }) => {
+  const [isTimezoneModalOpen, setIsTimezoneModalOpen] = useState(false);
+  const { currentFormattedTime, currentAbbr, currentOffset, activeTimezoneInfo } = useTimezone();
+
   const isKillSwitchEngaged = risk?.isKillSwitchEngaged ?? false;
   const currentDrawdown = account?.currentDrawdownPercent ?? 0;
   const maxDrawdown = risk?.maxDailyDrawdownPercent ?? 5.0;
@@ -106,6 +111,21 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Timezone & Live Platform Clock Button */}
+        <button
+          onClick={() => setIsTimezoneModalOpen(true)}
+          className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-white transition-all text-xs font-mono shadow-sm group cursor-pointer"
+          title={`Platform Timezone: ${activeTimezoneInfo.label} (${currentOffset}, ${currentAbbr}). Click to change timezone.`}
+        >
+          <Clock className="w-3.5 h-3.5 text-cyan-400 group-hover:text-cyan-300 transition-colors animate-pulse" />
+          <span className="font-bold text-slate-100 group-hover:text-cyan-200">
+            {currentFormattedTime}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded font-bold font-mono bg-cyan-950 text-cyan-300 border border-cyan-800/60 hidden sm:inline">
+            {currentAbbr || activeTimezoneInfo.city}
+          </span>
+        </button>
 
         {/* Manual Refresh Button - Eliminates high frequency polling overload */}
         {onManualRefresh && (
@@ -206,6 +226,12 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
       </div>
+
+      {/* Interactive Timezone & Clock Modal */}
+      <TimezoneSelectorModal
+        isOpen={isTimezoneModalOpen}
+        onClose={() => setIsTimezoneModalOpen(false)}
+      />
     </header>
   );
 };

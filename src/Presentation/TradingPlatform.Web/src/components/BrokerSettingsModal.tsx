@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { tradingApi } from '../api/tradingClient';
 import { AIProviderConfig } from '../types/trading';
-import { ShieldCheck, Cpu, Database, Globe } from 'lucide-react';
+import { ShieldCheck, Cpu, Database, Globe, Clock, Check, Activity } from 'lucide-react';
+import { useTimezone } from '../context/TimezoneContext';
 
 interface BrokerSettingsModalProps {
   isOpen: boolean;
@@ -14,7 +15,22 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
   onClose,
   onProviderChanged,
 }) => {
-  const [modalTab, setModalTab] = useState<'broker' | 'ai'>('broker');
+  const [modalTab, setModalTab] = useState<'broker' | 'ai' | 'timezone'>('broker');
+  const {
+    timezone,
+    resolvedIana,
+    setTimezone,
+    use24Hour,
+    setUse24Hour,
+    currentFormattedTime,
+    currentFormattedDate,
+    currentOffset,
+    currentAbbr,
+    activeTimezoneInfo,
+    popularTimezones,
+    allTimezones,
+    marketSessions,
+  } = useTimezone();
 
   // Broker Settings
   const [activeProvider, setActiveProvider] = useState<string>('KeylessPublic');
@@ -195,6 +211,18 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
             <Cpu className="w-3.5 h-3.5" />
             AI Copilot (BYOK Keys)
           </button>
+          <button
+            type="button"
+            onClick={() => { setModalTab('timezone'); setStatusMessage(null); }}
+            className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+              modalTab === 'timezone'
+                ? 'border-emerald-500 text-emerald-300'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            Timezone & Clock
+          </button>
         </div>
 
         {/* Content Body */}
@@ -212,7 +240,132 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
             </div>
           )}
 
-          {modalTab === 'broker' ? (
+          {modalTab === 'timezone' ? (
+            <div className="space-y-4">
+              {/* Active Timezone Card */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider font-mono font-semibold">
+                      Active Platform Clock & Timezone
+                    </span>
+                    <div className="text-xl font-bold font-mono text-white flex items-center gap-2 mt-0.5">
+                      <span>{currentFormattedTime}</span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-semibold">
+                        {currentOffset} ({currentAbbr})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-slate-400 font-mono">{currentFormattedDate}</span>
+                    <div className="text-xs text-emerald-400 font-semibold mt-0.5">
+                      {activeTimezoneInfo.flag} {activeTimezoneInfo.city}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">Clock Format:</span>
+                  <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setUse24Hour(true)}
+                      className={`px-3 py-1 rounded text-xs font-mono font-semibold transition-all cursor-pointer ${
+                        use24Hour ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      24-Hour (Quant)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUse24Hour(false)}
+                      className={`px-3 py-1 rounded text-xs font-mono font-semibold transition-all cursor-pointer ${
+                        !use24Hour ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      12-Hour (AM/PM)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Major Financial Center Presets */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-200 block">
+                  Select Financial Market Hub:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {popularTimezones.slice(0, 10).map((tz) => {
+                    const isSelected = timezone === tz.id;
+                    return (
+                      <button
+                        type="button"
+                        key={tz.id}
+                        onClick={() => setTimezone(tz.id)}
+                        className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-950/80 border-emerald-500 text-white shadow-sm ring-1 ring-emerald-500/50'
+                            : 'bg-slate-950/60 border-slate-800 hover:bg-slate-800/60 text-slate-300'
+                        }`}
+                      >
+                        <div className="min-w-0 pr-1">
+                          <div className="flex items-center gap-1.5 text-xs font-bold truncate">
+                            <span>{tz.flag}</span>
+                            <span>{tz.city}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate mt-0.5 font-mono">
+                            {tz.region}
+                          </div>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* All IANA Timezones Dropdown */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-200 block">
+                  Or Choose from All Global Timezones ({allTimezones.length}):
+                </label>
+                <select
+                  value={resolvedIana}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+                >
+                  {allTimezones.map((iana) => (
+                    <option key={iana} value={iana}>
+                      {iana.replace(/_/g, ' ')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Market Sessions Strip */}
+              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+                <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Market Session Statuses (London / New York / Tokyo / Sydney):</span>
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                  {marketSessions.map((s) => (
+                    <div
+                      key={s.name}
+                      className={`p-2 rounded-lg border text-center ${
+                        s.isOpen
+                          ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300 font-bold'
+                          : 'bg-slate-900 border-slate-800/80 text-slate-500'
+                      }`}
+                    >
+                      <div>{s.name}</div>
+                      <div className="text-[10px] mt-0.5">{s.isOpen ? '● OPEN' : '○ CLOSED'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : modalTab === 'broker' ? (
             <>
               {/* Section 1: Choose Active Provider */}
               <div className="space-y-3">
@@ -535,16 +688,20 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
             Cancel
           </button>
           <button
-            onClick={modalTab === 'broker' ? handleSave : handleSaveAi}
+            onClick={modalTab === 'timezone' ? onClose : modalTab === 'broker' ? handleSave : handleSaveAi}
             disabled={isLoading}
             className={`px-5 py-2 rounded-lg text-white text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50 ${
-              modalTab === 'broker'
+              modalTab === 'timezone'
+                ? 'bg-emerald-600 hover:bg-emerald-500'
+                : modalTab === 'broker'
                 ? 'bg-blue-600 hover:bg-blue-500'
                 : 'bg-cyan-600 hover:bg-cyan-500'
             }`}
           >
             {isLoading
               ? 'Saving...'
+              : modalTab === 'timezone'
+              ? 'Done (Applied)'
               : modalTab === 'broker'
               ? 'Apply & Save Broker Settings'
               : 'Save AI BYOK Settings'}
