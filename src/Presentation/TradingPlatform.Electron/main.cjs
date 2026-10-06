@@ -33,20 +33,14 @@ function getUserDataDir() {
 function resolveBackendExecutable() {
   const isWin = process.platform === 'win32';
   const binName = isWin ? 'TradingPlatform.Api.exe' : 'TradingPlatform.Api';
-  const desktopBinName = isWin ? 'TradingPlatform.Desktop.exe' : 'TradingPlatform.Desktop';
 
   const candidates = [
     // 1. Extra resources in packaged Electron app
     path.join(process.resourcesPath, 'backend', binName),
-    path.join(process.resourcesPath, 'backend', desktopBinName),
     // 2. Pre-built local directory in development
     path.join(__dirname, 'dist', 'backend', binName),
-    path.join(__dirname, 'dist', 'backend', desktopBinName),
-    // 3. Project payload folder
-    path.join(__dirname, '..', '..', '..', 'dist', 'snap-payload', desktopBinName),
-    path.join(__dirname, '..', 'TradingPlatform.Desktop', 'bin', 'Release', 'net10.0', 'linux-x64', desktopBinName),
+    // 3. Project output folders
     path.join(__dirname, '..', 'TradingPlatform.Api', 'bin', 'Release', 'net10.0', 'linux-x64', binName),
-    path.join(__dirname, '..', 'TradingPlatform.Desktop', 'bin', 'Debug', 'net10.0', desktopBinName),
     path.join(__dirname, '..', 'TradingPlatform.Api', 'bin', 'Debug', 'net10.0', binName),
   ];
 
@@ -100,8 +94,8 @@ function startBackend() {
     let resolved = false;
     const timeout = setTimeout(() => {
       if (!resolved) {
-        console.warn('[ELECTRON] Port discovery timed out after 30s. Attempting fallback to http://127.0.0.1:5000...');
-        resolve('http://127.0.0.1:5000');
+        console.error('[ELECTRON] Port discovery timed out after 30s: backend did not report a listening port.');
+        reject(new Error('Backend process timed out waiting for OS dynamic port assignment'));
       }
     }, 30000);
 
@@ -135,6 +129,10 @@ function startBackend() {
 
     child.on('exit', (code, signal) => {
       console.log(`[ELECTRON] Backend process exited with code ${code}, signal ${signal}`);
+      if (!resolved) {
+        clearTimeout(timeout);
+        reject(new Error(`Backend process exited prematurely (exit code ${code}, signal ${signal})`));
+      }
       if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.executeJavaScript(
           `console.warn('Backend server disconnected (code ${code})');`

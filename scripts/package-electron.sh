@@ -61,8 +61,14 @@ case "$TARGET" in
         ;;
 esac
 
+# Copy artifacts to workspace root for convenient access and deployment
+cp "$ELECTRON_DIR"/dist/release/*.snap "$WORKSPACE_ROOT/" 2>/dev/null || true
+cp "$ELECTRON_DIR"/dist/release/*.deb "$WORKSPACE_ROOT/" 2>/dev/null || true
+
 echo "========================================================================"
 echo " SUCCESS: Electron packaging completed!"
 echo " Artifacts located in: $ELECTRON_DIR/dist/release"
 ls -lh "$ELECTRON_DIR/dist/release" 2>/dev/null || true
+echo " Artifacts copied to: $WORKSPACE_ROOT"
+ls -lh "$WORKSPACE_ROOT"/*.snap 2>/dev/null || true
 echo "========================================================================"

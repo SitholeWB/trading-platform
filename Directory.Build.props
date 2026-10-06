@@ -12,4 +12,11 @@
     <CompilerVisibleProperty Include="RootNamespace" />
     <CompilerVisibleProperty Include="ProjectDir" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Use 2.1.12 to eliminate vulnerability warning GHSA-2m69-gcr7-jv3q -->
+    <PackageReference Update="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+    <PackageReference Update="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
+    <PackageReference Update="SQLitePCLRaw.core" Version="2.1.12" />
+  </ItemGroup>
 </Project>

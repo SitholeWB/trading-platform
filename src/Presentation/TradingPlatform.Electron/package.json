@@ -1,6 +1,6 @@
 {
   "name": "trading-platform",
-  "version": "1.0.0",
+  "version": "1.2.1",
   "description": "Institutional Algorithmic Trading Platform, Live Charts & AI Copilot",
   "homepage": "https://github.com/tradingplatform/tradingplatform",
   "main": "main.cjs",
@@ -53,6 +53,7 @@
       "icon": "assets/icon.png"
     },
     "snap": {
+      "base": "core22",
       "confinement": "strict",
       "grade": "stable",
       "summary": "Institutional Algorithmic Trading Platform, Live Charts & AI Copilot",
