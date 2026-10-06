@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using TradingPlatform.Domain.Entities;
+using TradingPlatform.Domain;
 
 namespace TradingPlatform.Persistence;
 

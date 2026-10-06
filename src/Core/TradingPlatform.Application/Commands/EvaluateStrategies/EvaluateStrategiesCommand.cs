@@ -1,13 +1,7 @@
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Commands.ExecuteTrade;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Common.Validation;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Application.Commands.EvaluateStrategies;
+namespace TradingPlatform.Application;
 
 public record EvaluateStrategiesCommand(MarketSnapshot Snapshot) : ICommand<IReadOnlyList<SignalResult>>;
 

@@ -1,10 +1,7 @@
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Broker.Abstractions.Models;
-using TradingPlatform.Domain.Entities;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Application.Queries;
+namespace TradingPlatform.Application;
 
 // 1. Get Strategies
 public record GetStrategiesQuery : IQuery<IReadOnlyList<StrategyDefinition>>;

@@ -1,8 +1,6 @@
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Application.Interfaces;
+namespace TradingPlatform.Application;
 
 public record GeneratedStrategyResult(
     string Name,

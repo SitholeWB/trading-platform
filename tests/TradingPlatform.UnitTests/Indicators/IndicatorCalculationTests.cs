@@ -1,9 +1,8 @@
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
-using TradingPlatform.RulesEngine.Indicators;
+using TradingPlatform.Domain;
+using TradingPlatform.RulesEngine;
 using Xunit;
 
-namespace TradingPlatform.UnitTests.Indicators;
+namespace TradingPlatform.UnitTests;
 
 public class IndicatorCalculationTests
 {

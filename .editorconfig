@@ -1,0 +1,24 @@
+# Top-most EditorConfig file
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = lf
+indent_size = 4
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# C# files
+[*.cs]
+# 1. Enforce file-scoped namespaces (fails build if block-scoped namespaces are used)
+csharp_style_namespace_declarations = file_scoped:error
+dotnet_diagnostic.IDE0161.severity = error
+
+# 2. Allow project-level namespaces without requiring matching folder structure
+dotnet_diagnostic.IDE0130.severity = none
+
+# 3. Using directives placement and sorting
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:suggestion

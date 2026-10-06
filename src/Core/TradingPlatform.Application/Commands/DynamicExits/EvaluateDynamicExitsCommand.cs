@@ -1,11 +1,8 @@
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Application.Commands.DynamicExits;
+namespace TradingPlatform.Application;
 
 public record EvaluateDynamicExitsCommand(MarketSnapshot Snapshot) : ICommand<int>;
 

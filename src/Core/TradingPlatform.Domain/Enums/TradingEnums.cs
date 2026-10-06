@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace TradingPlatform.Domain.Enums;
+namespace TradingPlatform.Domain;
 
 [JsonConverter(typeof(TimeframeJsonConverter))]
 public enum Timeframe

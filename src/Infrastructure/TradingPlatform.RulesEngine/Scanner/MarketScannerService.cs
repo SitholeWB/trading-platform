@@ -1,13 +1,11 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Interfaces;
+using TradingPlatform.Application;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.RulesEngine.Scanner;
+namespace TradingPlatform.RulesEngine;
 
 public class MarketScannerService : IMarketScannerService
 {

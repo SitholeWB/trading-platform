@@ -1,6 +1,4 @@
-using TradingPlatform.Domain.Enums;
-
-namespace TradingPlatform.Domain.Entities;
+namespace TradingPlatform.Domain;
 
 public class StrategyDefinition
 {

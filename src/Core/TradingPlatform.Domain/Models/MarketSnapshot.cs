@@ -1,6 +1,4 @@
-using TradingPlatform.Domain.Enums;
-
-namespace TradingPlatform.Domain.Models;
+namespace TradingPlatform.Domain;
 
 /// <summary>
 /// Flattens all extracted indicator values and candle features for a single completed candle.

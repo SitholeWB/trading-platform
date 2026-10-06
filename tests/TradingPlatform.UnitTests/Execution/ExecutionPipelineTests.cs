@@ -1,19 +1,12 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using TradingPlatform.AI.Abstractions;
-using TradingPlatform.Application.Commands.ExecuteTrade;
-using TradingPlatform.Application.Commands.IngestCandle;
-using TradingPlatform.Application.Commands.Risk;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Interfaces;
+using TradingPlatform.Application;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Broker.Abstractions.Models;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 using Xunit;
 
-namespace TradingPlatform.UnitTests.Execution;
+namespace TradingPlatform.UnitTests;
 
 public class ExecutionPipelineTests
 {

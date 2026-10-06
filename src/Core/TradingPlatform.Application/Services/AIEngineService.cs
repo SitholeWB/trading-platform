@@ -2,12 +2,9 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Application.Services;
+namespace TradingPlatform.Application;
 
 public class AIEngineService : IAIEngineService
 {

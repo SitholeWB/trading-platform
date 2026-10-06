@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace TradingPlatform.Application.Common.Validation;
+namespace TradingPlatform.Application;
 
 public record ValidationError(string PropertyName, string ErrorMessage, object? AttemptedValue = null);
 

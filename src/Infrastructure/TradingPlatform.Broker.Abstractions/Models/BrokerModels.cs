@@ -1,6 +1,6 @@
-using TradingPlatform.Domain.Enums;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Broker.Abstractions.Models;
+namespace TradingPlatform.Broker.Abstractions;
 
 public record Tick(
     string Symbol,

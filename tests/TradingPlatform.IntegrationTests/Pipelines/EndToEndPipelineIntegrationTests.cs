@@ -2,18 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TradingPlatform.Application;
-using TradingPlatform.Application.Commands.IngestCandle;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Oanda;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 using TradingPlatform.Persistence;
 using TradingPlatform.RulesEngine;
 using Xunit;
 
-namespace TradingPlatform.IntegrationTests.Pipelines;
+namespace TradingPlatform.IntegrationTests;
 
 public class EndToEndPipelineIntegrationTests
 {
@@ -42,10 +37,10 @@ public class EndToEndPipelineIntegrationTests
         {
             options.UseInMemoryDatabase(uniqueDbName);
         });
-        services.AddScoped<ISignalAuditRepository, Persistence.Repositories.SignalAuditRepository>();
-        services.AddScoped<IStrategyRepository, Persistence.Repositories.StrategyRepository>();
-        services.AddScoped<ITradeRepository, Persistence.Repositories.TradeRepository>();
-        services.AddScoped<IRiskProfileRepository, Persistence.Repositories.RiskProfileRepository>();
+        services.AddScoped<ISignalAuditRepository, SignalAuditRepository>();
+        services.AddScoped<IStrategyRepository, StrategyRepository>();
+        services.AddScoped<ITradeRepository, TradeRepository>();
+        services.AddScoped<IRiskProfileRepository, RiskProfileRepository>();
 
         services.AddRulesEngineServices();
         services.AddOandaBroker(configuration);

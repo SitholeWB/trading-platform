@@ -1,11 +1,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 using TradingPlatform.RulesEngine;
 using Xunit;
 
-namespace TradingPlatform.UnitTests.Rules;
+namespace TradingPlatform.UnitTests;
 
 public class RulesEngineTests
 {

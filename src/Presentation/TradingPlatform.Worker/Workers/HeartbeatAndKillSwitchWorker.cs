@@ -1,12 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Interfaces;
+using TradingPlatform.Application;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Worker.Workers;
+namespace TradingPlatform.Worker;
 
 public class HeartbeatAndKillSwitchWorker : BackgroundService
 {

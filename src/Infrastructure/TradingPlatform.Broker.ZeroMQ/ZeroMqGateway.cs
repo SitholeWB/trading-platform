@@ -2,11 +2,9 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using NetMQ;
 using NetMQ.Sockets;
-using TradingPlatform.Application.Common.Resilience;
+using TradingPlatform.Application;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Broker.Abstractions.Models;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
 namespace TradingPlatform.Broker.ZeroMQ;
 

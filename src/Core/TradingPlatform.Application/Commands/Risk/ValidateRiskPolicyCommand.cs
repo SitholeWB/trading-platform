@@ -1,12 +1,9 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Application.Commands.Risk;
+namespace TradingPlatform.Application;
 
 public record RiskEvaluationResult(bool IsPassed, string? RejectionReason = null);
 

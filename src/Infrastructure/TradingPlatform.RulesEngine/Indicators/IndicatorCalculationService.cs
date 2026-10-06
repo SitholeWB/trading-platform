@@ -1,8 +1,8 @@
 using Skender.Stock.Indicators;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Application;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.RulesEngine.Indicators;
+namespace TradingPlatform.RulesEngine;
 
 public class IndicatorCalculationService : IIndicatorCalculationService
 {

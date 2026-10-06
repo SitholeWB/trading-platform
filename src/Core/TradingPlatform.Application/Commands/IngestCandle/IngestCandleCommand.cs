@@ -1,13 +1,7 @@
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Commands.DynamicExits;
-using TradingPlatform.Application.Commands.EvaluateStrategies;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Common.Validation;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Domain.Events;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Application.Commands.IngestCandle;
+namespace TradingPlatform.Application;
 
 public record IngestCandleCommand(Candle Candle) : ICommand<MarketSnapshot?>;
 

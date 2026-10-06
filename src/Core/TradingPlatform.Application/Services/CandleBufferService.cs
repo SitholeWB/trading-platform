@@ -1,9 +1,7 @@
 using System.Collections.Concurrent;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Application.Services;
+namespace TradingPlatform.Application;
 
 public class CandleBufferService : ICandleBufferService
 {

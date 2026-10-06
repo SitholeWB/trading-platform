@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace TradingPlatform.Application.Common;
+namespace TradingPlatform.Application;
 
 /// <summary>
 /// Provides cross-platform, confinement-safe paths for writable application data.

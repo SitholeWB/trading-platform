@@ -1,9 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using TradingPlatform.AI.Abstractions;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Common.Validation;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Application.Services;
 
 namespace TradingPlatform.Application;
 

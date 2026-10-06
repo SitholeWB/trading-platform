@@ -1,9 +1,8 @@
 using System.Text.Json;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
+using TradingPlatform.Domain;
 using Xunit;
 
-namespace TradingPlatform.UnitTests.Rules;
+namespace TradingPlatform.UnitTests;
 
 public class StrategySerializationTests
 {

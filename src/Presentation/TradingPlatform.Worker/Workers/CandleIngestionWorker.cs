@@ -1,15 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Commands.IngestCandle;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Interfaces;
+using TradingPlatform.Application;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Worker.Workers;
+namespace TradingPlatform.Worker;
 
 public class CandleIngestionWorker : BackgroundService
 {

@@ -1,4 +1,4 @@
-namespace TradingPlatform.Domain.Entities;
+namespace TradingPlatform.Domain;
 
 public class RiskProfile
 {

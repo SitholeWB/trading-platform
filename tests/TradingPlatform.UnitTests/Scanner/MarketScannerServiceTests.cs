@@ -1,15 +1,12 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using TradingPlatform.Application.Interfaces;
+using TradingPlatform.Application;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
-using TradingPlatform.RulesEngine.Indicators;
-using TradingPlatform.RulesEngine.Scanner;
+using TradingPlatform.Domain;
+using TradingPlatform.RulesEngine;
 using Xunit;
 
-namespace TradingPlatform.UnitTests.Scanner;
+namespace TradingPlatform.UnitTests;
 
 public class MarketScannerServiceTests
 {

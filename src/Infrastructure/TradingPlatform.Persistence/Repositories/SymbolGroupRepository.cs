@@ -1,9 +1,8 @@
 using System.Text.Json;
-using TradingPlatform.Application.Common;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Domain.Entities;
+using TradingPlatform.Application;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Persistence.Repositories;
+namespace TradingPlatform.Persistence;
 
 public class SymbolGroupRepository : ISymbolGroupRepository
 {

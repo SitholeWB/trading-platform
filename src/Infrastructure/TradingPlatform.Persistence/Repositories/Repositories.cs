@@ -1,9 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
+using TradingPlatform.Application;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Persistence.Repositories;
+namespace TradingPlatform.Persistence;
 
 public class SignalAuditRepository : ISignalAuditRepository
 {

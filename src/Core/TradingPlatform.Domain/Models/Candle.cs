@@ -1,6 +1,4 @@
-using TradingPlatform.Domain.Enums;
-
-namespace TradingPlatform.Domain.Models;
+namespace TradingPlatform.Domain;
 
 public record Candle
 {

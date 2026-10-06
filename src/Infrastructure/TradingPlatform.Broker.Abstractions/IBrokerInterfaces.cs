@@ -1,5 +1,4 @@
-using TradingPlatform.Broker.Abstractions.Models;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
 namespace TradingPlatform.Broker.Abstractions;
 

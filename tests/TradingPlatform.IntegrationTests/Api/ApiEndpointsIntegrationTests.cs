@@ -3,15 +3,14 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Broker.Abstractions;
 using TradingPlatform.Api;
+using TradingPlatform.Application;
+using TradingPlatform.Broker.Abstractions;
 using TradingPlatform.Broker.Public;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 using Xunit;
 
-namespace TradingPlatform.IntegrationTests.Api;
+namespace TradingPlatform.IntegrationTests;
 
 public class ApiEndpointsIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {

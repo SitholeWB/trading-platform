@@ -1,5 +1,4 @@
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
 namespace TradingPlatform.Broker.Public;
 

@@ -2,12 +2,10 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Application;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.RulesEngine.Scanner;
+namespace TradingPlatform.RulesEngine;
 
 public class BackgroundStrategyScannerService : BackgroundService
 {

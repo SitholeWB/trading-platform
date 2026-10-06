@@ -1,7 +1,6 @@
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.AI.Abstractions.Models;
+namespace TradingPlatform.AI.Abstractions;
 
 public record NewsHeadline(
     string Title,

@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Photino.NET;
 using TradingPlatform.Api;
-using TradingPlatform.Application.Common;
+using TradingPlatform.Application;
 
 namespace TradingPlatform.Desktop;
 

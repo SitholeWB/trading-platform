@@ -1,4 +1,4 @@
-namespace TradingPlatform.Application.Common.CQRS;
+namespace TradingPlatform.Application;
 
 /// <summary>
 /// Marker interface for a command that does not return a value.

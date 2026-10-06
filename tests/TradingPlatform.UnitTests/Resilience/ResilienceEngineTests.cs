@@ -1,7 +1,7 @@
-using TradingPlatform.Application.Common.Resilience;
+using TradingPlatform.Application;
 using Xunit;
 
-namespace TradingPlatform.UnitTests.Resilience;
+namespace TradingPlatform.UnitTests;
 
 public class ResilienceEngineTests
 {

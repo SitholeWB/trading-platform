@@ -1,19 +1,10 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
-using TradingPlatform.Api.Hosting;
 using TradingPlatform.Application;
-using TradingPlatform.Application.Common;
-using TradingPlatform.Application.Commands.IngestCandle;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Application.Queries;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Broker.Abstractions.Models;
 using TradingPlatform.Broker.Oanda;
 using TradingPlatform.Broker.Public;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 using TradingPlatform.Persistence;
 using TradingPlatform.RulesEngine;
 

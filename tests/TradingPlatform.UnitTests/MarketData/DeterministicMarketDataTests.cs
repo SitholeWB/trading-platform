@@ -1,8 +1,8 @@
 using TradingPlatform.Broker.Public;
-using TradingPlatform.Domain.Enums;
+using TradingPlatform.Domain;
 using Xunit;
 
-namespace TradingPlatform.UnitTests.MarketData;
+namespace TradingPlatform.UnitTests;
 
 public class DeterministicMarketDataTests
 {

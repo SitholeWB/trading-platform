@@ -3,11 +3,9 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using TradingPlatform.Application.Common.Resilience;
+using TradingPlatform.Application;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Broker.Abstractions.Models;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
 namespace TradingPlatform.Broker.Oanda;
 
@@ -25,7 +23,9 @@ public class OandaGateway : IMarketDataStreamer, IOrderExecutionService, IHistor
     private BrokerConnectionStatus _status = BrokerConnectionStatus.Disconnected;
     private long _ticketSequence = 100000;
 
+#pragma warning disable CS0067 // Satisfies IMarketDataStreamer interface contract
     public event Func<Candle, Task>? OnCandleClosed;
+#pragma warning restore CS0067
     public event Func<Tick, Task>? OnTickReceived;
 
     public BrokerConnectionStatus Status => _status;

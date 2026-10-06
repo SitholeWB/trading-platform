@@ -2,9 +2,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Common.Validation;
-
-namespace TradingPlatform.Application.Common.CQRS;
+namespace TradingPlatform.Application;
 
 public class CqrsDispatcher : ICqrsDispatcher
 {

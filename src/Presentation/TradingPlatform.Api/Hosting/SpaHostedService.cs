@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace TradingPlatform.Api.Hosting;
+namespace TradingPlatform.Api;
 
 public class SpaHostedService : IHostedService, IDisposable
 {

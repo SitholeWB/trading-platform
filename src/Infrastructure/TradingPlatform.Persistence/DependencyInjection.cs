@@ -1,8 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Persistence.Repositories;
+using TradingPlatform.Application;
 
 namespace TradingPlatform.Persistence;
 

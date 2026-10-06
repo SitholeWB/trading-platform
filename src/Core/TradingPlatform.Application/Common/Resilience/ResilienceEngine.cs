@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 
-namespace TradingPlatform.Application.Common.Resilience;
+namespace TradingPlatform.Application;
 
 public enum CircuitState
 {

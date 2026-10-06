@@ -1,10 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Common.Validation;
+using TradingPlatform.Application;
 using Xunit;
 
-namespace TradingPlatform.UnitTests.CQRS;
+namespace TradingPlatform.UnitTests;
 
 public class CqrsDispatcherTests
 {

@@ -1,8 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
 namespace TradingPlatform.Broker.Public;
 

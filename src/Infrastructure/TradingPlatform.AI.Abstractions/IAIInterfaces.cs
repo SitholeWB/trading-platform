@@ -1,5 +1,4 @@
-using TradingPlatform.AI.Abstractions.Models;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
 namespace TradingPlatform.AI.Abstractions;
 
@@ -40,7 +39,7 @@ public class DefaultAIReasoningService : IAIReasoningService
             .Where(n => n.RelatedSymbols.Contains(signal.Symbol) && n.Impact.Equals("High", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        if (signal.RecommendedOrderType == Domain.Enums.OrderType.Buy &&
+        if (signal.RecommendedOrderType == OrderType.Buy &&
             highImpactBadNews.Any(n => n.SentimentScore < -0.6m))
         {
             return Task.FromResult(AIContextValidationResult.Rejected(
@@ -48,7 +47,7 @@ public class DefaultAIReasoningService : IAIReasoningService
                 "BreakingBearishNews"));
         }
 
-        if (signal.RecommendedOrderType == Domain.Enums.OrderType.Sell &&
+        if (signal.RecommendedOrderType == OrderType.Sell &&
             highImpactBadNews.Any(n => n.SentimentScore > 0.6m))
         {
             return Task.FromResult(AIContextValidationResult.Rejected(

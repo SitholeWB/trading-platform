@@ -1,7 +1,4 @@
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
-
-namespace TradingPlatform.Domain.Events;
+namespace TradingPlatform.Domain;
 
 public interface IDomainEvent
 {

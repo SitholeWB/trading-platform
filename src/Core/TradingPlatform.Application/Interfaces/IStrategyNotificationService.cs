@@ -1,6 +1,6 @@
-using TradingPlatform.Domain.Enums;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Application.Interfaces;
+namespace TradingPlatform.Application;
 
 public record StrategyAlertNotification(
     Guid Id,

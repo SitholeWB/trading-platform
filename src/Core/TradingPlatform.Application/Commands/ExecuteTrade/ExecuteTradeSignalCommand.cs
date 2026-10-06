@@ -1,17 +1,9 @@
 using Microsoft.Extensions.Logging;
 using TradingPlatform.AI.Abstractions;
-using TradingPlatform.AI.Abstractions.Models;
-using TradingPlatform.Application.Commands.Risk;
-using TradingPlatform.Application.Common.CQRS;
-using TradingPlatform.Application.Common.Validation;
-using TradingPlatform.Application.Interfaces;
 using TradingPlatform.Broker.Abstractions;
-using TradingPlatform.Broker.Abstractions.Models;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.Application.Commands.ExecuteTrade;
+namespace TradingPlatform.Application;
 
 public record ExecuteTradeSignalCommand(SignalResult Signal) : ICommand<ExecutionResult>;
 

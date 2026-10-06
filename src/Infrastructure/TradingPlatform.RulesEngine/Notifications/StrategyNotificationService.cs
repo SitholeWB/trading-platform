@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Domain.Enums;
+using TradingPlatform.Application;
+using TradingPlatform.Domain;
 
-namespace TradingPlatform.RulesEngine.Notifications;
+namespace TradingPlatform.RulesEngine;
 
 public class StrategyNotificationService : IStrategyNotificationService
 {

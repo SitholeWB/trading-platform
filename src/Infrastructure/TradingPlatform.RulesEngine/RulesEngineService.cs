@@ -1,10 +1,8 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RulesEngine.Models;
-using TradingPlatform.Application.Interfaces;
-using TradingPlatform.Domain.Entities;
-using TradingPlatform.Domain.Enums;
-using TradingPlatform.Domain.Models;
+using TradingPlatform.Application;
+using TradingPlatform.Domain;
 
 namespace TradingPlatform.RulesEngine;
 
