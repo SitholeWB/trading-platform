@@ -183,7 +183,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                     {
                         ResetFailoverState();
                         var liveOanda = EnsureLiveFormingCandle(oandaCandles, symbol, parsedTf, count, nowUtc);
-                        _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveOanda);
+                        _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(60), liveOanda);
                         return liveOanda;
                     }
                 }
@@ -205,7 +205,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 {
                     ResetFailoverState();
                     var liveBinance = EnsureLiveFormingCandle(binanceCandles, symbol, parsedTf, count, nowUtc);
-                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveBinance);
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(60), liveBinance);
                     return liveBinance;
                 }
             }
@@ -222,7 +222,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 if (yahooCrypto.Count > 0)
                 {
                     var liveYahooCrypto = EnsureLiveFormingCandle(yahooCrypto, symbol, parsedTf, count, nowUtc);
-                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveYahooCrypto);
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(60), liveYahooCrypto);
                     return liveYahooCrypto;
                 }
             }
@@ -243,7 +243,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 {
                     ResetFailoverState();
                     var liveYahooForex = EnsureLiveFormingCandle(yahooCandles, symbol, parsedTf, count, nowUtc);
-                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveYahooForex);
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(60), liveYahooForex);
                     return liveYahooForex;
                 }
             }
@@ -262,7 +262,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
                 {
                     EngageFailover($"Yahoo Finance offline for {symbol}; served official ECB rates via Frankfurter.", "Frankfurter-ECB");
                     var liveEcb = EnsureLiveFormingCandle(ecbCandles, symbol, parsedTf, count, nowUtc);
-                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveEcb);
+                    _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(60), liveEcb);
                     return liveEcb;
                 }
             }
@@ -280,7 +280,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             {
                 ResetFailoverState();
                 var liveGeneral = EnsureLiveFormingCandle(generalCandles, symbol, parsedTf, count, nowUtc);
-                _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), liveGeneral);
+                _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(60), liveGeneral);
                 return liveGeneral;
             }
         }
@@ -295,7 +295,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
         EngageFailover($"External market data feeds unavailable for {symbol}; activated deterministic resilient synthesizer.", "Deterministic-Synthesizer");
 
         var syntheticCandles = DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, parsedTf, count, nowUtc);
-        _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(15), syntheticCandles);
+        _candleCache[cacheKey] = (DateTime.UtcNow.AddSeconds(60), syntheticCandles);
         return syntheticCandles;
     }
 
