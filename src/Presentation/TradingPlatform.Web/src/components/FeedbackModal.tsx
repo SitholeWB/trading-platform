@@ -48,7 +48,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   isOpen,
   onClose,
   activeProvider = 'KeylessPublic',
-  appVersion = '1.2.1',
+  appVersion = '1.3.0',
 }) => {
   const { t } = useLanguage();
   // Form fields

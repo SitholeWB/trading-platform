@@ -142,3 +142,4 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({
     </div>
   );
 };
+

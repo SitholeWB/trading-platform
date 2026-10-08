@@ -26,7 +26,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({
   const electronVersion = electronApi?.versions?.electron || (isElectron ? '33.2.1' : 'Web Browser');
   const chromeVersion = electronApi?.versions?.chrome || (isElectron ? '130.0' : 'Blink');
   const nodeVersion = electronApi?.versions?.node || (isElectron ? '20.18.0' : 'N/A');
-  const appVersion = '1.2.1';
+  const appVersion = '1.3.0';
 
   const handleCopyDiagnostics = async () => {
     const diagText = [
@@ -220,3 +220,4 @@ export const AboutModal: React.FC<AboutModalProps> = ({
     </div>
   );
 };
+
