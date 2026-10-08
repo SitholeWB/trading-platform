@@ -7,9 +7,6 @@ import {
   AlertCircle,
   RefreshCw,
   ShieldCheck,
-  Settings,
-  HelpCircle,
-  ExternalLink,
   Sparkles
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
@@ -48,7 +45,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   isOpen,
   onClose,
   activeProvider = 'KeylessPublic',
-  appVersion = '1.3.2',
+  appVersion = '1.4.0',
 }) => {
   const { t } = useLanguage();
   // Form fields
@@ -74,8 +71,8 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   const [challenge, setChallenge] = useState<MathChallenge>(() => generateMathChallenge());
   const [captchaInput, setCaptchaInput] = useState('');
 
-  // Webhook settings & state
-  const [webhookUrl, setWebhookUrl] = useState(() => {
+  // Webhook settings & state (encrypted in-memory resolution)
+  const [webhookUrl] = useState(() => {
     try {
       // 1. Resolve secure encrypted payload from local build environment
       const payload = (import.meta as any).env?.VITE_DISCORD_PAYLOAD as string;
@@ -92,7 +89,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
         }
       }
 
-      // 2. Check local storage override from in-app settings (ignoring known revoked IDs)
+      // 2. Check local storage override if present (ignoring known revoked IDs)
       const saved = localStorage.getItem(STORAGE_KEY_WEBHOOK);
       if (saved && saved.trim() && !saved.includes('1557830139650515054') && !saved.includes('1557766324220792944')) {
         return saved.trim();
@@ -103,8 +100,6 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
       return '';
     }
   });
-  const [isConfiguringWebhook, setIsConfiguringWebhook] = useState(false);
-  const [webhookDraft, setWebhookDraft] = useState('');
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -156,22 +151,6 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
     setCaptchaInput('');
   };
 
-  const handleSaveWebhook = () => {
-    const cleanUrl = webhookDraft.trim();
-    if (!cleanUrl.startsWith('https://discord.com/api/webhooks/') && !cleanUrl.startsWith('https://discordapp.com/api/webhooks/')) {
-      setErrorMessage('Please enter a valid Discord webhook URL starting with https://discord.com/api/webhooks/');
-      return;
-    }
-    try {
-      localStorage.setItem(STORAGE_KEY_WEBHOOK, cleanUrl);
-      setWebhookUrl(cleanUrl);
-      setIsConfiguringWebhook(false);
-      setErrorMessage(null);
-    } catch {
-      setErrorMessage('Failed to save webhook URL to local storage.');
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -208,8 +187,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
     // 5. Ensure webhook URL is configured
     const activeWebhook = webhookUrl.trim();
     if (!activeWebhook) {
-      setIsConfiguringWebhook(true);
-      setErrorMessage('A Discord Webhook URL is required. Paste your Discord channel webhook URL below to enable dispatch.');
+      setErrorMessage('Feedback dispatch service is currently unavailable. Please try again later.');
       return;
     }
 
@@ -537,73 +515,22 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                 </div>
               </div>
 
-              {/* Webhook Configuration Sub-Panel (Collapsible) */}
-              <div className="pt-1 border-t border-slate-800/60">
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        webhookUrl ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'
-                      }`}
-                    />
-                    <span className="font-mono text-[10px]">
-                      {webhookUrl ? 'Discord Channel Connected' : 'Discord Webhook Not Configured'}
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWebhookDraft(webhookUrl);
-                      setIsConfiguringWebhook(!isConfiguringWebhook);
-                    }}
-                    className="text-[10px] text-indigo-400 hover:text-indigo-300 underline font-mono flex items-center gap-1 cursor-pointer"
-                  >
-                    <Settings className="w-3 h-3" />
-                    {webhookUrl ? 'Change Webhook' : 'Configure Webhook'}
-                  </button>
+              {/* Discord Connection Status */}
+              <div className="pt-1 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-400">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      webhookUrl ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'
+                    }`}
+                  />
+                  <span className="font-mono text-[10px]">
+                    {webhookUrl ? 'Discord Channel Connected' : 'Feedback Service Offline'}
+                  </span>
                 </div>
 
-                {isConfiguringWebhook && (
-                  <div className="mt-2.5 p-3 rounded-xl bg-slate-950 border border-indigo-500/30 space-y-2 animate-in fade-in duration-150">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-slate-200">
-                        Discord Channel Webhook URL
-                      </span>
-                      <a
-                        href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-mono"
-                      >
-                        How to get URL <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
-                    </div>
-                    <input
-                      type="url"
-                      value={webhookDraft}
-                      onChange={(e) => setWebhookDraft(e.target.value)}
-                      placeholder="https://discord.com/api/webhooks/123456789/abcdef..."
-                      className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[11px] font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
-                    />
-                    <div className="flex items-center justify-end gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setIsConfiguringWebhook(false)}
-                        className="px-2.5 py-1 rounded text-[10px] text-slate-400 hover:text-slate-200 cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveWebhook}
-                        className="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] font-semibold text-white cursor-pointer shadow-sm"
-                      >
-                        Save Webhook
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <span className="font-mono text-[10px] text-slate-500">
+                  Encrypted Dispatch
+                </span>
               </div>
 
               {/* Submit Button */}
