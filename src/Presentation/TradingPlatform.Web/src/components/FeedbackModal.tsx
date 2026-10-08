@@ -28,6 +28,9 @@ interface MathChallenge {
   expected: number;
 }
 
+const DEFAULT_DISCORD_WEBHOOK_URL =
+  'https://discord.com/api/webhooks/1557830139650515054/cgl1L7eaTaUA7gM-FxXOzTaEGb6WHzQjT2twwHHeRhxL7SS4MQW5GXnE7tqL7mkoHmK2';
+
 const STORAGE_KEY_WEBHOOK = 'tp_discord_webhook_url';
 const STORAGE_KEY_AUTHOR = 'tp_feedback_author_name';
 const STORAGE_KEY_CONTACT = 'tp_feedback_author_contact';
@@ -72,13 +75,16 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   // Webhook settings & state
   const [webhookUrl, setWebhookUrl] = useState(() => {
     try {
-      // 1. Check local storage
+      // 1. Check local storage override
       const saved = localStorage.getItem(STORAGE_KEY_WEBHOOK);
       if (saved) return saved;
       // 2. Check Vite environment variable if configured
-      return ((import.meta as any).env?.VITE_DISCORD_WEBHOOK_URL as string) || '';
+      const envUrl = (import.meta as any).env?.VITE_DISCORD_WEBHOOK_URL as string;
+      if (envUrl) return envUrl;
+      // 3. Fallback to active built-in Discord webhook
+      return DEFAULT_DISCORD_WEBHOOK_URL;
     } catch {
-      return '';
+      return DEFAULT_DISCORD_WEBHOOK_URL;
     }
   });
   const [isConfiguringWebhook, setIsConfiguringWebhook] = useState(false);
