@@ -382,24 +382,9 @@ function createApplicationMenu() {
           label: 'Keyboard Shortcuts Reference',
           accelerator: 'CmdOrCtrl+/',
           click: () => {
-            if (mainWindow) {
-              dialog.showMessageBox(mainWindow, {
-                type: 'info',
-                title: 'Keyboard Shortcuts Reference',
-                message: 'Trading Platform Desktop Shortcuts',
-                detail: [
-                  '• F1: Open In-App Documentation & Manual',
-                  '• Ctrl+R / F5: Reload Platform & Refresh Charts',
-                  '• Ctrl+Shift+R: Hard Reload & Clear Frontend Cache',
-                  '• F11: Toggle Fullscreen Workstation Mode',
-                  '• Ctrl + / Ctrl -: Zoom In / Zoom Out Interface',
-                  '• Ctrl+0: Reset Zoom Level to 100%',
-                  '• Ctrl+Shift+I: Toggle Chromium Developer Tools',
-                  '• Esc: Close active modal or drawer',
-                  '• Spacebar: Pause / Resume Radar scan in Scanner view'
-                ].join('\n'),
-                buttons: ['Got it']
-              });
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('menu:open-shortcuts');
+              mainWindow.focus();
             }
           }
         },
@@ -407,31 +392,9 @@ function createApplicationMenu() {
         {
           label: 'About Trading Platform',
           click: () => {
-            if (mainWindow) {
-              dialog.showMessageBox(mainWindow, {
-                type: 'info',
-                title: 'About Trading Platform',
-                message: 'Trading Platform v1.0.0',
-                detail: [
-                  'High-Frequency Algorithmic Workstation & Multi-Asset Scanner',
-                  '',
-                  '• Engine: .NET 10.0 Native ASP.NET Core Engine',
-                  '• Desktop: Electron 35 & Sandboxed Chromium',
-                  '• Frontend: React 18, TypeScript, TailwindCSS, Lightweight Charts',
-                  '• Persistence: SQLite & In-Memory Journaling',
-                  '• Multi-Feed Resilience: OANDA, Binance, Yahoo, ECB, Synthesizer',
-                  '',
-                  'Author & Repository: https://github.com/SitholeWB/trading-platform',
-                  'License: MIT'
-                ].join('\n'),
-                buttons: ['OK', 'Visit GitHub'],
-                defaultId: 0,
-                cancelId: 0
-              }).then(({ response }) => {
-                if (response === 1) {
-                  shell.openExternal('https://github.com/SitholeWB/trading-platform');
-                }
-              });
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('menu:open-about');
+              mainWindow.focus();
             }
           }
         }

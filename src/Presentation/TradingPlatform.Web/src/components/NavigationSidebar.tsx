@@ -14,6 +14,7 @@ interface NavigationSidebarProps {
   activeProvider?: string;
   onOpenSettings?: () => void;
   onOpenFeedback?: () => void;
+  onOpenAbout?: () => void;
 }
 
 export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
@@ -26,6 +27,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   activeProvider = 'KeylessPublic',
   onOpenSettings,
   onOpenFeedback,
+  onOpenAbout,
 }) => {
   const { t } = useLanguage();
   const navItems = [
@@ -81,14 +83,18 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     <aside className="w-56 bg-slate-950 border-r border-slate-800 flex flex-col justify-between select-none flex-shrink-0 h-screen">
       {/* Top: Clean Robot Identity & Status */}
       <div>
-        <div className="h-13 min-h-[52px] px-3.5 border-b border-slate-800 flex items-center gap-2.5">
+        <div
+          onClick={onOpenAbout}
+          className="h-13 min-h-[52px] px-3.5 border-b border-slate-800 flex items-center gap-2.5 cursor-pointer hover:bg-slate-900/60 transition-colors group"
+          title="About Trading Platform Workstation"
+        >
           <img
             src="/app-icon.png"
             alt="Trading Platform"
-            className="w-9 h-9 rounded-lg object-cover border border-cyan-500/30 shadow-md shadow-cyan-950/40"
+            className="w-9 h-9 rounded-lg object-cover border border-cyan-500/30 shadow-md shadow-cyan-950/40 group-hover:scale-105 transition-transform"
           />
           <div className="flex flex-col min-w-0">
-            <span className="text-xs font-bold tracking-wider text-slate-100 uppercase truncate">
+            <span className="text-xs font-bold tracking-wider text-slate-100 uppercase truncate group-hover:text-cyan-200 transition-colors">
               {t('common.appTitle', 'Trading Platform')}
             </span>
             <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">

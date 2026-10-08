@@ -18,6 +18,8 @@ import { AICopilotDrawer } from './components/AICopilotDrawer';
 import { AIStrategyGeneratorModal } from './components/AIStrategyGeneratorModal';
 import { DocumentationPage } from './components/DocumentationPage';
 import { FeedbackModal } from './components/FeedbackModal';
+import { AboutModal } from './components/AboutModal';
+import { ShortcutsModal } from './components/ShortcutsModal';
 import { sendDesktopNotification } from './utils/desktopNotification';
 import { tradingApi } from './api/tradingClient';
 import {
@@ -160,10 +162,17 @@ export function App() {
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [isAiStrategyModalOpen, setIsAiStrategyModalOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
-  // Global keyboard shortcut to open symbol search (/ or Ctrl+K)
+  // Global keyboard shortcuts (/ for search, Ctrl+/ for shortcuts reference)
   useEffect(() => {
     const handleGlobalKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+        return;
+      }
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
       if (e.key === '/' || (e.ctrlKey && e.key.toLowerCase() === 'k')) {
         e.preventDefault();
@@ -172,6 +181,19 @@ export function App() {
     };
     window.addEventListener('keydown', handleGlobalKey);
     return () => window.removeEventListener('keydown', handleGlobalKey);
+  }, []);
+
+  // Listen for Electron native application menu triggers (About, Shortcuts)
+  useEffect(() => {
+    const electron = (window as any).electronAPI;
+    if (electron) {
+      const cleanAbout = electron.onOpenAbout?.(() => setIsAboutOpen(true));
+      const cleanShortcuts = electron.onOpenShortcuts?.(() => setIsShortcutsOpen(true));
+      return () => {
+        cleanAbout?.();
+        cleanShortcuts?.();
+      };
+    }
   }, []);
 
   // Initial synthetic candlestick data for charting
@@ -636,6 +658,7 @@ export function App() {
         activeProvider={activeProvider}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenFeedback={() => setIsFeedbackOpen(true)}
+        onOpenAbout={() => setIsAboutOpen(true)}
       />
 
       {/* Main Terminal Workspace: Top Header + Dedicated Page Viewport */}
@@ -1034,6 +1057,20 @@ export function App() {
         onClose={() => setIsFeedbackOpen(false)}
         activeProvider={activeProvider}
         appVersion="1.2.1"
+      />
+
+      {/* About Trading Platform Modal */}
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+        activeProvider={activeProvider}
+        onOpenFeedback={() => setIsFeedbackOpen(true)}
+      />
+
+      {/* Keyboard Shortcuts Reference Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
     </div>
   );

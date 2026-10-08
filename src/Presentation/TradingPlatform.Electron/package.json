@@ -57,6 +57,11 @@
       "confinement": "strict",
       "grade": "stable",
       "summary": "Institutional Algorithmic Trading Platform, Live Charts & AI Copilot",
+      "stagePackages": [
+        "libgtk-3-0",
+        "fontconfig",
+        "fonts-dejavu-core"
+      ],
       "plugs": [
         "browser-support",
         "desktop",
