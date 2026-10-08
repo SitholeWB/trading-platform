@@ -48,7 +48,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   isOpen,
   onClose,
   activeProvider = 'KeylessPublic',
-  appVersion = '1.3.0',
+  appVersion = '1.3.1',
 }) => {
   const { t } = useLanguage();
   // Form fields
@@ -77,16 +77,31 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   // Webhook settings & state
   const [webhookUrl, setWebhookUrl] = useState(() => {
     try {
-      // 1. Check local storage override
+      // 1. Check local storage override from in-app settings
       const saved = localStorage.getItem(STORAGE_KEY_WEBHOOK);
-      if (saved) return saved;
-      // 2. Check Vite environment variable if configured
+      if (saved && saved.trim()) return saved.trim();
+
+      // 2. Check direct environment variable if set
       const envUrl = (import.meta as any).env?.VITE_DISCORD_WEBHOOK_URL as string;
-      if (envUrl) return envUrl;
-      // 3. Fallback to active built-in Discord webhook
-      return DEFAULT_DISCORD_WEBHOOK_URL;
+      if (envUrl && envUrl.trim()) return envUrl.trim();
+
+      // 3. Resolve secure encrypted payload from local build environment
+      const payload = (import.meta as any).env?.VITE_DISCORD_PAYLOAD as string;
+      const salt = (import.meta as any).env?.VITE_DISCORD_SALT as string;
+      if (payload && salt) {
+        let text = '';
+        for (let i = 0; i < payload.length; i += 2) {
+          const code = parseInt(payload.substr(i, 2), 16) ^ salt.charCodeAt((i / 2) % salt.length);
+          text += String.fromCharCode(code);
+        }
+        if (text.startsWith('https://')) {
+          return text;
+        }
+      }
+
+      return '';
     } catch {
-      return DEFAULT_DISCORD_WEBHOOK_URL;
+      return '';
     }
   });
   const [isConfiguringWebhook, setIsConfiguringWebhook] = useState(false);
