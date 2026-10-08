@@ -19,6 +19,12 @@ dist/
 src/Presentation/TradingPlatform.Web/dist/
 src/Presentation/TradingPlatform.Api/wwwroot/assets/
 
+# Environment & Secrets
+.env
+.env.*
+*.env
+*.env.*
+
 # Local databases and logs
 *.sqlite
 *.sqlite3

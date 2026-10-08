@@ -29,8 +29,8 @@ interface MathChallenge {
   expected: number;
 }
 
-const DEFAULT_DISCORD_WEBHOOK_URL =
-  'https://discord.com/api/webhooks/1557830139650515054/cgl1L7eaTaUA7gM-FxXOzTaEGb6WHzQjT2twwHHeRhxL7SS4MQW5GXnE7tqL7mkoHmK2';
+// Built-in webhook fallback (configured via .env or in-app settings to prevent secret-scanner revocations)
+const DEFAULT_DISCORD_WEBHOOK_URL = '';
 
 const STORAGE_KEY_WEBHOOK = 'tp_discord_webhook_url';
 const STORAGE_KEY_AUTHOR = 'tp_feedback_author_name';
