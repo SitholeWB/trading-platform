@@ -32,6 +32,7 @@ import {
   calculateSupertrend,
   calculateVWAP,
   formatPrice,
+  getSymbolPriceFormat,
   getCandleTimeSeconds,
   sanitizeCandles,
 } from '../utils/indicators';
@@ -712,6 +713,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     const earliestTime = cleanCandles.length > 0 ? getCandleTimeSeconds(cleanCandles[0].timestamp) : 0;
     const latestTime = cleanCandles.length > 0 ? getCandleTimeSeconds(cleanCandles[cleanCandles.length - 1].timestamp) : 0;
 
+    // Dynamic Symbol Precision & Minimum Move Price Format
+    const samplePrice = cleanCandles.length > 0 ? cleanCandles[cleanCandles.length - 1].close : undefined;
+    const priceFormatConfig = getSymbolPriceFormat(symbol, samplePrice);
+
     // A. Recreate Main Series if chartType changed or doesn't exist
     const needsNewSeries = !mainSeriesRef.current || currentChartTypeRef.current !== chartType;
     if (needsNewSeries) {
@@ -731,11 +736,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         series = chart.addBarSeries({
           upColor: '#10b981',
           downColor: '#ef4444',
+          priceFormat: priceFormatConfig,
         });
       } else if (chartType === 'line') {
         series = chart.addLineSeries({
           color: '#38bdf8',
           lineWidth: 2,
+          priceFormat: priceFormatConfig,
         });
       } else if (chartType === 'area') {
         series = chart.addAreaSeries({
@@ -743,6 +750,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           bottomColor: 'rgba(56, 189, 248, 0.01)',
           lineColor: '#38bdf8',
           lineWidth: 2,
+          priceFormat: priceFormatConfig,
         });
       } else if (chartType === 'baseline') {
         const baseValue = cleanCandles[0]?.open ?? 1.085;
@@ -754,6 +762,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           bottomLineColor: '#ef4444',
           bottomFillColor1: 'rgba(239, 68, 68, 0.05)',
           bottomFillColor2: 'rgba(239, 68, 68, 0.28)',
+          priceFormat: priceFormatConfig,
         });
       } else {
         // Default: Candlestick (or Heikin Ashi)
@@ -764,11 +773,19 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           borderDownColor: '#ef4444',
           wickUpColor: '#10b981',
           wickDownColor: '#ef4444',
+          priceFormat: priceFormatConfig,
         });
       }
 
       mainSeriesRef.current = series;
       currentChartTypeRef.current = chartType;
+    } else {
+      // Re-apply price format if symbol or precision changed
+      try {
+        mainSeriesRef.current?.applyOptions({
+          priceFormat: priceFormatConfig,
+        });
+      } catch {}
     }
 
     // B. Set Main Series Data
@@ -847,6 +864,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             title: showPriceLine ? title : undefined,
             priceLineVisible: showPriceLine,
             lastValueVisible: showPriceLine,
+            priceFormat: priceFormatConfig,
           });
           indicatorSeriesMapRef.current.set(key, series);
         } else {
@@ -857,6 +875,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             title: showPriceLine ? title : undefined,
             priceLineVisible: showPriceLine,
             lastValueVisible: showPriceLine,
+            priceFormat: priceFormatConfig,
           });
         }
         try {

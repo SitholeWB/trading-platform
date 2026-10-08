@@ -13,6 +13,7 @@ import {
   sanitizeCandles,
   calculateEMA,
   formatPrice,
+  getSymbolPriceFormat,
 } from '../utils/indicators';
 import { tradingApi } from '../api/tradingClient';
 import {
@@ -201,6 +202,9 @@ export const DashboardMiniChart: React.FC<DashboardMiniChartProps> = ({
     volumeSeriesRef.current = volumeSeries;
 
     // EMA 20 line
+    const samplePrice = sanitized.length > 0 ? sanitized[sanitized.length - 1].close : undefined;
+    const priceFormatConfig = getSymbolPriceFormat(activeSymbol, samplePrice);
+
     const emaSeries = chart.addLineSeries({
       color: '#38bdf8',
       lineWidth: 2,
@@ -208,6 +212,7 @@ export const DashboardMiniChart: React.FC<DashboardMiniChartProps> = ({
       lastValueVisible: false,
       crosshairMarkerVisible: false,
       title: 'EMA 20',
+      priceFormat: priceFormatConfig,
     });
     emaSeriesRef.current = emaSeries;
 
@@ -219,6 +224,7 @@ export const DashboardMiniChart: React.FC<DashboardMiniChartProps> = ({
         borderVisible: false,
         wickUpColor: '#10b981',
         wickDownColor: '#ef4444',
+        priceFormat: priceFormatConfig,
       });
       candleSeriesRef.current = candleSeries;
       areaSeriesRef.current = null;
@@ -228,6 +234,7 @@ export const DashboardMiniChart: React.FC<DashboardMiniChartProps> = ({
         bottomColor: 'rgba(15, 23, 42, 0.0)',
         lineColor: isPositive ? '#10b981' : '#ef4444',
         lineWidth: 2,
+        priceFormat: priceFormatConfig,
       });
       areaSeriesRef.current = areaSeries;
       candleSeriesRef.current = null;
@@ -260,6 +267,12 @@ export const DashboardMiniChart: React.FC<DashboardMiniChartProps> = ({
   // Update chart data whenever sanitized candles change
   useEffect(() => {
     if (!chartRef.current || sanitized.length === 0) return;
+
+    const samplePrice = sanitized.length > 0 ? sanitized[sanitized.length - 1].close : undefined;
+    const priceFormatConfig = getSymbolPriceFormat(activeSymbol, samplePrice);
+    if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ priceFormat: priceFormatConfig });
+    if (areaSeriesRef.current) areaSeriesRef.current.applyOptions({ priceFormat: priceFormatConfig });
+    if (emaSeriesRef.current) emaSeriesRef.current.applyOptions({ priceFormat: priceFormatConfig });
 
     // 1. Volume data
     if (volumeSeriesRef.current) {

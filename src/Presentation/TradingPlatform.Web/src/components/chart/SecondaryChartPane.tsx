@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, ISeriesApi, ColorType, CrosshairMode, UTCTimestamp } from 'lightweight-charts';
 import { Timeframe, Candle } from '../../types/trading';
 import { tradingApi } from '../../api/tradingClient';
-import { getCandleTimeSeconds, sanitizeCandles, calculateEMA, formatPrice } from '../../utils/indicators';
+import { getCandleTimeSeconds, sanitizeCandles, calculateEMA, formatPrice, getSymbolPriceFormat } from '../../utils/indicators';
 import { Maximize2, X, RefreshCw, Loader2 } from 'lucide-react';
 
 interface SecondaryChartPaneProps {
@@ -95,12 +95,16 @@ export const SecondaryChartPane: React.FC<SecondaryChartPaneProps> = ({
 
     chartRef.current = chart;
 
+    const samplePrice = candles.length > 0 ? candles[candles.length - 1].close : undefined;
+    const priceFormatConfig = getSymbolPriceFormat(symbol, samplePrice);
+
     const series = chart.addCandlestickSeries({
       upColor: '#10b981',
       downColor: '#ef4444',
       borderVisible: false,
       wickUpColor: '#10b981',
       wickDownColor: '#ef4444',
+      priceFormat: priceFormatConfig,
     });
     seriesRef.current = series;
 
@@ -108,6 +112,7 @@ export const SecondaryChartPane: React.FC<SecondaryChartPaneProps> = ({
       color: '#06b6d4',
       lineWidth: 1,
       title: 'EMA 20',
+      priceFormat: priceFormatConfig,
     });
     emaSeriesRef.current = emaSeries;
 
@@ -134,6 +139,10 @@ export const SecondaryChartPane: React.FC<SecondaryChartPaneProps> = ({
   // Update candle data in secondary chart
   useEffect(() => {
     if (!seriesRef.current || candles.length === 0) return;
+    const samplePrice = candles.length > 0 ? candles[candles.length - 1].close : undefined;
+    const priceFormatConfig = getSymbolPriceFormat(symbol, samplePrice);
+    seriesRef.current.applyOptions({ priceFormat: priceFormatConfig });
+    emaSeriesRef.current?.applyOptions({ priceFormat: priceFormatConfig });
     try {
       seriesRef.current.setData(
         candles.map((c) => ({

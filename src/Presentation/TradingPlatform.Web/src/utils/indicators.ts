@@ -624,20 +624,85 @@ export function calculateHeikinAshi(candles: Candle[]): Candle[] {
 }
 
 /**
- * Symbol formatting utilities
+ * Symbol formatting utilities & price precision
  */
-export function getSymbolDigits(symbol: string): number {
-  const s = symbol.toUpperCase();
-  if (s.includes('JPY')) return 3;
+export function getSymbolDigits(symbol: string, samplePrice?: number): number {
+  const s = (symbol || '').toUpperCase();
+
+  // If a sample price is provided and is extremely low (crypto penny tokens)
+  if (samplePrice !== undefined && samplePrice > 0) {
+    if (samplePrice < 0.001) return 6;
+    if (samplePrice < 1) return 5;
+    if (samplePrice < 10 && !s.includes('OIL') && !s.includes('GAS')) return 4;
+  }
+
+  // 1. Forex JPY Crosses (USDJPY, EURJPY, GBPJPY, AUDJPY, CADJPY, NZDJPY, CHFJPY) -> 3 decimals (pipettes)
+  if (s.includes('JPY')) {
+    return 3;
+  }
+
+  // 2. Global Stock Indices (US500, NAS100, US30, GER40, UK100, JP225, US2000, SPX, etc.) -> 2 decimals
+  if (
+    s.includes('US500') ||
+    s.includes('SPX') ||
+    s.includes('NAS100') ||
+    s.includes('NDX') ||
+    s.includes('US30') ||
+    s.includes('DJI') ||
+    s.includes('GER40') ||
+    s.includes('DAX') ||
+    s.includes('UK100') ||
+    s.includes('JP225') ||
+    s.includes('US2000') ||
+    s.startsWith('^')
+  ) {
+    return 2;
+  }
+
+  // 3. Commodities & Energy
   if (s.includes('XAU') || s.includes('GOLD')) return 2;
-  if (s.includes('BTC') || s.includes('ETH')) return 2;
-  if (s.includes('US500') || s.includes('NAS100') || s.includes('SPX')) return 2;
+  if (s.includes('XAG') || s.includes('SILVER')) return 3;
+  if (s.includes('OIL') || s.includes('BRENT') || s.includes('WTI')) return 2;
+  if (s.includes('NATGAS') || s.includes('GAS') || s.includes('COPPER')) return 3;
+
+  // 4. Large-Cap Cryptocurrencies
+  if (s.includes('BTC') || s.includes('ETH') || s.includes('SOL') || s.includes('BNB') || s.includes('AVAX')) {
+    return 2;
+  }
+  if (s.includes('DOGE') || s.includes('SHIB') || s.includes('PEPE')) {
+    return 5;
+  }
+  if (s.includes('XRP') || s.includes('ADA') || s.includes('LINK') || s.includes('DOT') || s.includes('MATIC')) {
+    return 4;
+  }
+
+  // 5. Equities / Stocks (e.g. AAPL, NVDA, TSLA, MSFT, AMZN, GOOGL, META)
+  if (
+    ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'GOOGL', 'META', 'AMD', 'NFLX', 'INTC', 'BABA', 'PLTR'].includes(s) ||
+    (samplePrice !== undefined && samplePrice >= 10 && !s.includes('EUR') && !s.includes('GBP') && !s.includes('AUD') && !s.includes('NZD') && !s.includes('CAD') && !s.includes('CHF') && !s.includes('USD'))
+  ) {
+    return 2;
+  }
+
+  // 6. Standard Forex Pairs (EURUSD, GBPUSD, AUDUSD, USDCAD, USDCHF, NZDUSD, EURGBP, etc.)
+  // Institutional standard is 5 decimal places (fractional pips / pipettes)
   return 5;
 }
 
 export function formatPrice(price: number, symbol: string): string {
-  const digits = getSymbolDigits(symbol);
+  if (typeof price !== 'number' || isNaN(price)) return '0.00';
+  const digits = getSymbolDigits(symbol, price);
   return price.toFixed(digits);
+}
+
+export function getSymbolPriceFormat(symbol: string, samplePrice?: number) {
+  const precision = getSymbolDigits(symbol, samplePrice);
+  const minMove = Number(Math.pow(10, -precision).toFixed(precision));
+  return {
+    type: 'price' as const,
+    precision,
+    minMove,
+  };
 }
 
 export function calculatePips(diff: number, symbol: string): number {
