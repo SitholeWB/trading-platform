@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 
-export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'zh' | 'ja' | 'pt';
+export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'zh' | 'ja' | 'pt' | 'ru' | 'zu';
 
 export interface LanguageOption {
   code: LanguageCode;
@@ -18,6 +18,8 @@ export const SUPPORTED_LANGUAGES: LanguageOption[] = [
   { code: 'zh', label: 'Chinese', nativeName: '简体中文', flag: '🇨🇳', region: 'Asia / Global' },
   { code: 'ja', label: 'Japanese', nativeName: '日本語', flag: '🇯🇵', region: 'Japan' },
   { code: 'pt', label: 'Portuguese', nativeName: 'Português', flag: '🇧🇷', region: 'Brasil / Portugal' },
+  { code: 'ru', label: 'Russian', nativeName: 'Русский', flag: '🇷🇺', region: 'Eastern Europe / CIS' },
+  { code: 'zu', label: 'Zulu', nativeName: 'isiZulu', flag: '🇿🇦', region: 'South Africa / SADC' },
 ];
 
 export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
@@ -559,6 +561,160 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     'settings.timezoneTab': 'Fuso Horário & Relógio',
     'settings.languageTab': 'Idioma & Região',
   },
+
+  ru: {
+    // Common
+    'common.appTitle': 'Торговая Платформа',
+    'common.autoTrading': 'Авто-Трейдинг',
+    'common.halted': 'Остановлено',
+    'common.connected': 'Подключено',
+    'common.disconnected': 'Отключено',
+    'common.brokerBridge': 'Мост Брокера',
+    'common.feed': 'Котировки',
+    'common.search': 'Поиск',
+    'common.settings': 'Настройки',
+    'common.feedback': 'Отзывы',
+    'common.save': 'Сохранить',
+    'common.cancel': 'Отмена',
+    'common.close': 'Закрыть',
+    'common.loading': 'Загрузка...',
+    'common.language': 'Язык',
+
+    // Navigation
+    'nav.dashboard': 'Панель управления',
+    'nav.scanner': 'Сканер Рынка',
+    'nav.strategies': 'Стратегии',
+    'nav.radar': 'Радар Аудита',
+    'nav.positions': 'Позиции',
+    'nav.simulator': 'Симулятор',
+    'nav.chart': 'Живой График',
+    'nav.docs': 'Руководство пользователя',
+    'nav.feedSettings': 'Настройки данных и API',
+    'nav.robot': 'Робот',
+
+    // Header
+    'header.equity': 'Капитал',
+    'header.balance': 'Баланс',
+    'header.dailyDrawdown': 'Дневная просадка',
+    'header.killSwitch': 'АВАРИЙНЫЙ СТОП',
+    'header.aiCopilot': 'ИИ-Копилот',
+    'header.symbolSearchTooltip': 'Поиск или выбор символа (Горячая клавиша: /)',
+    'header.alertsTooltip': 'Оповещения стратегий и фоновый сканер',
+    'header.changeLanguage': 'Сменить язык',
+
+    // Feedback
+    'feedback.title': 'Быстрый отзыв клиента',
+    'feedback.subtitle': 'Прямая отправка в Discord • Без входа в систему',
+    'feedback.nameLabel': 'Ваше имя / Ник трейдера',
+    'feedback.namePlaceholder': 'напр. Alex M. или Trader#42',
+    'feedback.contactLabel': 'Email или Discord (Необязательно)',
+    'feedback.contactPlaceholder': 'Для ответа: alex@domain.com или @alex',
+    'feedback.categoryLabel': 'Категория',
+    'feedback.feature': '💡 Функция',
+    'feedback.bug': '🐛 Ошибка',
+    'feedback.strategy': '📈 Стратегия',
+    'feedback.general': '💬 Общее',
+    'feedback.messageLabel': 'Сообщение',
+    'feedback.messagePlaceholder': 'Напишите, что вам нравится, что не работает или какие индикаторы добавить...',
+    'feedback.antiBotTitle': 'Подтвердите, что вы человек',
+    'feedback.antiBotDesc': 'Антиспам-проверка',
+    'feedback.sendButton': 'Отправить отзыв',
+    'feedback.sending': 'Отправка в Discord...',
+    'feedback.delivered': 'Отзыв отправлен!',
+    'feedback.deliveredDesc': 'Большое спасибо! Ваше сообщение отправлено прямо в наш Discord-канал.',
+    'feedback.sendAnother': 'Отправить еще одно сообщение',
+
+    // Kill Switch
+    'killSwitch.title': 'Аварийная остановка и Kill Switch',
+    'killSwitch.desc': 'Немедленно ликвидировать открытые позиции и остановить торговые алгоритмы.',
+    'killSwitch.engagedTitle': 'ТОРГОВЛЯ ОСТАНОВЛЕНА',
+    'killSwitch.disengage': 'Снять блокировку и возобновить торговлю',
+    'killSwitch.engage': 'ВКЛЮЧИТЬ АВАРИЙНЫЙ СТОП',
+
+    // Settings
+    'settings.title': 'Настройки платформы',
+    'settings.brokerTab': 'Брокер и данные',
+    'settings.aiTab': 'ИИ-Копилот BYOK',
+    'settings.timezoneTab': 'Часовой пояс и часы',
+    'settings.languageTab': 'Язык и регион',
+  },
+
+  zu: {
+    // Common
+    'common.appTitle': 'Inkundla Yokuhweba',
+    'common.autoTrading': 'Ukuhweba Ngokuzenzakalelayo',
+    'common.halted': 'Kumisiwe',
+    'common.connected': 'Kuxhunyiwe',
+    'common.disconnected': 'Kunganqanyuliwe',
+    'common.brokerBridge': 'Ibhuloho Lomthengisi',
+    'common.feed': 'Ukudla Kwamanani',
+    'common.search': 'Sesha',
+    'common.settings': 'Izilungiselelo',
+    'common.feedback': 'Impendulo',
+    'common.save': 'Londoloza',
+    'common.cancel': 'Khansela',
+    'common.close': 'Vala',
+    'common.loading': 'Iyalayisha...',
+    'common.language': 'Ulimi',
+
+    // Navigation
+    'nav.dashboard': 'Ideshibhodi',
+    'nav.scanner': 'Isithwebuli Semakethe',
+    'nav.strategies': 'Amasu Okuhweba',
+    'nav.radar': 'Iradar Yokucwaninga',
+    'nav.positions': 'Izikhundla Ezivuliwe',
+    'nav.simulator': 'Isilingisi',
+    'nav.chart': 'Ishadi Elibukhoma',
+    'nav.docs': 'Incwadi Yomsebenzisi',
+    'nav.feedSettings': 'Izilungiselelo Zokudla Nezikhiye',
+    'nav.robot': 'Irobhothi',
+
+    // Header
+    'header.equity': 'Ukulingana (Equity)',
+    'header.balance': 'Ibhalansi',
+    'header.dailyDrawdown': 'Ukudonswa Kwansuku Zonke',
+    'header.killSwitch': 'ISIVIMBO ESIPHUTHUMAYO',
+    'header.aiCopilot': 'Umsizi We-AI',
+    'header.symbolSearchTooltip': 'Sesha Noma Bheka Uphawu / Umbhangqwana (Isinqamuleli: /)',
+    'header.alertsTooltip': 'Izexwayiso Zamalungiselelo Nesithwebuli Sangasemuva',
+    'header.changeLanguage': 'Shintsha Ulimi',
+
+    // Feedback
+    'feedback.title': 'Impendulo Esheshayo Yekhasimende',
+    'feedback.subtitle': 'Kuthunyelwa ngqo ku-Discord • Akukho ukungena okudingekayo',
+    'feedback.nameLabel': 'Igama Lakho / Isibambo Somhwebi',
+    'feedback.namePlaceholder': 'isib. Sipho M. noma Umhwebi#42',
+    'feedback.contactLabel': 'I-imeyili noma i-Discord (Ongakukhetha)',
+    'feedback.contactPlaceholder': 'Ukuze uphendulwe: sipho@domain.com noma @sipho',
+    'feedback.categoryLabel': 'Umkhakha',
+    'feedback.feature': '💡 Isici Esisha',
+    'feedback.bug': '🐛 Iphutha',
+    'feedback.strategy': '📈 Isu Lokuhweba',
+    'feedback.general': '💬 Okujwayelekile',
+    'feedback.messageLabel': 'Umyalezo',
+    'feedback.messagePlaceholder': 'Sitshele okuthandayo, okonakele, noma izinkomba ofuna zengezwe...',
+    'feedback.antiBotTitle': 'Qinisekisa ukuthi ungumuntu',
+    'feedback.antiBotDesc': 'Ukuqinisekisa Ukulwa Nogaxekile',
+    'feedback.sendButton': 'Thumela Impendulo Esheshayo',
+    'feedback.sending': 'Ithunyelwa ku-Discord...',
+    'feedback.delivered': 'Impendulo Ilethiwe!',
+    'feedback.deliveredDesc': 'Siyabonga kakhulu! Umyalezo wakho uthunyelwe ngqo esiteshini sethu se-Discord.',
+    'feedback.sendAnother': 'Thumela Omunye Umyalezo',
+
+    // Kill Switch
+    'killSwitch.title': 'Isinqamuli Esiphuthumayo Nesilawuli Sokumisa',
+    'killSwitch.desc': 'Vala izikhundla ezivulekile ngokushesha futhi umise ama-algorithms okuhweba.',
+    'killSwitch.engagedTitle': 'UKUHWEBA KUMISIWE',
+    'killSwitch.disengage': 'Khulula Ukuze Uqhubeke Nokuhweba',
+    'killSwitch.engage': 'QALA ISIVIMBO ESIPHUTHUMAYO',
+
+    // Settings
+    'settings.title': 'Izilungiselelo Zenkundla',
+    'settings.brokerTab': 'Umthengisi Nokudla',
+    'settings.aiTab': 'Umsizi We-AI BYOK',
+    'settings.timezoneTab': 'Isikhathi Sewashi Nendawo',
+    'settings.languageTab': 'Ulimi Nesifunda',
+  },
 };
 
 const LOCAL_STORAGE_KEY_LANG = 'trading_platform_language';
@@ -577,6 +733,8 @@ function detectDefaultLanguage(): LanguageCode {
     if (browserLang.startsWith('de')) return 'de';
     if (browserLang.startsWith('ja')) return 'ja';
     if (browserLang.startsWith('pt')) return 'pt';
+    if (browserLang.startsWith('ru')) return 'ru';
+    if (browserLang.startsWith('zu')) return 'zu';
   } catch {
     // fallback
   }
@@ -658,3 +816,4 @@ export const useLanguage = (): LanguageContextValue => {
   }
   return context;
 };
+
