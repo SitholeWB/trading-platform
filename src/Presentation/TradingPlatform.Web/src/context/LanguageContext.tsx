@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 
-export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'zh' | 'ja' | 'pt' | 'ru' | 'zu';
+export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'zh' | 'ja' | 'pt' | 'ru' | 'zu' | 'af';
 
 export interface LanguageOption {
   code: LanguageCode;
@@ -20,6 +20,7 @@ export const SUPPORTED_LANGUAGES: LanguageOption[] = [
   { code: 'pt', label: 'Portuguese', nativeName: 'Português', flag: '🇧🇷', region: 'Brasil / Portugal' },
   { code: 'ru', label: 'Russian', nativeName: 'Русский', flag: '🇷🇺', region: 'Eastern Europe / CIS' },
   { code: 'zu', label: 'Zulu', nativeName: 'isiZulu', flag: '🇿🇦', region: 'South Africa / SADC' },
+  { code: 'af', label: 'Afrikaans', nativeName: 'Afrikaans', flag: '🇿🇦', region: 'Suid-Afrika / Namibia' },
 ];
 
 export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
@@ -715,6 +716,83 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     'settings.timezoneTab': 'Isikhathi Sewashi Nendawo',
     'settings.languageTab': 'Ulimi Nesifunda',
   },
+
+  af: {
+    // Common
+    'common.appTitle': 'Handelsplatform',
+    'common.autoTrading': 'Outo-Handel',
+    'common.halted': 'Gestaak',
+    'common.connected': 'Gekoppel',
+    'common.disconnected': 'Ontkoppel',
+    'common.brokerBridge': 'Makelaarsbrug',
+    'common.feed': 'Prysstroom',
+    'common.search': 'Soek',
+    'common.settings': 'Instellings',
+    'common.feedback': 'Terugvoer',
+    'common.save': 'Stoor',
+    'common.cancel': 'Kanselleer',
+    'common.close': 'Maak Toe',
+    'common.loading': 'Laai tans...',
+    'common.language': 'Taal',
+
+    // Navigation
+    'nav.dashboard': 'Kontroleskerm',
+    'nav.scanner': 'Markskandeerder',
+    'nav.strategies': 'Strategieë',
+    'nav.radar': 'Ouditradar',
+    'nav.positions': 'Oop Posisies',
+    'nav.simulator': 'Simulator',
+    'nav.chart': 'Regstreekse Grafiek',
+    'nav.docs': 'Gebruikershandleiding',
+    'nav.feedSettings': 'Stroom- & Sleutelinstellings',
+    'nav.robot': 'Robot',
+
+    // Header
+    'header.equity': 'Ekwiteit',
+    'header.balance': 'Saldo',
+    'header.dailyDrawdown': 'Daaglikse Drawdown',
+    'header.killSwitch': 'NOODSTOP',
+    'header.aiCopilot': 'KI-Kopvlieënier',
+    'header.symbolSearchTooltip': 'Soek of blaai deur simbool / paar (Kortpad: /)',
+    'header.alertsTooltip': 'Strategie-waarskuwings & agtergrondskandeerder',
+    'header.changeLanguage': 'Verander Taal',
+
+    // Feedback
+    'feedback.title': 'Vinnige Kliënteterugvoer',
+    'feedback.subtitle': 'Direkte Discord-versending • Geen aanmelding nodig nie',
+    'feedback.nameLabel': 'Jou Naam / Handelaarsnaam',
+    'feedback.namePlaceholder': 'bv. Alex M. of Handelaar#42',
+    'feedback.contactLabel': 'E-pos of Discord (Opsioneel)',
+    'feedback.contactPlaceholder': 'Vir antwoord: alex@domein.co.za of @alex',
+    'feedback.categoryLabel': 'Kategorie',
+    'feedback.feature': '💡 Funksie',
+    'feedback.bug': '🐛 Fout',
+    'feedback.strategy': '📈 Strategie',
+    'feedback.general': '💬 Algemeen',
+    'feedback.messageLabel': 'Boodskap',
+    'feedback.messagePlaceholder': 'Vertel ons waarvan jy hou, wat stukkend is, of watter aanwysers jy bygevoeg wil hê...',
+    'feedback.antiBotTitle': 'Bevestig dat jy menslik is',
+    'feedback.antiBotDesc': 'Teen-strooipos-verifikasie',
+    'feedback.sendButton': 'Stuur Terugvoer',
+    'feedback.sending': 'Stuur tans na Discord...',
+    'feedback.delivered': 'Terugvoer Afgelewer!',
+    'feedback.deliveredDesc': 'Baie dankie! Jou boodskap is direk na ons Discord-kanaal gestuur.',
+    'feedback.sendAnother': 'Stuur Nog \'n Boodskap',
+
+    // Kill Switch
+    'killSwitch.title': 'Noodstop & Kill Switch',
+    'killSwitch.desc': 'Likwideer dadelik alle oop posisies en staak outomatiese handelsalgoritmes.',
+    'killSwitch.engagedTitle': 'HANDEL GESTAAK',
+    'killSwitch.disengage': 'Ontkoppel en Hervat Handel',
+    'killSwitch.engage': 'AKTIVEER NOODSTOP',
+
+    // Settings
+    'settings.title': 'Platforminstellings',
+    'settings.brokerTab': 'Makelaar & Data',
+    'settings.aiTab': 'KI-Kopvlieënier BYOK',
+    'settings.timezoneTab': 'Tydsone & Horlosie',
+    'settings.languageTab': 'Taal & Streek',
+  },
 };
 
 const LOCAL_STORAGE_KEY_LANG = 'trading_platform_language';
@@ -735,6 +813,7 @@ function detectDefaultLanguage(): LanguageCode {
     if (browserLang.startsWith('pt')) return 'pt';
     if (browserLang.startsWith('ru')) return 'ru';
     if (browserLang.startsWith('zu')) return 'zu';
+    if (browserLang.startsWith('af')) return 'af';
   } catch {
     // fallback
   }
