@@ -1,5 +1,6 @@
 import React from 'react';
 import { BookOpen, MessageSquarePlus } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 export type PageId = 'dashboard' | 'scanner' | 'strategies' | 'radar' | 'positions' | 'sandbox' | 'chart' | 'docs';
 
@@ -26,51 +27,52 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   onOpenSettings,
   onOpenFeedback,
 }) => {
+  const { t } = useLanguage();
   const navItems = [
     {
       id: 'dashboard' as PageId,
       icon: '🤖',
-      label: 'Dashboard',
+      label: t('nav.dashboard', 'Dashboard'),
       badge: null,
     },
     {
       id: 'scanner' as PageId,
       icon: '📡',
-      label: 'Market Scanner',
-      badge: 'Robot',
+      label: t('nav.scanner', 'Market Scanner'),
+      badge: t('nav.robot', 'Robot'),
       badgeColor: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
     },
     {
       id: 'strategies' as PageId,
       icon: '⚡',
-      label: 'Strategies',
+      label: t('nav.strategies', 'Strategies'),
       badge: activeStrategiesCount > 0 ? `${activeStrategiesCount} Active` : null,
       badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
     },
     {
       id: 'radar' as PageId,
       icon: '🎯',
-      label: 'Audit Radar',
+      label: t('nav.radar', 'Audit Radar'),
       badge: auditLogsCount > 0 ? `${auditLogsCount}` : null,
       badgeColor: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
     },
     {
       id: 'positions' as PageId,
       icon: '💼',
-      label: 'Positions',
+      label: t('nav.positions', 'Positions'),
       badge: openPositionsCount > 0 ? `${openPositionsCount}` : null,
       badgeColor: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
     },
     {
       id: 'sandbox' as PageId,
       icon: '🔬',
-      label: 'Simulator',
+      label: t('nav.simulator', 'Simulator'),
       badge: null,
     },
     {
       id: 'chart' as PageId,
       icon: '📈',
-      label: 'Live Chart',
+      label: t('nav.chart', 'Live Chart'),
       badge: null,
     },
   ];
@@ -87,7 +89,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
           />
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-bold tracking-wider text-slate-100 uppercase truncate">
-              Trading Platform
+              {t('common.appTitle', 'Trading Platform')}
             </span>
             <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
               <span
@@ -96,7 +98,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
                 }`}
               />
               <span className={isKillSwitchEngaged ? 'text-red-400 font-bold' : 'text-emerald-400'}>
-                {isKillSwitchEngaged ? 'Halted' : 'Auto-Trading'}
+                {isKillSwitchEngaged ? t('common.halted', 'Halted') : t('common.autoTrading', 'Auto-Trading')}
               </span>
             </span>
           </div>
@@ -159,7 +161,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               <BookOpen className="w-3.5 h-3.5" />
             </div>
             <div className="flex flex-col text-left min-w-0">
-              <span className="font-semibold text-xs leading-none truncate font-sans">User Manual</span>
+              <span className="font-semibold text-xs leading-none truncate font-sans">{t('nav.docs', 'User Manual')}</span>
               <span className="text-[10px] text-slate-500 font-mono mt-0.5">Documentation</span>
             </div>
           </div>
@@ -170,15 +172,15 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
 
         <div className="pt-1 border-t border-slate-800/60 space-y-1">
           <div className="flex items-center justify-between text-[10.5px]">
-            <span className="text-slate-500">Broker Bridge</span>
+            <span className="text-slate-500">{t('common.brokerBridge', 'Broker Bridge')}</span>
             <span className="text-emerald-400 font-medium flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              Connected
+              {t('common.connected', 'Connected')}
             </span>
           </div>
           <div className="flex items-center justify-between text-[10px] text-slate-400">
             <span className="truncate">
-              Feed: {activeProvider === 'KeylessPublic' ? 'Public (Yahoo/Binance)' : activeProvider === 'Oanda' ? 'OANDA v20' : activeProvider === 'ZeroMQ' ? 'MT5 ZeroMQ' : 'Sandbox'}
+              {t('common.feed', 'Feed')}: {activeProvider === 'KeylessPublic' ? 'Public (Yahoo/Binance)' : activeProvider === 'Oanda' ? 'OANDA v20' : activeProvider === 'ZeroMQ' ? 'MT5 ZeroMQ' : 'Sandbox'}
             </span>
             <span className="text-slate-500 font-mono">M5</span>
           </div>
@@ -192,7 +194,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               title="Quick Feedback & Bug Report directly to Discord"
             >
               <MessageSquarePlus className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Feedback</span>
+              <span>{t('common.feedback', 'Feedback')}</span>
             </button>
           )}
 
@@ -203,7 +205,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               title="Configure Broker, API Keys & AI Provider"
             >
               <span>⚙️</span>
-              <span>Settings</span>
+              <span>{t('common.settings', 'Settings')}</span>
             </button>
           )}
         </div>

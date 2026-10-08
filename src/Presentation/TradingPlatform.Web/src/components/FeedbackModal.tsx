@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Sparkles
 } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface FeedbackModalProps {
   isOpen: boolean;
@@ -49,6 +50,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   activeProvider = 'KeylessPublic',
   appVersion = '1.2.1',
 }) => {
+  const { t } = useLanguage();
   // Form fields
   const [authorName, setAuthorName] = useState(() => {
     try {
@@ -318,13 +320,13 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                Quick Client Feedback
+                {t('feedback.title', 'Quick Client Feedback')}
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                   Discord
                 </span>
               </h2>
               <p className="text-[11px] text-slate-400 font-mono">
-                No account required • Instant team notification
+                {t('feedback.subtitle', 'Direct Discord dispatch • No login required')}
               </p>
             </div>
           </div>
@@ -345,9 +347,9 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                 <CheckCircle2 className="w-8 h-8" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-slate-100">Feedback Delivered!</h3>
+                <h3 className="text-base font-bold text-slate-100">{t('feedback.delivered', 'Feedback Delivered!')}</h3>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-                  Thank you, <span className="text-slate-200 font-semibold">{authorName}</span>! Your message has been posted directly into our developer Discord channel.
+                  {t('feedback.deliveredDesc', 'Thank you! Your message has been posted directly into our developer Discord channel.')}
                 </p>
               </div>
               <div className="pt-2 flex items-center justify-center gap-3">
@@ -355,13 +357,13 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                   onClick={() => setIsSuccess(false)}
                   className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
                 >
-                  Send Another Message
+                  {t('feedback.sendAnother', 'Send Another Message')}
                 </button>
                 <button
                   onClick={onClose}
                   className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
                 >
-                  Close
+                  {t('common.close', 'Close')}
                 </button>
               </div>
             </div>
@@ -390,7 +392,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Your Name / Trader ID <span className="text-rose-400">*</span>
+                    {t('feedback.nameLabel', 'Your Name / Trader ID')} <span className="text-rose-400">*</span>
                   </label>
                   <input
                     type="text"
@@ -398,21 +400,21 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                     maxLength={50}
                     value={authorName}
                     onChange={(e) => setAuthorName(e.target.value)}
-                    placeholder="e.g. Alex M. or Trader#42"
+                    placeholder={t('feedback.namePlaceholder', 'e.g. Alex M. or Trader#42')}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/40 transition-all font-sans"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Email or Discord <span className="text-slate-500 font-normal">(Optional)</span>
+                    {t('feedback.contactLabel', 'Email or Discord (Optional)')}
                   </label>
                   <input
                     type="text"
                     maxLength={80}
                     value={contactInfo}
                     onChange={(e) => setContactInfo(e.target.value)}
-                    placeholder="For reply: alex@domain.com or @alex"
+                    placeholder={t('feedback.contactPlaceholder', 'For reply: alex@domain.com or @alex')}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/40 transition-all font-sans"
                   />
                 </div>
@@ -421,15 +423,15 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
               {/* Feedback Category Pills */}
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Category
+                  {t('feedback.categoryLabel', 'Category')}
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {(
                     [
-                      { id: 'suggestion', label: '💡 Feature', desc: 'Idea' },
-                      { id: 'bug', label: '🐛 Bug', desc: 'Issue' },
-                      { id: 'strategy', label: '📈 Strategy', desc: 'Trading' },
-                      { id: 'general', label: '💬 General', desc: 'Feedback' },
+                      { id: 'suggestion', label: t('feedback.feature', '💡 Feature'), desc: 'Idea' },
+                      { id: 'bug', label: t('feedback.bug', '🐛 Bug'), desc: 'Issue' },
+                      { id: 'strategy', label: t('feedback.strategy', '📈 Strategy'), desc: 'Trading' },
+                      { id: 'general', label: t('feedback.general', '💬 General'), desc: 'Feedback' },
                     ] as const
                   ).map((item) => {
                     const isSelected = category === item.id;
@@ -456,7 +458,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
-                    Message <span className="text-rose-400">*</span>
+                    {t('feedback.messageLabel', 'Message')} <span className="text-rose-400">*</span>
                   </label>
                   <span className="text-[10px] font-mono text-slate-500">
                     {message.length}/1000
@@ -468,7 +470,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                   maxLength={1000}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Tell us what you like, what is broken, or what indicators / features you would like added to the platform..."
+                  placeholder={t('feedback.messagePlaceholder', 'Tell us what you like, what is broken, or what indicators / features you would like added to the platform...')}
                   className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/40 transition-all font-sans resize-none"
                 />
               </div>
@@ -479,10 +481,10 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
                     <span className="text-xs font-bold text-slate-200">
-                      Confirm you are human
+                      {t('feedback.antiBotTitle', 'Confirm you are human')}
                     </span>
                   </div>
-                  <span className="text-[10px] font-mono text-slate-500">Anti-Spam Verification</span>
+                  <span className="text-[10px] font-mono text-slate-500">{t('feedback.antiBotDesc', 'Anti-Spam Verification')}</span>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -604,14 +606,14 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                   {isSubmitting ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Sending to Discord...</span>
+                      <span>{t('feedback.sending', 'Sending to Discord...')}</span>
                     </>
                   ) : cooldownRemaining > 0 ? (
                     <span>Wait {cooldownRemaining}s to send again</span>
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      <span>Send Quick Feedback</span>
+                      <span>{t('feedback.sendButton', 'Send Quick Feedback')}</span>
                     </>
                   )}
                 </button>

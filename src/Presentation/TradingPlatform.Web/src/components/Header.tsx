@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { AccountSummary, RiskProfile } from '../types/trading';
-import { Search, RefreshCw, Bell, Sparkles, Settings, Clock, Globe, MessageSquarePlus } from 'lucide-react';
+import { Search, RefreshCw, Bell, Sparkles, Settings, Clock, Globe, MessageSquarePlus, Languages } from 'lucide-react';
 import { useTimezone } from '../context/TimezoneContext';
+import { useLanguage } from '../context/LanguageContext';
 import { TimezoneSelectorModal } from './TimezoneSelectorModal';
+import { LanguageSelectorModal } from './LanguageSelectorModal';
 
 interface HeaderProps {
   pageTitle: string;
@@ -46,7 +48,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenFeedback,
 }) => {
   const [isTimezoneModalOpen, setIsTimezoneModalOpen] = useState(false);
+  const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const { currentFormattedTime, currentAbbr, currentOffset, activeTimezoneInfo } = useTimezone();
+  const { language, activeLanguageInfo, t } = useLanguage();
 
   const isKillSwitchEngaged = risk?.isKillSwitchEngaged ?? false;
   const currentDrawdown = account?.currentDrawdownPercent ?? 0;
@@ -93,21 +97,21 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-3 sm:gap-5 font-mono text-xs flex-shrink-0">
         <div className="flex items-center gap-3 sm:gap-4">
           <div>
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Equity</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">{t('header.equity', 'Equity')}</span>
             <span className="font-semibold text-slate-100">
               ${account?.equity ? account.equity.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '100,000.00'}
             </span>
           </div>
 
           <div className="hidden sm:block">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Balance</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">{t('header.balance', 'Balance')}</span>
             <span className="text-slate-300">
               ${account?.balance ? account.balance.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '100,000.00'}
             </span>
           </div>
 
           <div>
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Drawdown</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">{t('header.dailyDrawdown', 'Drawdown')}</span>
             <span className={`font-bold ${ddColor}`}>
               {currentDrawdown.toFixed(2)}%
             </span>
@@ -126,6 +130,18 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded font-bold font-mono bg-cyan-950 text-cyan-300 border border-cyan-800/60 hidden sm:inline">
             {currentAbbr || activeTimezoneInfo.city}
+          </span>
+        </button>
+
+        {/* Language Selector Button */}
+        <button
+          onClick={() => setIsLanguageModalOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/50 text-slate-300 hover:text-white transition-all text-xs font-mono shadow-sm group cursor-pointer"
+          title={`Platform Language: ${activeLanguageInfo.nativeName} (${activeLanguageInfo.label}). Click to change language.`}
+        >
+          <span className="text-sm leading-none">{activeLanguageInfo.flag}</span>
+          <span className="font-bold text-slate-100 uppercase text-[11px] hidden sm:inline">
+            {language}
           </span>
         </button>
 
@@ -198,7 +214,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="AI Market Copilot: Quantitative market diagnostics, conversational assistant, and trade audit explanations"
           >
             <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-            <span className="font-sans font-semibold hidden md:inline">AI Copilot</span>
+            <span className="font-sans font-semibold hidden md:inline">{t('header.aiCopilot', 'AI Copilot')}</span>
           </button>
         )}
 
@@ -210,7 +226,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="Send Quick Feedback to Discord (No login required)"
           >
             <MessageSquarePlus className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="font-sans font-semibold hidden lg:inline">Feedback</span>
+            <span className="font-sans font-semibold hidden lg:inline">{t('common.feedback', 'Feedback')}</span>
           </button>
         )}
 
@@ -236,7 +252,7 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-red-400" />
-            <span>{isKillSwitchEngaged ? 'HALTED' : 'KILL SWITCH'}</span>
+            <span>{isKillSwitchEngaged ? t('common.halted', 'HALTED') : t('header.killSwitch', 'KILL SWITCH')}</span>
           </button>
         )}
       </div>
@@ -245,6 +261,12 @@ export const Header: React.FC<HeaderProps> = ({
       <TimezoneSelectorModal
         isOpen={isTimezoneModalOpen}
         onClose={() => setIsTimezoneModalOpen(false)}
+      />
+
+      {/* Interactive Language & Region Modal */}
+      <LanguageSelectorModal
+        isOpen={isLanguageModalOpen}
+        onClose={() => setIsLanguageModalOpen(false)}
       />
     </header>
   );
