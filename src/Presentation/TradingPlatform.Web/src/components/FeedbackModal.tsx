@@ -77,17 +77,10 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   // Webhook settings & state
   const [webhookUrl, setWebhookUrl] = useState(() => {
     try {
-      // 1. Check local storage override from in-app settings
-      const saved = localStorage.getItem(STORAGE_KEY_WEBHOOK);
-      if (saved && saved.trim()) return saved.trim();
-
-      // 2. Check direct environment variable if set
-      const envUrl = (import.meta as any).env?.VITE_DISCORD_WEBHOOK_URL as string;
-      if (envUrl && envUrl.trim()) return envUrl.trim();
-
-      // 3. Resolve secure encrypted payload from local build environment
+      // 1. Resolve secure encrypted payload from local build environment
       const payload = (import.meta as any).env?.VITE_DISCORD_PAYLOAD as string;
       const salt = (import.meta as any).env?.VITE_DISCORD_SALT as string;
+      let builtInWebhook = '';
       if (payload && salt) {
         let text = '';
         for (let i = 0; i < payload.length; i += 2) {
@@ -95,11 +88,17 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
           text += String.fromCharCode(code);
         }
         if (text.startsWith('https://')) {
-          return text;
+          builtInWebhook = text;
         }
       }
 
-      return '';
+      // 2. Check local storage override from in-app settings (ignoring known revoked IDs)
+      const saved = localStorage.getItem(STORAGE_KEY_WEBHOOK);
+      if (saved && saved.trim() && !saved.includes('1557830139650515054') && !saved.includes('1557766324220792944')) {
+        return saved.trim();
+      }
+
+      return builtInWebhook;
     } catch {
       return '';
     }
