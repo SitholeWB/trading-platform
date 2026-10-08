@@ -914,12 +914,25 @@ export function App() {
                     <Search className="w-3 h-3 text-blue-400" />
                     <span>Browse All 45+ Symbols</span>
                   </button>
-                  <div className="text-[10px] text-slate-500 text-center font-sans space-y-0.5">
-                    <div>
-                      Feed: <span className="text-slate-400 font-mono">{activeProvider}</span>
+                  <div className="space-y-1.5 pt-1 font-sans">
+                    <div className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-950/70 via-slate-900 to-cyan-950/60 border border-emerald-500/40 text-emerald-300 flex items-center justify-between text-[10px] font-mono shadow-sm">
+                      <span className="flex items-center gap-1.5 text-slate-300 font-sans">
+                        <span className="relative flex h-2 w-2">
+                          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${secondsUntilSync <= 5 ? 'bg-amber-400' : 'bg-emerald-400'} opacity-75`} />
+                          <span className={`relative inline-flex rounded-full h-2 w-2 ${secondsUntilSync <= 5 ? 'bg-amber-400' : 'bg-emerald-500'}`} />
+                        </span>
+                        <span>Refresh prices in</span>
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded font-black font-mono text-[11px] border ${
+                        secondsUntilSync <= 5
+                          ? 'bg-amber-500/25 text-amber-200 border-amber-400/60 animate-pulse'
+                          : 'bg-emerald-500/20 text-emerald-200 border-emerald-400/50'
+                      }`}>
+                        {secondsUntilSync}s
+                      </span>
                     </div>
-                    <div className="text-[9px] text-slate-500 flex items-center justify-center gap-1">
-                      <span>Next sync in {secondsUntilSync}s</span>
+                    <div className="text-[9px] text-slate-500 text-center flex items-center justify-center gap-1.5">
+                      <span>Feed: <strong className="text-slate-400 font-mono">{activeProvider}</strong></span>
                       <span className="text-slate-600">·</span>
                       <span className="text-emerald-500/80">Rate-limit protected</span>
                     </div>

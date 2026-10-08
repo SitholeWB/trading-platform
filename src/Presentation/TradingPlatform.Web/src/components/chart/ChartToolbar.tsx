@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { ChartType, ChartLayoutMode } from './types';
 import { Timeframe } from '../../types/trading';
-import { Bell } from 'lucide-react';
+import { Bell, Clock } from 'lucide-react';
 
 interface ChartToolbarProps {
   symbol: string;
@@ -230,36 +230,92 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
 
         {/* Right Segment: Live Feed Cadence, Load History Button, Tools, Split View, Snapshot, Fullscreen, Reset */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Live Feed Cadence & Server Rate-Limit Protection Badge */}
-          <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-[11px] font-mono flex-shrink-0 group relative shadow-inner">
-            <span className="relative flex h-2 w-2">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isRefreshingCandles ? 'bg-blue-400' : 'bg-emerald-400'} opacity-75`} />
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${isRefreshingCandles ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+          {/* Live Feed Cadence & Server Rate-Limit Protection Standout Badge */}
+          <div
+            className={`flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-sans flex-shrink-0 group relative shadow-md transition-all border ${
+              isRefreshingCandles
+                ? 'bg-gradient-to-r from-blue-950/95 via-indigo-950/90 to-slate-900 border-blue-500/80 text-blue-200 shadow-blue-950/60'
+                : secondsUntilSync !== undefined && secondsUntilSync <= 5
+                ? 'bg-gradient-to-r from-amber-950/95 via-orange-950/90 to-slate-900 border-amber-400 text-amber-200 shadow-amber-950/60 animate-pulse'
+                : 'bg-gradient-to-r from-emerald-950/90 via-slate-900 to-cyan-950/80 border-emerald-500/70 text-emerald-300 shadow-emerald-950/50'
+            }`}
+          >
+            {/* Glowing Live / Radar Beacon */}
+            <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+              <span
+                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  isRefreshingCandles
+                    ? 'bg-blue-400'
+                    : secondsUntilSync !== undefined && secondsUntilSync <= 5
+                    ? 'bg-amber-400'
+                    : 'bg-emerald-400'
+                }`}
+              />
+              <span
+                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                  isRefreshingCandles
+                    ? 'bg-blue-500'
+                    : secondsUntilSync !== undefined && secondsUntilSync <= 5
+                    ? 'bg-amber-400'
+                    : 'bg-emerald-400'
+                }`}
+              />
             </span>
-            <span className="text-slate-300 font-semibold hidden md:inline">
-              {isRefreshingCandles ? 'Syncing...' : 'Live'}
-            </span>
-            <span className="text-slate-500 text-[10px] hidden xl:inline">1m feed</span>
-            <span className="text-emerald-400 font-bold text-[10px] bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-900/60">
-              {secondsUntilSync !== undefined ? `${secondsUntilSync}s` : '60s'}
-            </span>
+
+            {/* Standout Countdown / Syncing Label */}
+            {isRefreshingCandles ? (
+              <div className="flex items-center gap-1.5 font-semibold text-blue-200">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                <span className="tracking-tight">Refreshing prices now...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <Clock
+                  className={`w-3.5 h-3.5 flex-shrink-0 ${
+                    secondsUntilSync !== undefined && secondsUntilSync <= 5
+                      ? 'text-amber-300 animate-spin'
+                      : 'text-emerald-400'
+                  }`}
+                />
+                <span className="text-slate-200 font-medium tracking-tight whitespace-nowrap">
+                  <span className="hidden sm:inline">Refresh prices in </span>
+                  <span className="sm:hidden">Refresh in </span>
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded-md font-mono font-black text-xs tracking-wider shadow-inner border ${
+                    secondsUntilSync !== undefined && secondsUntilSync <= 5
+                      ? 'bg-amber-500/30 text-amber-100 border-amber-300 ring-1 ring-amber-400/50'
+                      : 'bg-emerald-500/25 text-emerald-100 border-emerald-400/60 ring-1 ring-emerald-400/30'
+                  }`}
+                >
+                  {secondsUntilSync !== undefined ? `${secondsUntilSync}s` : '60s'}
+                </span>
+              </div>
+            )}
+
+            {/* Instant Manual Refresh Trigger Button */}
             {onManualSyncCandles && (
               <button
                 onClick={onManualSyncCandles}
                 disabled={isRefreshingCandles}
-                className="p-0.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className={`ml-1 px-1.5 py-0.5 rounded-md border text-[10px] font-sans font-bold uppercase tracking-wider flex items-center gap-1 transition-all ${
+                  isRefreshingCandles
+                    ? 'bg-slate-800/40 border-slate-700/50 text-slate-500 cursor-not-allowed'
+                    : 'bg-emerald-500/20 hover:bg-emerald-500/35 border-emerald-400/50 text-emerald-200 hover:text-white shadow-sm hover:scale-105 active:scale-95 cursor-pointer'
+                }`}
                 title="Immediate Sync: Pull latest market tick & candles now (bypasses 60s cache)"
               >
-                <RefreshCw className={`w-3 h-3 ${isRefreshingCandles ? 'animate-spin text-blue-400' : ''}`} />
+                <RefreshCw className={`w-3 h-3 ${isRefreshingCandles ? 'animate-spin text-blue-400' : 'text-emerald-300'}`} />
+                <span className="hidden md:inline">Sync</span>
               </button>
             )}
 
             {/* Rate-Limit / Server Load Protection Tooltip */}
-            <div className="absolute top-8 right-0 hidden group-hover:block z-50 w-72 p-2.5 bg-slate-900/95 backdrop-blur border border-slate-700/80 rounded-xl shadow-2xl text-[11px] font-sans text-slate-300 pointer-events-none leading-relaxed">
-              <div className="font-bold text-white flex items-center gap-1.5 mb-1">
-                <span className="text-emerald-400">●</span> 1-Minute Live Auto-Sync
+            <div className="absolute top-10 right-0 hidden group-hover:block z-50 w-80 p-3 bg-slate-900/98 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl text-[11px] font-sans text-slate-300 pointer-events-none leading-relaxed">
+              <div className="font-bold text-white flex items-center gap-1.5 mb-1 text-xs">
+                <span className="text-emerald-400">●</span> 1-Minute Live Market Data Cadence
               </div>
-              Candles and watchlist quotes refresh every 1 minute (60s) for all timeframes to avoid rate-limiting and protect market data servers. Click the sync icon to fetch immediate updates anytime.
+              Prices, candles, and watchlist quotes refresh automatically every 60 seconds across all timeframes to avoid rate-limiting and protect exchange data feeds. Click <span className="text-emerald-400 font-semibold">Sync</span> to fetch immediate updates anytime.
             </div>
           </div>
 

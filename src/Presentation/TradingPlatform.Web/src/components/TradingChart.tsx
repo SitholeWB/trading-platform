@@ -1509,7 +1509,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                     </span>
                   )}
                   {/* Candle Close Countdown */}
-                  <div className="flex items-center gap-1 pl-1 text-[11px] text-blue-400 font-bold border-l border-slate-800">
+                  <div
+                    className="flex items-center gap-1 pl-1 text-[11px] text-blue-400 font-bold border-l border-slate-800"
+                    title="Candle Close: Time remaining until current candle bar closes"
+                  >
                     <Clock className="w-3 h-3 text-blue-400 animate-pulse" />
                     <span>{formatCountdown(secondsRemaining)}</span>
                   </div>
