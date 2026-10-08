@@ -17,6 +17,7 @@ import { StrategyAlertsModal } from './components/StrategyAlertsModal';
 import { AICopilotDrawer } from './components/AICopilotDrawer';
 import { AIStrategyGeneratorModal } from './components/AIStrategyGeneratorModal';
 import { DocumentationPage } from './components/DocumentationPage';
+import { FeedbackModal } from './components/FeedbackModal';
 import { sendDesktopNotification } from './utils/desktopNotification';
 import { tradingApi } from './api/tradingClient';
 import {
@@ -158,6 +159,7 @@ export function App() {
   const [watchlistCategory, setWatchlistCategory] = useState<'all' | 'forex' | 'indices' | 'commodities' | 'crypto' | 'stocks'>('all');
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [isAiStrategyModalOpen, setIsAiStrategyModalOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   // Global keyboard shortcut to open symbol search (/ or Ctrl+K)
   useEffect(() => {
@@ -633,6 +635,7 @@ export function App() {
         isKillSwitchEngaged={risk?.isKillSwitchEngaged ?? false}
         activeProvider={activeProvider}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenFeedback={() => setIsFeedbackOpen(true)}
       />
 
       {/* Main Terminal Workspace: Top Header + Dedicated Page Viewport */}
@@ -655,6 +658,7 @@ export function App() {
           isCopilotOpen={isCopilotOpen}
           activeProvider={activeProvider}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenFeedback={() => setIsFeedbackOpen(true)}
         />
 
         {/* Dedicated Page Viewport */}
@@ -935,6 +939,7 @@ export function App() {
               onNavigateTo={handleNavigateTo}
               onOpenSettings={() => setIsSettingsOpen(true)}
               onOpenCopilot={() => setIsCopilotOpen(true)}
+              onOpenFeedback={() => setIsFeedbackOpen(true)}
               activeProvider={activeProvider}
             />
           )}
@@ -1021,6 +1026,14 @@ export function App() {
         onClose={() => setIsAiStrategyModalOpen(false)}
         onApplyStrategy={handleApplyStrategyFromCopilot}
         initialTimeframe={timeframe}
+      />
+
+      {/* Quick Client Feedback to Discord Modal (No Login Required) */}
+      <FeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+        activeProvider={activeProvider}
+        appVersion="1.2.1"
       />
     </div>
   );

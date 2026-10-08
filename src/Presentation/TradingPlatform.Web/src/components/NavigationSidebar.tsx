@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, MessageSquarePlus } from 'lucide-react';
 
 export type PageId = 'dashboard' | 'scanner' | 'strategies' | 'radar' | 'positions' | 'sandbox' | 'chart' | 'docs';
 
@@ -12,6 +12,7 @@ interface NavigationSidebarProps {
   isKillSwitchEngaged: boolean;
   activeProvider?: string;
   onOpenSettings?: () => void;
+  onOpenFeedback?: () => void;
 }
 
 export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
@@ -23,6 +24,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   isKillSwitchEngaged,
   activeProvider = 'KeylessPublic',
   onOpenSettings,
+  onOpenFeedback,
 }) => {
   const navItems = [
     {
@@ -182,15 +184,29 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
           </div>
         </div>
 
-        {onOpenSettings && (
-          <button
-            onClick={onOpenSettings}
-            className="w-full py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-slate-800 hover:text-slate-200 border border-slate-800 text-[11px] font-sans font-medium flex items-center justify-center gap-1.5 text-slate-400 transition-colors cursor-pointer"
-          >
-            <span>⚙️</span>
-            <span>Feed & Keys Settings</span>
-          </button>
-        )}
+        <div className="flex items-center gap-1.5">
+          {onOpenFeedback && (
+            <button
+              onClick={onOpenFeedback}
+              className="flex-1 py-1.5 px-2 rounded-lg bg-indigo-950/40 hover:bg-indigo-900/50 hover:text-indigo-200 border border-indigo-500/30 text-[11px] font-sans font-medium flex items-center justify-center gap-1.5 text-indigo-300 transition-colors cursor-pointer"
+              title="Quick Feedback & Bug Report directly to Discord"
+            >
+              <MessageSquarePlus className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Feedback</span>
+            </button>
+          )}
+
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              className={`${onOpenFeedback ? 'flex-1' : 'w-full'} py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-slate-800 hover:text-slate-200 border border-slate-800 text-[11px] font-sans font-medium flex items-center justify-center gap-1.5 text-slate-400 transition-colors cursor-pointer`}
+              title="Configure Broker, API Keys & AI Provider"
+            >
+              <span>⚙️</span>
+              <span>Settings</span>
+            </button>
+          )}
+        </div>
       </div>
     </aside>
   );

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AccountSummary, RiskProfile } from '../types/trading';
-import { Search, RefreshCw, Bell, Sparkles, Settings, Clock, Globe } from 'lucide-react';
+import { Search, RefreshCw, Bell, Sparkles, Settings, Clock, Globe, MessageSquarePlus } from 'lucide-react';
 import { useTimezone } from '../context/TimezoneContext';
 import { TimezoneSelectorModal } from './TimezoneSelectorModal';
 
@@ -22,6 +22,7 @@ interface HeaderProps {
   isCopilotOpen?: boolean;
   activeProvider?: string;
   onOpenSettings?: () => void;
+  onOpenFeedback?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -42,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   isCopilotOpen = false,
   activeProvider,
   onOpenSettings,
+  onOpenFeedback,
 }) => {
   const [isTimezoneModalOpen, setIsTimezoneModalOpen] = useState(false);
   const { currentFormattedTime, currentAbbr, currentOffset, activeTimezoneInfo } = useTimezone();
@@ -197,6 +199,18 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
             <span className="font-sans font-semibold hidden md:inline">AI Copilot</span>
+          </button>
+        )}
+
+        {/* Quick Feedback Button */}
+        {onOpenFeedback && (
+          <button
+            onClick={onOpenFeedback}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-850 hover:border-indigo-500/40 text-slate-400 hover:text-indigo-300 transition-all text-xs font-mono cursor-pointer"
+            title="Send Quick Feedback to Discord (No login required)"
+          >
+            <MessageSquarePlus className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="font-sans font-semibold hidden lg:inline">Feedback</span>
           </button>
         )}
 

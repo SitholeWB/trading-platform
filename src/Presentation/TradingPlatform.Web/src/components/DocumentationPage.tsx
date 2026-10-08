@@ -31,6 +31,7 @@ import {
   Github,
   Bug,
   FileCode,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { PageId } from './NavigationSidebar';
 
@@ -38,6 +39,7 @@ interface DocumentationPageProps {
   onNavigateTo?: (page: PageId) => void;
   onOpenSettings?: () => void;
   onOpenCopilot?: () => void;
+  onOpenFeedback?: () => void;
   activeProvider?: string;
 }
 
@@ -67,6 +69,7 @@ export const DocumentationPage: React.FC<DocumentationPageProps> = ({
   onNavigateTo,
   onOpenSettings,
   onOpenCopilot,
+  onOpenFeedback,
   activeProvider = 'KeylessPublic',
 }) => {
   const [activeSectionId, setActiveSectionId] = useState<string>('overview');
@@ -720,6 +723,29 @@ export const DocumentationPage: React.FC<DocumentationPageProps> = ({
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            {onOpenFeedback && (
+              <div
+                onClick={onOpenFeedback}
+                className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/40 hover:border-indigo-400 hover:bg-indigo-900/40 transition-all group flex flex-col justify-between cursor-pointer shadow-sm"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-100 group-hover:text-indigo-300 transition-colors">
+                      <MessageSquarePlus className="w-4 h-4 text-indigo-400" />
+                      <span>Quick Feedback & Bug Report</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                      Discord
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Have a feature idea or encounter an issue? Send a direct message to our development Discord channel without requiring any login.
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono text-indigo-400 mt-2 font-medium">Open feedback modal →</span>
+              </div>
+            )}
+
             <a
               href="https://github.com/SitholeWB/trading-platform/issues/new"
               target="_blank"
