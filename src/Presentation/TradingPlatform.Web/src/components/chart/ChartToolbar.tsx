@@ -10,10 +10,12 @@ import {
   History,
   AlertCircle,
   Loader2,
+  PanelLeft,
+  Bell,
+  Clock,
 } from 'lucide-react';
 import { ChartType, ChartLayoutMode } from './types';
 import { Timeframe } from '../../types/trading';
-import { Bell, Clock } from 'lucide-react';
 
 interface ChartToolbarProps {
   symbol: string;
@@ -48,6 +50,9 @@ interface ChartToolbarProps {
   secondsUntilSync?: number;
   isRefreshingCandles?: boolean;
   onManualSyncCandles?: () => void;
+  // Collapsible Watchlist toggle
+  isWatchlistCollapsed?: boolean;
+  onToggleWatchlist?: () => void;
 }
 
 export const ChartToolbar: React.FC<ChartToolbarProps> = ({
@@ -80,8 +85,12 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
   secondsUntilSync,
   isRefreshingCandles = false,
   onManualSyncCandles,
+  isWatchlistCollapsed,
+  onToggleWatchlist,
 }) => {
   const [showLayoutDropdown, setShowLayoutDropdown] = useState(false);
+  const [showChartTypeDropdown, setShowChartTypeDropdown] = useState(false);
+  const [showTimeframeDropdown, setShowTimeframeDropdown] = useState(false);
 
   const timeframes: { label: string; value: Timeframe }[] = [
     { label: '1m', value: 'M1' },
@@ -124,6 +133,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
   };
 
   const badge = getCategoryBadge(symbol);
+  const currentChartType = chartTypes.find((t) => t.id === chartType) || chartTypes[0];
   const formattedPrice = currentPrice >= 100
     ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : currentPrice > 10
@@ -132,38 +142,87 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
 
   return (
     <div className="relative">
-      <div className="h-10 px-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs select-none flex-shrink-0 z-20">
-        {/* Left Segment: Symbol Picker, Price Stats, Timeframes, 1-Click Chart Type Selector */}
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1">
+      <div className="h-10 px-2 sm:px-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs select-none flex-shrink-0 z-20">
+        {/* Left Segment: Watchlist Toggle, Symbol Picker, Timeframes, Chart Styles, Indicators, Alerts */}
+        <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 overflow-x-auto scrollbar-none py-1 min-w-0">
+          {/* Toggle Watchlist Button (reclaims sidebar width on small screens) */}
+          {onToggleWatchlist && (
+            <button
+              onClick={onToggleWatchlist}
+              className={`p-1.5 rounded-lg border text-xs flex items-center gap-1 transition-all flex-shrink-0 cursor-pointer ${
+                isWatchlistCollapsed
+                  ? 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                  : 'bg-blue-600/20 text-blue-300 border-blue-500/40'
+              }`}
+              title={isWatchlistCollapsed ? 'Show Watchlist Sidebar' : 'Collapse Watchlist Sidebar'}
+            >
+              <PanelLeft className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline text-[11px] font-sans font-medium">Watchlist</span>
+            </button>
+          )}
+
           {/* Symbol Search Button */}
           <button
             onClick={onOpenSymbolSearch}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800/80 border border-slate-800 text-slate-100 font-bold transition-all group flex-shrink-0"
+            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800/80 border border-slate-800 text-slate-100 font-bold transition-all group flex-shrink-0 cursor-pointer"
             title="Search or Browse Symbol / Pair (Shortcut: /)"
           >
             <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-400" />
-            <span className="font-mono text-sm tracking-wide">{symbol}</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded border font-mono hidden sm:inline ${badge.color}`}>
+            <span className="font-mono text-xs sm:text-sm tracking-wide">{symbol}</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded border font-mono hidden md:inline ${badge.color}`}>
               {badge.label}
             </span>
             <ChevronDown className="w-3 h-3 text-slate-400" />
           </button>
 
-          {/* Live Ticker Price & % Change */}
-          <div className="hidden lg:flex items-center gap-1.5 font-mono text-xs px-2 border-r border-slate-800/80 flex-shrink-0">
-            <span className="font-bold text-slate-200">{formattedPrice}</span>
-            <span className={`text-[11px] font-semibold ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>
-              {isPos ? `+${priceChange.pct.toFixed(2)}%` : `${priceChange.pct.toFixed(2)}%`}
-            </span>
+          {/* Timeframe Selector Bar - Priority #1 right next to symbol, guaranteed never hidden */}
+          {/* Mobile / Narrow Screen Dropdown (< sm) */}
+          <div className="relative sm:hidden flex-shrink-0">
+            <button
+              onClick={() => setShowTimeframeDropdown(!showTimeframeDropdown)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-600 text-white font-mono font-bold text-xs shadow-sm cursor-pointer"
+              title="Select Timeframe"
+            >
+              <Clock className="w-3 h-3 text-blue-200" />
+              <span>{timeframe}</span>
+              <ChevronDown className="w-3 h-3 text-blue-200" />
+            </button>
+            {showTimeframeDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowTimeframeDropdown(false)}
+                />
+                <div className="absolute top-9 left-0 w-36 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 z-50 font-mono text-xs">
+                  {timeframes.map((tf) => (
+                    <button
+                      key={tf.value}
+                      onClick={() => {
+                        onTimeframeChange(tf.value);
+                        setShowTimeframeDropdown(false);
+                      }}
+                      className={`w-full px-2.5 py-1.5 rounded-lg flex items-center justify-between text-left transition-colors cursor-pointer ${
+                        timeframe === tf.value
+                          ? 'bg-blue-600 text-white font-bold'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <span>{tf.label}</span>
+                      <span className="text-[10px] text-slate-400">{tf.value}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Timeframe Selector Bar */}
-          <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex-shrink-0">
+          {/* Tablet & Desktop Timeframe Selector Bar (>= sm) */}
+          <div className="hidden sm:flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex-shrink-0">
             {timeframes.map((tf) => (
               <button
                 key={tf.value}
                 onClick={() => onTimeframeChange(tf.value)}
-                className={`px-2 py-0.5 rounded text-[11px] font-mono transition-all ${
+                className={`px-1.5 md:px-2 py-0.5 rounded text-[11px] font-mono transition-all cursor-pointer ${
                   timeframe === tf.value
                     ? 'bg-blue-600 text-white font-bold shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
@@ -174,15 +233,56 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
             ))}
           </div>
 
-          {/* Direct 1-Click Chart Style Switcher Buttons */}
-          <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex-shrink-0">
+          {/* Direct Chart Style Switcher: Compact Dropdown on < 2xl, Full bar on 2xl+ */}
+          {/* Dropdown (< 2xl) */}
+          <div className="relative 2xl:hidden flex-shrink-0">
+            <button
+              onClick={() => setShowChartTypeDropdown(!showChartTypeDropdown)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-950 hover:bg-slate-850 border border-slate-800 text-slate-200 text-xs transition-all cursor-pointer"
+              title={`Chart Type: ${currentChartType.label}`}
+            >
+              <span>{currentChartType.icon}</span>
+              <span className="hidden md:inline font-mono text-[11px]">{currentChartType.short}</span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+            {showChartTypeDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowChartTypeDropdown(false)}
+                />
+                <div className="absolute top-9 left-0 w-40 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 z-50 font-sans text-xs">
+                  {chartTypes.map((type) => (
+                    <button
+                      key={type.id}
+                      onClick={() => {
+                        onChartTypeChange(type.id);
+                        setShowChartTypeDropdown(false);
+                      }}
+                      className={`w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 text-left transition-colors cursor-pointer ${
+                        chartType === type.id
+                          ? 'bg-blue-600 text-white font-bold'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <span>{type.icon}</span>
+                      <span>{type.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Full Bar (>= 2xl) */}
+          <div className="hidden 2xl:flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex-shrink-0">
             {chartTypes.map((type) => {
               const isActive = chartType === type.id;
               return (
                 <button
                   key={type.id}
                   onClick={() => onChartTypeChange(type.id)}
-                  className={`px-2 py-0.5 rounded text-xs flex items-center gap-1 transition-all ${
+                  className={`px-2 py-0.5 rounded text-xs flex items-center gap-1 transition-all cursor-pointer ${
                     isActive
                       ? 'bg-blue-600 text-white font-bold shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
@@ -190,7 +290,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
                   title={`Switch to ${type.label}`}
                 >
                   <span>{type.icon}</span>
-                  <span className="hidden xl:inline">{type.short}</span>
+                  <span>{type.short}</span>
                 </button>
               );
             })}
@@ -199,10 +299,11 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           {/* Indicators Dialog Trigger */}
           <button
             onClick={onOpenIndicatorsModal}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/30 text-blue-300 font-bold transition-all flex-shrink-0"
+            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/30 text-blue-300 font-bold transition-all flex-shrink-0 cursor-pointer"
+            title="Technical Indicators (fx)"
           >
             <span className="italic font-serif font-black">fx</span>
-            <span>Indicators</span>
+            <span className="hidden xl:inline">Indicators</span>
             {activeIndicatorsCount > 0 && (
               <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-mono">
                 {activeIndicatorsCount}
@@ -214,11 +315,11 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           {onOpenAlertsModal && (
             <button
               onClick={onOpenAlertsModal}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold transition-all flex-shrink-0"
+              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold transition-all flex-shrink-0 cursor-pointer"
               title="Price Level Alerts & Chimes"
             >
               <Bell className="w-3.5 h-3.5 text-amber-400" />
-              <span>Alerts</span>
+              <span className="hidden xl:inline">Alerts</span>
               {activeAlertsCount !== undefined && activeAlertsCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold flex items-center justify-center font-mono">
                   {activeAlertsCount}
@@ -226,22 +327,32 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
               )}
             </button>
           )}
+
+          {/* Live Ticker Price & % Change (Only when room permits on wide screens) */}
+          <div className="hidden 2xl:flex items-center gap-1.5 font-mono text-xs px-2 border-l border-slate-800/80 flex-shrink-0">
+            <span className="font-bold text-slate-200">{formattedPrice}</span>
+            <span className={`text-[11px] font-semibold ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>
+              {isPos ? `+${priceChange.pct.toFixed(2)}%` : `${priceChange.pct.toFixed(2)}%`}
+            </span>
+          </div>
         </div>
 
-        {/* Right Segment: Live Feed Cadence, Load History Button, Tools, Split View, Snapshot, Fullscreen, Reset */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Live Feed Cadence & Server Rate-Limit Protection Standout Badge */}
+        {/* Right Segment: Responsive Live Feed Cadence, Load History, Split, Trade, Tools */}
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+          {/* Live Feed Cadence & Server Protection Standout Badge (Responsive & Click-to-Sync) */}
           <div
-            className={`flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-sans flex-shrink-0 group relative shadow-md transition-all border ${
+            onClick={onManualSyncCandles}
+            className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-2.5 py-1 rounded-lg text-xs font-sans flex-shrink-0 group relative shadow-md transition-all border cursor-pointer ${
               isRefreshingCandles
                 ? 'bg-gradient-to-r from-blue-950/95 via-indigo-950/90 to-slate-900 border-blue-500/80 text-blue-200 shadow-blue-950/60'
                 : secondsUntilSync !== undefined && secondsUntilSync <= 5
                 ? 'bg-gradient-to-r from-amber-950/95 via-orange-950/90 to-slate-900 border-amber-400 text-amber-200 shadow-amber-950/60 animate-pulse'
                 : 'bg-gradient-to-r from-emerald-950/90 via-slate-900 to-cyan-950/80 border-emerald-500/70 text-emerald-300 shadow-emerald-950/50'
             }`}
+            title="Click to fetch immediate market sync (auto-refreshes every 60s)"
           >
             {/* Glowing Live / Radar Beacon */}
-            <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+            <span className="relative flex h-2 w-2 md:h-2.5 md:w-2.5 flex-shrink-0">
               <span
                 className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
                   isRefreshingCandles
@@ -252,7 +363,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
                 }`}
               />
               <span
-                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                className={`relative inline-flex rounded-full h-2 w-2 md:h-2.5 md:w-2.5 ${
                   isRefreshingCandles
                     ? 'bg-blue-500'
                     : secondsUntilSync !== undefined && secondsUntilSync <= 5
@@ -264,9 +375,9 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
 
             {/* Standout Countdown / Syncing Label */}
             {isRefreshingCandles ? (
-              <div className="flex items-center gap-1.5 font-semibold text-blue-200">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                <span className="tracking-tight">Refreshing prices now...</span>
+              <div className="flex items-center gap-1 font-semibold text-blue-200">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400 flex-shrink-0" />
+                <span className="hidden xl:inline tracking-tight text-[11px]">Refreshing prices...</span>
               </div>
             ) : (
               <div className="flex items-center gap-1.5">
@@ -277,12 +388,11 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
                       : 'text-emerald-400'
                   }`}
                 />
-                <span className="text-slate-200 font-medium tracking-tight whitespace-nowrap">
-                  <span className="hidden sm:inline">Refresh prices in </span>
-                  <span className="sm:hidden">Refresh in </span>
+                <span className="text-slate-200 font-medium tracking-tight whitespace-nowrap hidden xl:inline text-[11px]">
+                  Refresh prices in
                 </span>
                 <span
-                  className={`px-2 py-0.5 rounded-md font-mono font-black text-xs tracking-wider shadow-inner border ${
+                  className={`px-1.5 py-0.2 md:px-2 md:py-0.5 rounded-md font-mono font-black text-[11px] md:text-xs tracking-wider shadow-inner border ${
                     secondsUntilSync !== undefined && secondsUntilSync <= 5
                       ? 'bg-amber-500/30 text-amber-100 border-amber-300 ring-1 ring-amber-400/50'
                       : 'bg-emerald-500/25 text-emerald-100 border-emerald-400/60 ring-1 ring-emerald-400/30'
@@ -293,12 +403,16 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
               </div>
             )}
 
-            {/* Instant Manual Refresh Trigger Button */}
+            {/* Instant Manual Refresh Trigger Button (Shown on xl+) */}
             {onManualSyncCandles && (
               <button
-                onClick={onManualSyncCandles}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onManualSyncCandles();
+                }}
                 disabled={isRefreshingCandles}
-                className={`ml-1 px-1.5 py-0.5 rounded-md border text-[10px] font-sans font-bold uppercase tracking-wider flex items-center gap-1 transition-all ${
+                className={`hidden xl:flex ml-0.5 px-1.5 py-0.5 rounded-md border text-[10px] font-sans font-bold uppercase tracking-wider items-center gap-1 transition-all ${
                   isRefreshingCandles
                     ? 'bg-slate-800/40 border-slate-700/50 text-slate-500 cursor-not-allowed'
                     : 'bg-emerald-500/20 hover:bg-emerald-500/35 border-emerald-400/50 text-emerald-200 hover:text-white shadow-sm hover:scale-105 active:scale-95 cursor-pointer'
@@ -306,16 +420,16 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
                 title="Immediate Sync: Pull latest market tick & candles now (bypasses 60s cache)"
               >
                 <RefreshCw className={`w-3 h-3 ${isRefreshingCandles ? 'animate-spin text-blue-400' : 'text-emerald-300'}`} />
-                <span className="hidden md:inline">Sync</span>
+                <span>Sync</span>
               </button>
             )}
 
-            {/* Rate-Limit / Server Load Protection Tooltip */}
-            <div className="absolute top-10 right-0 hidden group-hover:block z-50 w-80 p-3 bg-slate-900/98 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl text-[11px] font-sans text-slate-300 pointer-events-none leading-relaxed">
+            {/* Tooltip */}
+            <div className="absolute top-10 right-0 hidden group-hover:block z-50 w-72 p-2.5 bg-slate-900/98 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl text-[11px] font-sans text-slate-300 pointer-events-none leading-relaxed">
               <div className="font-bold text-white flex items-center gap-1.5 mb-1 text-xs">
                 <span className="text-emerald-400">●</span> 1-Minute Live Market Data Cadence
               </div>
-              Prices, candles, and watchlist quotes refresh automatically every 60 seconds across all timeframes to avoid rate-limiting and protect exchange data feeds. Click <span className="text-emerald-400 font-semibold">Sync</span> to fetch immediate updates anytime.
+              Prices refresh automatically every 60 seconds across all timeframes. Click anywhere on this badge to sync immediately.
             </div>
           </div>
 
@@ -324,7 +438,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
             <button
               onClick={onLoadOlderHistory}
               disabled={isLoadingHistory || !hasMoreHistory}
-              className={`px-2 py-1 rounded-lg text-xs font-mono flex items-center gap-1.5 transition-all border ${
+              className={`px-2 py-1 rounded-lg text-xs font-mono flex items-center gap-1.5 transition-all border cursor-pointer ${
                 isLoadingHistory
                   ? 'bg-blue-900/30 border-blue-500/40 text-blue-300 animate-pulse'
                   : !hasMoreHistory
@@ -340,12 +454,12 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
               {isLoadingHistory ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                  <span className="hidden sm:inline">Loading...</span>
+                  <span className="hidden 2xl:inline">Loading...</span>
                 </>
               ) : (
                 <>
                   <History className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="hidden sm:inline">
+                  <span className="hidden 2xl:inline">
                     {!hasMoreHistory ? 'Earliest Reached' : `+Bars (${candlesCount})`}
                   </span>
                 </>
@@ -357,7 +471,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           <div className="relative">
             <button
               onClick={() => setShowLayoutDropdown(!showLayoutDropdown)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
               title="Chart Split View Layout"
             >
               <Split className="w-4 h-4" />
@@ -375,7 +489,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
                       onLayoutModeChange('single');
                       setShowLayoutDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left ${
+                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left cursor-pointer ${
                       layoutMode === 'single'
                         ? 'bg-blue-600 text-white font-bold'
                         : 'text-slate-300 hover:bg-slate-800'
@@ -389,7 +503,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
                       onLayoutModeChange('split-v');
                       setShowLayoutDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left ${
+                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left cursor-pointer ${
                       layoutMode === 'split-v'
                         ? 'bg-blue-600 text-white font-bold'
                         : 'text-slate-300 hover:bg-slate-800'
@@ -403,7 +517,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
                       onLayoutModeChange('split-h');
                       setShowLayoutDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left ${
+                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left cursor-pointer ${
                       layoutMode === 'split-h'
                         ? 'bg-blue-600 text-white font-bold'
                         : 'text-slate-300 hover:bg-slate-800'
@@ -417,7 +531,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
                       onLayoutModeChange('grid-4');
                       setShowLayoutDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left ${
+                    className={`w-full px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-left cursor-pointer ${
                       layoutMode === 'grid-4'
                         ? 'bg-blue-600 text-white font-bold'
                         : 'text-slate-300 hover:bg-slate-800'
@@ -435,21 +549,22 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           {onToggleOrderWidget && (
             <button
               onClick={onToggleOrderWidget}
-              className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+              className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
                 showOrderWidget
                   ? 'bg-blue-600/90 text-white shadow-sm ring-1 ring-blue-400/40'
                   : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800'
               }`}
               title={showOrderWidget ? 'Hide 1-Click Order Dock' : 'Show 1-Click Order Dock'}
             >
-              <span>⚡ Trade</span>
+              <span>⚡</span>
+              <span className="hidden md:inline">Trade</span>
             </button>
           )}
 
           {/* Fit Content / Reset View */}
           <button
             onClick={onFitContent}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
             title="Reset Zoom / Fit Content (Auto)"
           >
             <RefreshCw className="w-4 h-4" />
@@ -458,7 +573,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           {/* Take Snapshot / Screenshot */}
           <button
             onClick={onTakeSnapshot}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
             title="Save Chart Screenshot (PNG)"
           >
             <Camera className="w-4 h-4" />
@@ -467,7 +582,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           {/* Fullscreen Toggle */}
           <button
             onClick={onToggleFullscreen}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
             title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}

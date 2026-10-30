@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Crosshair,
   TrendingUp,
@@ -12,6 +12,9 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
 } from 'lucide-react';
 import { DrawingTool } from './types';
 
@@ -32,6 +35,23 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
   onToggleShowDrawings,
   drawingsCount,
 }) => {
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('tp_drawing_toolbar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleCollapse = (collapsed: boolean) => {
+    setIsCollapsed(collapsed);
+    try {
+      localStorage.setItem('tp_drawing_toolbar_collapsed', String(collapsed));
+    } catch {
+      // ignore
+    }
+  };
+
   const tools: { id: DrawingTool; label: string; icon: React.ReactNode; shortcut?: string }[] = [
     {
       id: 'cursor',
@@ -89,8 +109,34 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
     },
   ];
 
+  if (isCollapsed) {
+    return (
+      <aside className="w-5 bg-slate-950/90 hover:bg-slate-900 border-r border-slate-800 flex flex-col items-center py-2 select-none flex-shrink-0 z-10 transition-all group">
+        <button
+          onClick={() => handleToggleCollapse(false)}
+          className="w-full h-full flex flex-col items-center justify-start pt-3 gap-2 text-slate-500 hover:text-cyan-300 transition-colors cursor-pointer"
+          title="Expand Drawing Tools (Trendlines, Zones, Fibonacci)"
+        >
+          <ChevronRight className="w-3.5 h-3.5 group-hover:scale-125 transition-transform text-slate-400 group-hover:text-cyan-300" />
+          <Pencil className="w-3 h-3 text-slate-500 group-hover:text-cyan-300" />
+        </button>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="w-11 bg-slate-900/90 border-r border-slate-800 flex flex-col items-center py-2 select-none flex-shrink-0 z-10">
+    <aside className="w-11 bg-slate-900/90 border-r border-slate-800 flex flex-col items-center py-1.5 select-none flex-shrink-0 z-10 transition-all">
+      {/* Top Collapse Toggle */}
+      <div className="w-full flex justify-center pb-1 mb-1 border-b border-slate-800/80">
+        <button
+          onClick={() => handleToggleCollapse(true)}
+          className="w-7 h-5 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-200 flex items-center justify-center transition-colors cursor-pointer"
+          title="Collapse Drawing Toolbar"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
       <div className="flex-1 flex flex-col items-center gap-1 w-full px-1">
         {tools.map((tool) => {
           const isActive = activeTool === tool.id;

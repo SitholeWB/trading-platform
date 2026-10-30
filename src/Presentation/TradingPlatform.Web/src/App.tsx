@@ -12,7 +12,7 @@ import { SimulatorConsole } from './components/SimulatorConsole';
 import { KillSwitchModal } from './components/KillSwitchModal';
 import { BrokerSettingsModal } from './components/BrokerSettingsModal';
 import { SymbolSearchModal } from './components/chart/SymbolSearchModal';
-import { Search, Layers, Globe, Coins, TrendingUp, Flame, BarChart3, Sparkles } from 'lucide-react';
+import { Search, Layers, Globe, Coins, TrendingUp, Flame, BarChart3, Sparkles, ChevronLeft, ChevronRight, List } from 'lucide-react';
 import { StrategyAlertsModal } from './components/StrategyAlertsModal';
 import { AICopilotDrawer } from './components/AICopilotDrawer';
 import { AIStrategyGeneratorModal } from './components/AIStrategyGeneratorModal';
@@ -226,6 +226,25 @@ export function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, MarketQuote>>({});
   const [secondsUntilSync, setSecondsUntilSync] = useState<number>(60);
+  const [isWatchlistCollapsed, setIsWatchlistCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('tp_watchlist_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleWatchlist = () => {
+    setIsWatchlistCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('tp_watchlist_collapsed', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   const currentPrice = watchlistQuotes[selectedSymbol]?.price ?? candles[candles.length - 1]?.close ?? 1.0852;
   const [isSyncingCandles, setIsSyncingCandles] = useState<boolean>(false);
@@ -771,32 +790,42 @@ export function App() {
 
           {/* Page 6: Dedicated Chart & Technical Inspector */}
           {activePage === 'chart' && (
-            <div className="flex-1 h-full p-3 flex gap-3 overflow-hidden">
-              {/* Market Watchlist Sidebar */}
-              <aside className="w-64 bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col font-mono text-xs hidden md:flex flex-shrink-0">
-                {/* Watchlist Header + Browse Button */}
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                      Watchlist
-                    </span>
-                    <span
-                      className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 flex items-center gap-1 font-semibold"
-                      title="Auto-refreshes every 1 min (60s) to protect market data servers from rate-limiting"
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      1m sync
-                    </span>
+            <div className="flex-1 h-full p-2 sm:p-3 flex gap-2 sm:gap-3 overflow-hidden">
+              {/* Market Watchlist Sidebar - Minimizable / Collapsible */}
+              {!isWatchlistCollapsed ? (
+                <aside className="w-64 bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col font-mono text-xs hidden md:flex flex-shrink-0 animate-in fade-in duration-150">
+                  {/* Watchlist Header + Browse Button + Collapse Toggle */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                        Watchlist
+                      </span>
+                      <span
+                        className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 flex items-center gap-1 font-semibold"
+                        title="Auto-refreshes every 1 min (60s) to protect market data servers from rate-limiting"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        1m sync
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setIsSymbolSearchOpen(true)}
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 text-[10px] font-sans font-medium transition-all cursor-pointer"
+                        title="Search & Browse All Symbols (Shortcut: /)"
+                      >
+                        <Search className="w-3 h-3" />
+                        <span className="hidden lg:inline">Browse</span>
+                      </button>
+                      <button
+                        onClick={handleToggleWatchlist}
+                        className="p-1 rounded-md hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                        title="Collapse Watchlist (reclaims 250px for chart)"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => setIsSymbolSearchOpen(true)}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 text-[10px] font-sans font-medium transition-all"
-                    title="Search & Browse All Symbols (Shortcut: /)"
-                  >
-                    <Search className="w-3 h-3" />
-                    <span>Browse All</span>
-                  </button>
-                </div>
 
                 {/* Category Pills on Watchlist */}
                 <div className="flex gap-1 mb-2 overflow-x-auto scrollbar-none text-[10px] font-sans pb-1">
@@ -939,33 +968,63 @@ export function App() {
                   </div>
                 </div>
               </aside>
+            ) : (
+              /* Collapsed Watchlist Slim Rail */
+              <aside className="hidden md:flex flex-col items-center justify-between w-9 bg-slate-900 border border-slate-800 rounded-xl py-3 select-none flex-shrink-0 animate-in fade-in duration-150">
+                <button
+                  onClick={handleToggleWatchlist}
+                  className="w-7 h-7 rounded-lg bg-slate-800/80 hover:bg-slate-750 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer shadow-sm"
+                  title="Expand Market Watchlist"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
 
-              {/* Full Interactive Chart */}
-              <div className="flex-1 h-full overflow-hidden">
-                <TradingChart
-                  candles={candles}
-                  symbol={selectedSymbol}
-                  timeframe={timeframe}
-                  onTimeframeChange={setTimeframe}
-                  onSymbolChange={setSelectedSymbol}
-                  indicatorConfig={indicatorConfig}
-                  positions={positions}
-                  auditLogs={auditLogs}
-                  onPlaceOrder={handlePlaceOrder}
-                  onClosePosition={handleClosePosition}
-                  onLoadOlderCandles={handleLoadOlderCandles}
-                  isLoadingHistory={isLoadingHistory}
-                  activeProvider={activeProvider}
-                  account={account}
-                  secondsUntilSync={secondsUntilSync}
-                  isRefreshingCandles={isSyncingCandles}
-                  onManualSyncCandles={() => {
-                    setSecondsUntilSync(60);
-                    fetchLiveCandles(false, undefined, true);
-                    fetchQuotesData();
-                  }}
-                />
-              </div>
+                <div
+                  className="flex flex-col items-center gap-3 cursor-pointer py-4 group"
+                  onClick={handleToggleWatchlist}
+                  title="Click to Expand Watchlist"
+                >
+                  <List className="w-4 h-4 text-slate-400 group-hover:text-cyan-300 transition-colors" />
+                  <span
+                    className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-semibold group-hover:text-slate-200 transition-colors"
+                    style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                  >
+                    Watchlist
+                  </span>
+                </div>
+
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Live 1m cadence active" />
+              </aside>
+            )}
+
+            {/* Full Interactive Chart */}
+            <div className="flex-1 h-full overflow-hidden">
+              <TradingChart
+                candles={candles}
+                symbol={selectedSymbol}
+                timeframe={timeframe}
+                onTimeframeChange={setTimeframe}
+                onSymbolChange={setSelectedSymbol}
+                indicatorConfig={indicatorConfig}
+                positions={positions}
+                auditLogs={auditLogs}
+                onPlaceOrder={handlePlaceOrder}
+                onClosePosition={handleClosePosition}
+                onLoadOlderCandles={handleLoadOlderCandles}
+                isLoadingHistory={isLoadingHistory}
+                activeProvider={activeProvider}
+                account={account}
+                secondsUntilSync={secondsUntilSync}
+                isRefreshingCandles={isSyncingCandles}
+                onManualSyncCandles={() => {
+                  setSecondsUntilSync(60);
+                  fetchLiveCandles(false, undefined, true);
+                  fetchQuotesData();
+                }}
+                isWatchlistCollapsed={isWatchlistCollapsed}
+                onToggleWatchlist={handleToggleWatchlist}
+              />
+            </div>
             </div>
           )}
 

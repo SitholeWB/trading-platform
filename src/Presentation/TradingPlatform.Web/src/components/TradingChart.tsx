@@ -84,6 +84,8 @@ interface TradingChartProps {
   secondsUntilSync?: number;
   isRefreshingCandles?: boolean;
   onManualSyncCandles?: () => void;
+  isWatchlistCollapsed?: boolean;
+  onToggleWatchlist?: () => void;
 }
 
 export interface HistoryLoadResult {
@@ -117,6 +119,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   secondsUntilSync,
   isRefreshingCandles = false,
   onManualSyncCandles,
+  isWatchlistCollapsed,
+  onToggleWatchlist,
 }) => {
   const { formatDateTime, formatTime, resolvedIana } = useTimezone();
 
@@ -1425,6 +1429,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         secondsUntilSync={secondsUntilSync}
         isRefreshingCandles={isRefreshingCandles}
         onManualSyncCandles={onManualSyncCandles}
+        isWatchlistCollapsed={isWatchlistCollapsed}
+        onToggleWatchlist={onToggleWatchlist}
       />
 
       {/* Alert Trigger Toast Notification */}
