@@ -164,6 +164,24 @@ export function App() {
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [chartEngine, setChartEngine] = useState<'native' | 'tradingview'>(() => {
+    try {
+      return localStorage.getItem('tp_chart_engine_mode_v1') === 'tradingview' ? 'tradingview' : 'native';
+    } catch {
+      return 'native';
+    }
+  });
+  const handleChartEngineChange = (mode: 'native' | 'tradingview') => {
+    setChartEngine(mode);
+    try {
+      localStorage.setItem('tp_chart_engine_mode_v1', mode);
+    } catch {
+      // ignore
+    }
+    if (activePage !== 'chart') {
+      handleNavigateTo('chart');
+    }
+  };
 
   // Global keyboard shortcuts (/ for search, Ctrl+/ for shortcuts reference)
   useEffect(() => {
@@ -735,20 +753,9 @@ export function App() {
           account={account}
           risk={risk}
           onOpenKillSwitch={() => setIsKillSwitchOpen(true)}
-          selectedSymbol={selectedSymbol}
-          currentPrice={currentPrice}
-          onOpenSymbolSearch={() => setIsSymbolSearchOpen(true)}
           openPositionsCount={positions.filter((p) => p.status === 'Open').length}
-          onManualRefresh={handleManualRefresh}
-          isRefreshing={isRefreshing}
-          unacknowledgedAlertsCount={alerts.filter((a) => !a.isAcknowledged).length}
-          onOpenAlertsModal={() => setIsAlertsModalOpen(true)}
-          isBackgroundScannerRunning={scannerSettings?.isEnabled ?? true}
-          onToggleCopilot={() => setIsCopilotOpen((prev) => !prev)}
-          isCopilotOpen={isCopilotOpen}
-          activeProvider={activeProvider}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenFeedback={() => setIsFeedbackOpen(true)}
+          chartEngine={chartEngine}
+          onChartEngineChange={handleChartEngineChange}
         />
 
         {/* Dedicated Page Viewport */}
@@ -1067,6 +1074,8 @@ export function App() {
                 }}
                 isWatchlistCollapsed={isWatchlistCollapsed}
                 onToggleWatchlist={handleToggleWatchlist}
+                chartEngine={chartEngine}
+                onChartEngineChange={handleChartEngineChange}
               />
             </div>
             </div>

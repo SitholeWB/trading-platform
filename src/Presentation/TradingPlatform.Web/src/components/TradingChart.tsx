@@ -88,6 +88,8 @@ interface TradingChartProps {
   onManualSyncCandles?: () => void;
   isWatchlistCollapsed?: boolean;
   onToggleWatchlist?: () => void;
+  chartEngine?: 'native' | 'tradingview';
+  onChartEngineChange?: (mode: 'native' | 'tradingview') => void;
 }
 
 export interface HistoryLoadResult {
@@ -123,19 +125,26 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   onManualSyncCandles,
   isWatchlistCollapsed,
   onToggleWatchlist,
+  chartEngine: externalChartEngine,
+  onChartEngineChange: externalOnChartEngineChange,
 }) => {
   const { formatDateTime, formatTime, resolvedIana } = useTimezone();
 
   // Chart layout and state
-  const [chartEngine, setChartEngine] = useState<'native' | 'tradingview'>(() => {
+  const [internalChartEngine, setInternalChartEngine] = useState<'native' | 'tradingview'>(() => {
     try {
       return localStorage.getItem('tp_chart_engine_mode_v1') === 'tradingview' ? 'tradingview' : 'native';
     } catch {
       return 'native';
     }
   });
+  const chartEngine = externalChartEngine ?? internalChartEngine;
   const handleChartEngineChange = (mode: 'native' | 'tradingview') => {
-    setChartEngine(mode);
+    if (externalOnChartEngineChange) {
+      externalOnChartEngineChange(mode);
+    } else {
+      setInternalChartEngine(mode);
+    }
     try {
       localStorage.setItem('tp_chart_engine_mode_v1', mode);
     } catch {
