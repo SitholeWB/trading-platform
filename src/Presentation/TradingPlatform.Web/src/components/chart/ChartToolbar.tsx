@@ -82,9 +82,6 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
   hasMoreHistory = true,
   historyNotice,
   onDismissHistoryNotice,
-  secondsUntilSync,
-  isRefreshingCandles = false,
-  onManualSyncCandles,
   isWatchlistCollapsed,
   onToggleWatchlist,
 }) => {
@@ -303,7 +300,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
             title="Technical Indicators (fx)"
           >
             <span className="italic font-serif font-black">fx</span>
-            <span className="hidden xl:inline">Indicators</span>
+            <span className="hidden lg:inline">Indicators</span>
             {activeIndicatorsCount > 0 && (
               <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-mono">
                 {activeIndicatorsCount}
@@ -319,7 +316,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
               title="Price Level Alerts & Chimes"
             >
               <Bell className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden xl:inline">Alerts</span>
+              <span className="hidden lg:inline">Alerts</span>
               {activeAlertsCount !== undefined && activeAlertsCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold flex items-center justify-center font-mono">
                   {activeAlertsCount}
@@ -329,7 +326,7 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           )}
 
           {/* Live Ticker Price & % Change (Only when room permits on wide screens) */}
-          <div className="hidden 2xl:flex items-center gap-1.5 font-mono text-xs px-2 border-l border-slate-800/80 flex-shrink-0">
+          <div className="hidden xl:flex items-center gap-1.5 font-mono text-xs px-2 border-l border-slate-800/80 flex-shrink-0">
             <span className="font-bold text-slate-200">{formattedPrice}</span>
             <span className={`text-[11px] font-semibold ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>
               {isPos ? `+${priceChange.pct.toFixed(2)}%` : `${priceChange.pct.toFixed(2)}%`}
@@ -337,102 +334,8 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           </div>
         </div>
 
-        {/* Right Segment: Responsive Live Feed Cadence, Load History, Split, Trade, Tools */}
+        {/* Right Segment: Load History, Split, Trade, Tools */}
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
-          {/* Live Feed Cadence & Server Protection Standout Badge (Responsive & Click-to-Sync) */}
-          <div
-            onClick={onManualSyncCandles}
-            className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-2.5 py-1 rounded-lg text-xs font-sans flex-shrink-0 group relative shadow-md transition-all border cursor-pointer ${
-              isRefreshingCandles
-                ? 'bg-gradient-to-r from-blue-950/95 via-indigo-950/90 to-slate-900 border-blue-500/80 text-blue-200 shadow-blue-950/60'
-                : secondsUntilSync !== undefined && secondsUntilSync <= 5
-                ? 'bg-gradient-to-r from-amber-950/95 via-orange-950/90 to-slate-900 border-amber-400 text-amber-200 shadow-amber-950/60 animate-pulse'
-                : 'bg-gradient-to-r from-emerald-950/90 via-slate-900 to-cyan-950/80 border-emerald-500/70 text-emerald-300 shadow-emerald-950/50'
-            }`}
-            title="Click to fetch immediate market sync (auto-refreshes every 60s)"
-          >
-            {/* Glowing Live / Radar Beacon */}
-            <span className="relative flex h-2 w-2 md:h-2.5 md:w-2.5 flex-shrink-0">
-              <span
-                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  isRefreshingCandles
-                    ? 'bg-blue-400'
-                    : secondsUntilSync !== undefined && secondsUntilSync <= 5
-                    ? 'bg-amber-400'
-                    : 'bg-emerald-400'
-                }`}
-              />
-              <span
-                className={`relative inline-flex rounded-full h-2 w-2 md:h-2.5 md:w-2.5 ${
-                  isRefreshingCandles
-                    ? 'bg-blue-500'
-                    : secondsUntilSync !== undefined && secondsUntilSync <= 5
-                    ? 'bg-amber-400'
-                    : 'bg-emerald-400'
-                }`}
-              />
-            </span>
-
-            {/* Standout Countdown / Syncing Label */}
-            {isRefreshingCandles ? (
-              <div className="flex items-center gap-1 font-semibold text-blue-200">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400 flex-shrink-0" />
-                <span className="hidden xl:inline tracking-tight text-[11px]">Refreshing prices...</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <Clock
-                  className={`w-3.5 h-3.5 flex-shrink-0 ${
-                    secondsUntilSync !== undefined && secondsUntilSync <= 5
-                      ? 'text-amber-300 animate-spin'
-                      : 'text-emerald-400'
-                  }`}
-                />
-                <span className="text-slate-200 font-medium tracking-tight whitespace-nowrap hidden xl:inline text-[11px]">
-                  Refresh prices in
-                </span>
-                <span
-                  className={`px-1.5 py-0.2 md:px-2 md:py-0.5 rounded-md font-mono font-black text-[11px] md:text-xs tracking-wider shadow-inner border ${
-                    secondsUntilSync !== undefined && secondsUntilSync <= 5
-                      ? 'bg-amber-500/30 text-amber-100 border-amber-300 ring-1 ring-amber-400/50'
-                      : 'bg-emerald-500/25 text-emerald-100 border-emerald-400/60 ring-1 ring-emerald-400/30'
-                  }`}
-                >
-                  {secondsUntilSync !== undefined ? `${secondsUntilSync}s` : '60s'}
-                </span>
-              </div>
-            )}
-
-            {/* Instant Manual Refresh Trigger Button (Shown on xl+) */}
-            {onManualSyncCandles && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onManualSyncCandles();
-                }}
-                disabled={isRefreshingCandles}
-                className={`hidden xl:flex ml-0.5 px-1.5 py-0.5 rounded-md border text-[10px] font-sans font-bold uppercase tracking-wider items-center gap-1 transition-all ${
-                  isRefreshingCandles
-                    ? 'bg-slate-800/40 border-slate-700/50 text-slate-500 cursor-not-allowed'
-                    : 'bg-emerald-500/20 hover:bg-emerald-500/35 border-emerald-400/50 text-emerald-200 hover:text-white shadow-sm hover:scale-105 active:scale-95 cursor-pointer'
-                }`}
-                title="Immediate Sync: Pull latest market tick & candles now (bypasses 60s cache)"
-              >
-                <RefreshCw className={`w-3 h-3 ${isRefreshingCandles ? 'animate-spin text-blue-400' : 'text-emerald-300'}`} />
-                <span>Sync</span>
-              </button>
-            )}
-
-            {/* Tooltip */}
-            <div className="absolute top-10 right-0 hidden group-hover:block z-50 w-72 p-2.5 bg-slate-900/98 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl text-[11px] font-sans text-slate-300 pointer-events-none leading-relaxed">
-              <div className="font-bold text-white flex items-center gap-1.5 mb-1 text-xs">
-                <span className="text-emerald-400">●</span> 1-Minute Live Market Data Cadence
-              </div>
-              Prices refresh automatically every 60 seconds across all timeframes. Click anywhere on this badge to sync immediately.
-            </div>
-          </div>
-
           {/* Historical Data Loading Trigger */}
           {onLoadOlderHistory && (
             <button

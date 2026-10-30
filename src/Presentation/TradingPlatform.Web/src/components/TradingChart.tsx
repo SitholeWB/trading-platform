@@ -51,6 +51,7 @@ import { DrawingCanvas } from './chart/DrawingCanvas';
 import { SymbolSearchModal } from './chart/SymbolSearchModal';
 import { IndicatorsModal } from './chart/IndicatorsModal';
 import { QuickOrderWidget } from './chart/QuickOrderWidget';
+import { DraggableSyncBadge } from './chart/DraggableSyncBadge';
 import { HistoryOverlay } from './chart/HistoryOverlay';
 import { ChartTradeOverlay } from './chart/ChartTradeOverlay';
 import { ChartAlertsModal } from './chart/ChartAlertsModal';
@@ -1489,6 +1490,15 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 : 'w-full'
             }`}
           >
+            {/* Draggable / Movable On-Chart Price Refresh Countdown Widget */}
+            <DraggableSyncBadge
+              secondsUntilSync={secondsUntilSync}
+              isRefreshingCandles={isRefreshingCandles}
+              onManualSyncCandles={onManualSyncCandles}
+              containerWidth={chartDimensions.width}
+              containerHeight={chartDimensions.height}
+            />
+
             {/* Quick One-Click Trading Dock */}
             {showOrderWidget && (
               <QuickOrderWidget
@@ -1502,7 +1512,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             )}
 
             {/* Interactive Inspection Bar / OHLCV Header */}
-            <div className="absolute top-2 left-3 right-3 z-10 flex flex-wrap items-center justify-between pointer-events-none text-xs font-mono">
+            <div className="absolute top-2 left-3 z-10 flex flex-wrap items-center gap-2 pointer-events-none text-xs font-mono max-w-[calc(100%-260px)]">
               {displayCandle && (
                 <div className="flex flex-wrap items-center gap-2.5 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800/80 pointer-events-auto">
                   <span className="font-bold text-slate-100">{symbol}</span>
