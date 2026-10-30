@@ -232,7 +232,7 @@ public class YahooFinanceGateway : IHistoricalDataProvider
                 isComplete: isComplete));
         }
 
-        return candles;
+        return DeterministicMarketDataSynthesizer.AggregateAndAlignCandles(candles, symbol, parsedTimeframe, DateTime.UtcNow);
     }
 
     private static long GetTimeframeSeconds(Timeframe tf) => tf switch

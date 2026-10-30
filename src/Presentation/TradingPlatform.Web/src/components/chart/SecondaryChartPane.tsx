@@ -48,7 +48,7 @@ export const SecondaryChartPane: React.FC<SecondaryChartPaneProps> = ({
     try {
       const data = await tradingApi.getCandles(symbol, timeframe, 150);
       if (data && data.length > 0) {
-        setCandles(sanitizeCandles(data));
+        setCandles(sanitizeCandles(data, timeframe));
       }
     } catch (e) {
       console.warn(`[SecondaryChartPane ${paneId}] failed to load candles:`, e);

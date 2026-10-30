@@ -79,8 +79,7 @@ public static class DeterministicMarketDataSynthesizer
 
         // Quantize anchor down to exact timeframe bar boundary
         var now = anchorUtc ?? DateTime.UtcNow;
-        long alignedTicks = (now.Ticks / barTicks) * barTicks;
-        var anchor = new DateTime(alignedTicks, DateTimeKind.Utc);
+        var anchor = AlignToTimeframeBoundaryUtc(now, timeframe);
 
         int decimals = GetDecimals(cleanSymbol, baseline);
         double volatility = (double)baseline * (cleanSymbol.Contains("JPY") || baseline > 100m ? 0.0012 : 0.0006);
@@ -307,6 +306,104 @@ public static class DeterministicMarketDataSynthesizer
         Timeframe.MN1 => TimeSpan.FromDays(30),
         _ => TimeSpan.FromMinutes(5)
     };
+
+    /// <summary>
+    /// Quantizes any UTC timestamp down to the exact opening boundary of the given timeframe bar.
+    /// Prevents intra-bar 1-minute ticks from creating separate bars on higher timeframes (e.g., H4, H1, M15).
+    /// </summary>
+    public static DateTime AlignToTimeframeBoundaryUtc(DateTime utcTime, Timeframe timeframe)
+    {
+        var dt = utcTime.Kind == DateTimeKind.Utc ? utcTime : DateTime.SpecifyKind(utcTime, DateTimeKind.Utc);
+        switch (timeframe)
+        {
+            case Timeframe.M1:
+            case Timeframe.M5:
+            case Timeframe.M15:
+            case Timeframe.M30:
+            case Timeframe.H1:
+            case Timeframe.H4:
+            case Timeframe.D1:
+            {
+                long barSecs = (long)GetTimeframeDuration(timeframe).TotalSeconds;
+                long unixSecs = new DateTimeOffset(dt).ToUnixTimeSeconds();
+                long alignedSecs = (unixSecs / barSecs) * barSecs;
+                return DateTimeOffset.FromUnixTimeSeconds(alignedSecs).UtcDateTime;
+            }
+            case Timeframe.W1:
+            {
+                int diff = (7 + (dt.DayOfWeek - DayOfWeek.Monday)) % 7;
+                var monday = dt.Date.AddDays(-diff);
+                return new DateTime(monday.Year, monday.Month, monday.Day, 0, 0, 0, DateTimeKind.Utc);
+            }
+            case Timeframe.MN1:
+            {
+                return new DateTime(dt.Year, dt.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+            }
+            default:
+            {
+                long unixSecs = new DateTimeOffset(dt).ToUnixTimeSeconds();
+                long alignedSecs = (unixSecs / 300) * 300;
+                return DateTimeOffset.FromUnixTimeSeconds(alignedSecs).UtcDateTime;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Aggregates and snaps a sequence of raw candles to exact timeframe boundaries.
+    /// Handles both 1h->4h (H4) aggregation and folding trailing live-minute quote ticks into the current forming bar.
+    /// </summary>
+    public static List<Candle> AggregateAndAlignCandles(
+        IEnumerable<Candle> rawCandles,
+        string symbol,
+        Timeframe timeframe,
+        DateTime nowUtc)
+    {
+        var currentBoundary = AlignToTimeframeBoundaryUtc(nowUtc, timeframe);
+        var buckets = new SortedDictionary<DateTime, Candle>();
+
+        foreach (var c in rawCandles)
+        {
+            var bucketTime = AlignToTimeframeBoundaryUtc(c.Timestamp, timeframe);
+            bool isComplete = bucketTime < currentBoundary;
+
+            if (!buckets.TryGetValue(bucketTime, out var existing))
+            {
+                buckets[bucketTime] = new Candle(
+                    symbol: symbol,
+                    timeframe: timeframe,
+                    timestamp: bucketTime,
+                    open: c.Open,
+                    high: Math.Max(c.High, Math.Max(c.Open, c.Close)),
+                    low: Math.Min(c.Low, Math.Min(c.Open, c.Close)),
+                    close: c.Close,
+                    volume: c.Volume,
+                    isComplete: isComplete
+                );
+            }
+            else
+            {
+                decimal open = existing.Open;
+                decimal close = c.Close;
+                decimal high = Math.Max(existing.High, Math.Max(c.High, Math.Max(open, close)));
+                decimal low = Math.Min(existing.Low, Math.Min(c.Low, Math.Min(open, close)));
+                decimal volume = existing.Volume + c.Volume;
+
+                buckets[bucketTime] = new Candle(
+                    symbol: symbol,
+                    timeframe: timeframe,
+                    timestamp: bucketTime,
+                    open: open,
+                    high: high,
+                    low: low,
+                    close: close,
+                    volume: volume,
+                    isComplete: isComplete
+                );
+            }
+        }
+
+        return buckets.Values.ToList();
+    }
 
     public static int GetDecimals(string symbol, decimal price)
     {

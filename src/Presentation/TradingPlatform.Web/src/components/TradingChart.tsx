@@ -350,8 +350,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // Chart dimensions for drawing canvas
   const [chartDimensions, setChartDimensions] = useState({ width: 800, height: 400 });
 
-  // Sanitize and sort candles
-  const cleanCandles = useMemo(() => sanitizeCandles(candles), [candles]);
+  // Sanitize, align to timeframe boundaries, and sort candles
+  const cleanCandles = useMemo(() => sanitizeCandles(candles, timeframe), [candles, timeframe]);
   const latestCandle = cleanCandles[cleanCandles.length - 1];
   const currentPrice = latestCandle?.close ?? 1.085;
 

@@ -51,11 +51,65 @@ export function getCandleTimeSeconds(timestamp: string | number): number {
 }
 
 /**
- * Sorts and deduplicates candles chronologically.
- * If multiple candles share the same second timestamp (e.g., historical vs. updated live forming bar),
- * the most recently updated candle is preserved.
+ * Returns the duration in seconds for standard intraday/daily timeframes
  */
-export function sanitizeCandles(candles: Candle[]): Candle[] {
+export function getTimeframePeriodSeconds(timeframe?: string): number {
+  switch ((timeframe || 'M5').toUpperCase()) {
+    case 'M1':
+      return 60;
+    case 'M5':
+      return 300;
+    case 'M15':
+      return 900;
+    case 'M30':
+      return 1800;
+    case 'H1':
+      return 3600;
+    case 'H4':
+      return 14400;
+    case 'D1':
+      return 86400;
+    case 'W1':
+      return 604800;
+    case 'MN1':
+      return 2592000;
+    default:
+      return 300;
+  }
+}
+
+/**
+ * Quantizes any UTC seconds timestamp down to the exact opening boundary of the given timeframe bar.
+ * Ensures 1-minute live poll updates fold into the active forming bar rather than appending 1m bars on H4/H1/etc.
+ */
+export function alignTimeSecondsToTimeframe(timeSec: number, timeframe?: string): number {
+  if (!Number.isFinite(timeSec) || timeSec <= 0) return timeSec;
+  const tf = (timeframe || '').toUpperCase();
+  if (!tf) return timeSec;
+
+  if (tf === 'MN1') {
+    const d = new Date(timeSec * 1000);
+    return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0) / 1000);
+  }
+  if (tf === 'W1') {
+    const d = new Date(timeSec * 1000);
+    const day = d.getUTCDay(); // 0 = Sun, 1 = Mon, ...
+    const diffToMonday = (day + 6) % 7;
+    return Math.floor(
+      Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - diffToMonday, 0, 0, 0) / 1000
+    );
+  }
+
+  const periodSec = getTimeframePeriodSeconds(tf);
+  return Math.floor(timeSec / periodSec) * periodSec;
+}
+
+/**
+ * Sorts, aligns to timeframe bar boundaries, and deduplicates candles chronologically.
+ * If multiple candles fall into the same timeframe bucket (e.g., intra-bar 1m refresh on a 4h chart),
+ * they are folded into a single bar at the bucket opening timestamp.
+ */
+export function sanitizeCandles(candles: Candle[], timeframeOverride?: string): Candle[] {
   if (!candles || candles.length === 0) return [];
   const map = new Map<number, Candle>();
   for (const c of candles) {
@@ -75,21 +129,43 @@ export function sanitizeCandles(candles: Candle[]): Candle[] {
     const safeHigh = Math.max(high, open, close);
     const safeLow = Math.min(low, open, close);
 
-    const safeCandle: Candle = {
-      ...c,
-      open,
-      high: safeHigh,
-      low: safeLow,
-      close,
-      volume: Number(c.volume) || 100,
-    };
+    const rawSec = getCandleTimeSeconds(c.timestamp);
+    const effectiveTf = timeframeOverride || c.timeframe;
+    const alignedSec = alignTimeSecondsToTimeframe(rawSec, effectiveTf);
+    const alignedIso = new Date(alignedSec * 1000).toISOString();
 
-    const t = getCandleTimeSeconds(c.timestamp);
-    map.set(t, safeCandle);
+    const existing = map.get(alignedSec);
+    if (!existing) {
+      map.set(alignedSec, {
+        ...c,
+        timeframe: (effectiveTf as any) || c.timeframe,
+        timestamp: alignedIso,
+        open,
+        high: safeHigh,
+        low: safeLow,
+        close,
+        volume: Number(c.volume) || 100,
+      });
+    } else {
+      const mergedOpen = existing.open;
+      const mergedClose = close;
+      const mergedHigh = Math.max(existing.high, safeHigh, mergedOpen, mergedClose);
+      const mergedLow = Math.min(existing.low, safeLow, mergedOpen, mergedClose);
+      map.set(alignedSec, {
+        ...c,
+        timeframe: (effectiveTf as any) || c.timeframe,
+        timestamp: alignedIso,
+        open: mergedOpen,
+        high: mergedHigh,
+        low: mergedLow,
+        close: mergedClose,
+        volume: Math.max(existing.volume, Number(c.volume) || 100),
+      });
+    }
   }
-  return Array.from(map.values()).sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  );
+  return Array.from(map.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map((e) => e[1]);
 }
 
 /**

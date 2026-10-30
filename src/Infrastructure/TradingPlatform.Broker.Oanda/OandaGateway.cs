@@ -262,8 +262,24 @@ public class OandaGateway : IMarketDataStreamer, IOrderExecutionService, IHistor
         return await _resiliencePipeline.ExecuteAsync(async innerCt =>
         {
             var parsedTimeframe = Enum.TryParse<Timeframe>(timeframe, true, out var tf) ? tf : Timeframe.M5;
+            var barSecs = parsedTimeframe switch
+            {
+                Timeframe.M1 => 60L,
+                Timeframe.M5 => 300L,
+                Timeframe.M15 => 900L,
+                Timeframe.M30 => 1800L,
+                Timeframe.H1 => 3600L,
+                Timeframe.H4 => 14400L,
+                Timeframe.D1 => 86400L,
+                Timeframe.W1 => 604800L,
+                Timeframe.MN1 => 2592000L,
+                _ => 300L
+            };
+            long nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            long alignedUnix = (nowUnix / barSecs) * barSecs;
+            var anchorTime = DateTimeOffset.FromUnixTimeSeconds(alignedUnix).UtcDateTime;
+            var baseTime = anchorTime.AddSeconds(-barSecs * (count - 1));
             var list = new List<Candle>();
-            var baseTime = DateTime.UtcNow.AddMinutes(-5 * count);
             decimal currentClose = 1.0500m;
 
             for (int i = 0; i < count; i++)
@@ -278,13 +294,13 @@ public class OandaGateway : IMarketDataStreamer, IOrderExecutionService, IHistor
                 list.Add(new Candle(
                     symbol,
                     parsedTimeframe,
-                    baseTime.AddMinutes(5 * i),
+                    baseTime.AddSeconds(barSecs * i),
                     open,
                     high,
                     low,
                     close,
                     volume,
-                    isComplete: true));
+                    isComplete: i < count - 1));
 
                 currentClose = close;
             }

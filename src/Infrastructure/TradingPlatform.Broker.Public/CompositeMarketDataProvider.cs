@@ -316,12 +316,19 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             return syn;
         }
 
-        var barDuration = DeterministicMarketDataSynthesizer.GetTimeframeDuration(timeframe);
-        long barTicks = barDuration.Ticks;
-        long alignedTicks = (nowUtc.Ticks / barTicks) * barTicks;
-        var currentBarTime = new DateTime(alignedTicks, DateTimeKind.Utc);
+        var currentBarTime = DeterministicMarketDataSynthesizer.AlignToTimeframeBoundaryUtc(nowUtc, timeframe);
 
-        var list = new List<Candle>(candles);
+        var list = DeterministicMarketDataSynthesizer.AggregateAndAlignCandles(candles, symbol, timeframe, nowUtc);
+        if (list.Count == 0)
+        {
+            var syn = DeterministicMarketDataSynthesizer.GenerateDeterministicCandles(symbol, timeframe, count, nowUtc);
+            if (syn.Count > 0)
+            {
+                _latestQuotes[symbol.ToUpperInvariant()] = syn[^1].Close;
+            }
+            return syn;
+        }
+
         var lastCandle = list[^1];
         int decimals = DeterministicMarketDataSynthesizer.GetDecimals(symbol, lastCandle.Close);
         double volatility = (double)lastCandle.Close * (symbol.Contains("JPY") || lastCandle.Close > 100m ? 0.0006 : 0.0003);
@@ -344,7 +351,7 @@ public class CompositeMarketDataProvider : IHistoricalDataProvider
             list[^1] = new Candle(
                 symbol: symbol,
                 timeframe: timeframe,
-                timestamp: lastCandle.Timestamp,
+                timestamp: currentBarTime,
                 open: open,
                 high: high,
                 low: low,

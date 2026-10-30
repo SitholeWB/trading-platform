@@ -37,7 +37,7 @@ import {
   StrategyDefinition,
   Timeframe,
 } from './types/trading';
-import { getCandleTimeSeconds } from './utils/indicators';
+import { alignTimeSecondsToTimeframe, getCandleTimeSeconds } from './utils/indicators';
 
 const VALID_PAGES: PageId[] = ['dashboard', 'scanner', 'strategies', 'radar', 'positions', 'sandbox', 'chart', 'docs'];
 
@@ -433,10 +433,56 @@ export function App() {
     candlesRef.current = candles;
   }, [candles]);
 
-  const mergeCandles = (a: Candle[], b: Candle[]): Candle[] => {
+  const mergeCandles = (a: Candle[], b: Candle[], tfOverride?: Timeframe): Candle[] => {
     const map = new Map<number, Candle>();
-    a.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
-    b.forEach((c) => map.set(getCandleTimeSeconds(c.timestamp), c));
+    const effectiveTf = tfOverride || timeframeRef.current;
+
+    const putCandle = (c: Candle, isIncomingRefresh: boolean) => {
+      if (!c || !c.timestamp) return;
+      const alignedSec = alignTimeSecondsToTimeframe(getCandleTimeSeconds(c.timestamp), effectiveTf);
+      const alignedIso = new Date(alignedSec * 1000).toISOString();
+      const normalized: Candle = {
+        ...c,
+        timeframe: effectiveTf,
+        timestamp: alignedIso,
+      };
+      const existing = map.get(alignedSec);
+      if (!existing) {
+        map.set(alignedSec, normalized);
+      } else if (isIncomingRefresh) {
+        // Incoming live poll bar for the same timeframe bucket: preserve initial open & extremes while updating close
+        const open = existing.open;
+        const close = normalized.close;
+        const high = Math.max(existing.high, normalized.high, open, close);
+        const low = Math.min(existing.low, normalized.low, open, close);
+        map.set(alignedSec, {
+          ...normalized,
+          open,
+          high,
+          low,
+          close,
+          volume: Math.max(existing.volume, normalized.volume),
+        });
+      } else {
+        // Deduplicating within the same array (e.g., aggregating intra-bar ticks)
+        const open = existing.open;
+        const close = normalized.close;
+        const high = Math.max(existing.high, normalized.high, open, close);
+        const low = Math.min(existing.low, normalized.low, open, close);
+        map.set(alignedSec, {
+          ...normalized,
+          open,
+          high,
+          low,
+          close,
+          volume: existing.volume + normalized.volume,
+        });
+      }
+    };
+
+    a.forEach((c) => putCandle(c, false));
+    b.forEach((c) => putCandle(c, true));
+
     return Array.from(map.entries())
       .sort((x, y) => x[0] - y[0])
       .map((e) => e[1]);
@@ -455,7 +501,9 @@ export function App() {
       if (targetKey !== `${selectedSymbolRef.current}|${timeframeRef.current}|${activeProviderRef.current}`) return;
       if (realCandles && realCandles.length > 0) {
         // Initial load replaces; live polls merge (overwriting the forming bar with the latest quote price)
-        setCandles((prev) => (isInitial ? mergeCandles([], realCandles) : mergeCandles(prev, realCandles)));
+        setCandles((prev) =>
+          isInitial ? mergeCandles([], realCandles, targetTimeframe) : mergeCandles(prev, realCandles, targetTimeframe)
+        );
       }
     } catch (err) {
       console.warn('Live candles fetch warning:', err);
@@ -535,7 +583,7 @@ export function App() {
         return { loaded: 0, total: current.length, boundaryTime: oldestSec };
       }
 
-      const merged = mergeCandles(strictlyOlder, candlesRef.current);
+      const merged = mergeCandles(strictlyOlder, candlesRef.current, timeframe);
       candlesRef.current = merged;
       setCandles(merged);
       return { loaded: merged.length - current.length, total: merged.length, boundaryTime: oldestSec };
@@ -1128,7 +1176,7 @@ export function App() {
         isOpen={isFeedbackOpen}
         onClose={() => setIsFeedbackOpen(false)}
         activeProvider={activeProvider}
-        appVersion="1.4.1"
+        appVersion="1.4.2"
       />
 
       {/* About Trading Platform Modal */}

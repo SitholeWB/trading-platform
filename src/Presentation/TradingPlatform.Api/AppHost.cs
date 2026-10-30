@@ -437,7 +437,7 @@ public static class AppHost
                     Description = "100% Free, zero-setup, multi-timeframe candles (~1m delay). Authenticated Crumb Session & Auto-Failover active.",
                     RequiresKey = false,
                     IsConfigured = true,
-                    SupportedTimeframes = new[] { "M1", "M5", "M15", "M30", "H1", "D1", "W1", "MN1" }
+                    SupportedTimeframes = new[] { "M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN1" }
                 },
                 new
                 {
