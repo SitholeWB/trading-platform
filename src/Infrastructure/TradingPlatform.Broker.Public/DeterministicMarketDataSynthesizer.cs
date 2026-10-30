@@ -408,11 +408,38 @@ public static class DeterministicMarketDataSynthesizer
     public static int GetDecimals(string symbol, decimal price)
     {
         var s = symbol.ToUpperInvariant();
-        if (s.Contains("JPY")) return 3;
-        if (price >= 1000m) return 2;
-        if (price >= 50m) return 2;
-        if (s.Length == 6 || s.Contains('/')) return 5;
-        return 4;
+
+        // 1. Inspect the actual decimal scale of the price returned by the feed
+        var normalized = price.ToString("0.##########", System.Globalization.CultureInfo.InvariantCulture);
+        var dotIdx = normalized.IndexOf('.');
+        var observedDecimals = dotIdx >= 0 ? normalized.Length - dotIdx - 1 : 0;
+
+        // 2. Baseline minimum precision by asset class & price magnitude
+        int baselineDecimals;
+        if (s.Contains("JPY"))
+        {
+            baselineDecimals = 3;
+        }
+        else if (price > 0m && price < 1m)
+        {
+            // Sub-dollar tokens / micro-cap assets: scale dynamically with magnitude (up to 10 decimals)
+            var leadingZeros = (int)Math.Ceiling(-Math.Log10((double)price));
+            baselineDecimals = Math.Clamp(leadingZeros + 4, 5, 10);
+        }
+        else if (price >= 50m)
+        {
+            baselineDecimals = 2;
+        }
+        else if (s.Length == 6 || s.Contains('/'))
+        {
+            baselineDecimals = 5;
+        }
+        else
+        {
+            baselineDecimals = 4;
+        }
+
+        return Math.Clamp(Math.Max(observedDecimals, baselineDecimals), 2, 10);
     }
 
     public static decimal GetBaselinePrice(string symbol)

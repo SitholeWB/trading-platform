@@ -737,7 +737,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     // Dynamic Symbol Precision & Minimum Move Price Format
     const samplePrice = cleanCandles.length > 0 ? cleanCandles[cleanCandles.length - 1].close : undefined;
-    const priceFormatConfig = getSymbolPriceFormat(symbol, samplePrice);
+    const recentPrices = cleanCandles.slice(-20).flatMap((c) => [c.open, c.high, c.low, c.close]);
+    const priceFormatConfig = getSymbolPriceFormat(symbol, samplePrice, recentPrices);
 
     // A. Recreate Main Series if chartType changed or doesn't exist
     const needsNewSeries = !mainSeriesRef.current || currentChartTypeRef.current !== chartType;

@@ -97,7 +97,8 @@ export const SecondaryChartPane: React.FC<SecondaryChartPaneProps> = ({
     chartRef.current = chart;
 
     const samplePrice = candles.length > 0 ? candles[candles.length - 1].close : undefined;
-    const priceFormatConfig = getSymbolPriceFormat(symbol, samplePrice);
+    const recentPrices = candles.slice(-20).flatMap((c) => [c.open, c.high, c.low, c.close]);
+    const priceFormatConfig = getSymbolPriceFormat(symbol, samplePrice, recentPrices);
 
     const series = chart.addCandlestickSeries({
       upColor: '#10b981',
@@ -141,7 +142,8 @@ export const SecondaryChartPane: React.FC<SecondaryChartPaneProps> = ({
   useEffect(() => {
     if (!seriesRef.current || candles.length === 0) return;
     const samplePrice = candles.length > 0 ? candles[candles.length - 1].close : undefined;
-    const priceFormatConfig = getSymbolPriceFormat(symbol, samplePrice);
+    const recentPrices = candles.slice(-20).flatMap((c) => [c.open, c.high, c.low, c.close]);
+    const priceFormatConfig = getSymbolPriceFormat(symbol, samplePrice, recentPrices);
     seriesRef.current.applyOptions({ priceFormat: priceFormatConfig });
     emaSeriesRef.current?.applyOptions({ priceFormat: priceFormatConfig });
     try {

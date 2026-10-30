@@ -37,7 +37,7 @@ import {
   StrategyDefinition,
   Timeframe,
 } from './types/trading';
-import { alignTimeSecondsToTimeframe, getCandleTimeSeconds } from './utils/indicators';
+import { alignTimeSecondsToTimeframe, formatPrice, getCandleTimeSeconds } from './utils/indicators';
 
 const VALID_PAGES: PageId[] = ['dashboard', 'scanner', 'strategies', 'radar', 'positions', 'sandbox', 'chart', 'docs'];
 
@@ -933,19 +933,15 @@ export function App() {
                       let isUp = item.defaultUp;
 
                       if (quote) {
-                        displayPrice = quote.price >= 100
+                        displayPrice = quote.price >= 1000
                           ? quote.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                          : quote.price > 10
-                          ? quote.price.toFixed(3)
-                          : quote.price.toFixed(quote.decimals || 5);
+                          : formatPrice(quote.price, item.s);
                         displayChange = `${quote.changePct >= 0 ? '+' : ''}${quote.changePct.toFixed(2)}%`;
                         isUp = quote.isPositive;
                       } else if (item.s === selectedSymbol && currentPrice) {
-                        displayPrice = currentPrice >= 100
+                        displayPrice = currentPrice >= 1000
                           ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                          : currentPrice > 10
-                          ? currentPrice.toFixed(3)
-                          : currentPrice.toFixed(5);
+                          : formatPrice(currentPrice, item.s);
                       }
 
                       return (

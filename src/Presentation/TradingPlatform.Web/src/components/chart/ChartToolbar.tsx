@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ChartType, ChartLayoutMode } from './types';
 import { Timeframe } from '../../types/trading';
+import { formatPrice } from '../../utils/indicators';
 
 interface ChartToolbarProps {
   symbol: string;
@@ -138,11 +139,9 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
 
   const badge = getCategoryBadge(symbol);
   const currentChartType = chartTypes.find((t) => t.id === chartType) || chartTypes[0];
-  const formattedPrice = currentPrice >= 100
+  const formattedPrice = currentPrice >= 1000
     ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : currentPrice > 10
-    ? currentPrice.toFixed(3)
-    : currentPrice.toFixed(5);
+    : formatPrice(currentPrice, symbol);
 
   return (
     <div className="relative">
@@ -343,37 +342,41 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
 
         {/* Right Segment: Chart Engine Switcher, Load History, Split, Trade, Tools */}
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
-          {/* Segmented Toggle: Native Bot Chart vs TradingView Live Widget */}
+          {/* Prominent Segmented Toggle: Native Bot Chart vs TradingView Live Widget */}
           {onChartEngineChange && (
             <div
-              className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex-shrink-0"
+              className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-indigo-500/50 shadow-[0_0_14px_rgba(99,102,241,0.28)] ring-1 ring-indigo-500/20 flex-shrink-0"
               title="Switch between Native Algorithmic Bot Chart and Official TradingView Live Widget"
             >
               <button
                 type="button"
                 onClick={() => onChartEngineChange('native')}
-                className={`px-2 py-0.5 rounded-md text-[11px] font-sans font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md text-[11px] font-sans flex items-center gap-1.5 transition-all cursor-pointer ${
                   chartEngine === 'native'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold shadow-md shadow-blue-500/30 border border-blue-400/40'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/80 font-semibold border border-transparent'
                 }`}
                 title="Native Bot Chart (Supports Bot Signals, Position SL/TP Dragging & Custom Drawings)"
               >
-                <Cpu className="w-3 h-3 flex-shrink-0" />
-                <span className="hidden md:inline">Bot Chart</span>
+                <Cpu className={`w-3.5 h-3.5 flex-shrink-0 ${chartEngine === 'native' ? 'text-cyan-200' : 'text-blue-400'}`} />
+                <span className="whitespace-nowrap">Bot Chart</span>
               </button>
               <button
                 type="button"
                 onClick={() => onChartEngineChange('tradingview')}
-                className={`px-2 py-0.5 rounded-md text-[11px] font-sans font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md text-[11px] font-sans flex items-center gap-1.5 transition-all cursor-pointer ${
                   chartEngine === 'tradingview'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-bold shadow-md shadow-purple-500/30 border border-purple-400/40'
+                    : 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200 hover:text-white font-bold border border-indigo-500/30'
                 }`}
                 title="TradingView Live Widget (Direct Real-Time TradingView Feed & Built-in Studies)"
               >
-                <Globe className="w-3 h-3 flex-shrink-0" />
-                <span className="hidden md:inline">TradingView Live</span>
+                <Globe className={`w-3.5 h-3.5 flex-shrink-0 ${chartEngine === 'tradingview' ? 'text-pink-200' : 'text-indigo-400'}`} />
+                <span className="whitespace-nowrap">TradingView</span>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-mono font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  LIVE
+                </span>
               </button>
             </div>
           )}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Position } from '../types/trading';
+import { formatPrice } from '../utils/indicators';
 
 interface PositionsManagerProps {
   positions: Position[];
@@ -79,10 +80,10 @@ export const PositionsManager: React.FC<PositionsManagerProps> = ({
                       </span>
                     </td>
                     <td className="py-2 px-3 text-slate-300">{pos.lots.toFixed(2)}</td>
-                    <td className="py-2 px-3 text-slate-300">{pos.entryPrice.toFixed(5)}</td>
-                    <td className="py-2 px-3 text-slate-200 font-bold">{pos.currentPrice.toFixed(5)}</td>
+                    <td className="py-2 px-3 text-slate-300">{formatPrice(pos.entryPrice, pos.symbol)}</td>
+                    <td className="py-2 px-3 text-slate-200 font-bold">{formatPrice(pos.currentPrice, pos.symbol)}</td>
                     <td className="py-2 px-3 text-[11px] text-slate-400">
-                      SL: {pos.stopLossPrice?.toFixed(5) ?? 'None'} | TP: {pos.takeProfitPrice?.toFixed(5) ?? 'None'}
+                      SL: {pos.stopLossPrice != null ? formatPrice(pos.stopLossPrice, pos.symbol) : 'None'} | TP: {pos.takeProfitPrice != null ? formatPrice(pos.takeProfitPrice, pos.symbol) : 'None'}
                     </td>
                     <td
                       className={`py-2 px-3 text-right font-bold ${

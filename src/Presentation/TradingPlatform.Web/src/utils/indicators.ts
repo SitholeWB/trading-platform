@@ -169,11 +169,88 @@ export function sanitizeCandles(candles: Candle[], timeframeOverride?: string): 
 }
 
 /**
+ * Counts the actual meaningful decimal places present in a numeric price from the data feed
+ * (ignoring IEEE-754 floating point tail noise).
+ */
+export function countObservedDecimals(value?: number): number {
+  if (value === undefined || value === null || !Number.isFinite(value) || value === 0) return 0;
+  const cleanStr = Number(Math.abs(value).toPrecision(12)).toString();
+  if (cleanStr.includes('e-')) {
+    const [mantissa, expStr] = cleanStr.split('e-');
+    const exp = parseInt(expStr, 10) || 0;
+    const fracLen = (mantissa.split('.')[1] || '').length;
+    return Math.min(10, exp + fracLen);
+  }
+  const dotIdx = cleanStr.indexOf('.');
+  return dotIdx === -1 ? 0 : Math.min(10, cleanStr.length - dotIdx - 1);
+}
+
+/**
+ * Dynamically determines the decimal precision for any symbol and price level.
+ * Never hard-caps at 4 or 5 decimals: if a symbol or feed has 6, 8, or 10 decimals,
+ * or trades at sub-cent / micro-cap levels, full precision is preserved.
+ */
+export function getSymbolDigits(symbol: string, samplePrice?: number): number {
+  const s = (symbol || '').toUpperCase();
+  const observed = countObservedDecimals(samplePrice);
+
+  // 1. Sub-dollar / micro-price dynamic scaling (supports 6, 8, 10+ decimals automatically)
+  if (samplePrice !== undefined && Number.isFinite(samplePrice) && samplePrice > 0 && samplePrice < 1) {
+    const leadingZeros = Math.max(0, Math.ceil(-Math.log10(samplePrice)));
+    // Keep at least 4–5 significant digits after leading zeros (e.g. 0.00001842 -> 8-9 decimals)
+    const magnitudeDigits = Math.min(10, Math.max(5, leadingZeros + 4));
+    return Math.max(observed, magnitudeDigits);
+  }
+
+  // 2. Baseline minimum precision by asset class / price magnitude
+  let minBaseline = 5;
+  if (s.includes('JPY')) {
+    minBaseline = 3;
+  } else if (
+    s.includes('US500') ||
+    s.includes('SPX') ||
+    s.includes('NAS100') ||
+    s.includes('NDX') ||
+    s.includes('US30') ||
+    s.includes('DJI') ||
+    s.includes('GER40') ||
+    s.includes('DAX') ||
+    s.includes('UK100') ||
+    s.includes('JP225') ||
+    s.includes('US2000') ||
+    s.startsWith('^') ||
+    s.includes('XAU') ||
+    s.includes('GOLD') ||
+    s.includes('OIL') ||
+    s.includes('BRENT') ||
+    s.includes('WTI')
+  ) {
+    minBaseline = 2;
+  } else if (s.includes('XAG') || s.includes('SILVER') || s.includes('NATGAS') || s.includes('GAS') || s.includes('COPPER')) {
+    minBaseline = 3;
+  } else if (samplePrice !== undefined && samplePrice >= 100) {
+    minBaseline = 2;
+  } else if (samplePrice !== undefined && samplePrice >= 10 && !s.includes('ZAR') && !s.includes('MXN')) {
+    minBaseline = 2;
+  }
+
+  return Math.min(10, Math.max(observed, minBaseline));
+}
+
+function roundToDynamicPrecision(value: number, symbol?: string, referencePrice?: number): number {
+  if (!Number.isFinite(value)) return 0;
+  const digits = Math.max(getSymbolDigits(symbol || '', referencePrice ?? value), 5);
+  return Number(value.toFixed(Math.min(10, digits)));
+}
+
+/**
  * Simple Moving Average (SMA)
  */
 export function calculateSMA(candles: Candle[], period: number): IndicatorPoint[] {
   const result: IndicatorPoint[] = [];
   if (candles.length < period || period <= 0) return result;
+  const sym = candles[0]?.symbol;
+  const refPrice = candles[candles.length - 1]?.close;
 
   let sum = 0;
   for (let i = 0; i < candles.length; i++) {
@@ -184,7 +261,7 @@ export function calculateSMA(candles: Candle[], period: number): IndicatorPoint[
     if (i >= period - 1) {
       result.push({
         time: getCandleTimeSeconds(candles[i].timestamp),
-        value: Number((sum / period).toFixed(5)),
+        value: roundToDynamicPrecision(sum / period, sym, refPrice),
       });
     }
   }
@@ -197,6 +274,8 @@ export function calculateSMA(candles: Candle[], period: number): IndicatorPoint[
 export function calculateEMA(candles: Candle[], period: number): IndicatorPoint[] {
   const result: IndicatorPoint[] = [];
   if (candles.length < period || period <= 0) return result;
+  const sym = candles[0]?.symbol;
+  const refPrice = candles[candles.length - 1]?.close;
 
   const multiplier = 2 / (period + 1);
 
@@ -208,7 +287,7 @@ export function calculateEMA(candles: Candle[], period: number): IndicatorPoint[
   let prevEma = initialSum / period;
   result.push({
     time: getCandleTimeSeconds(candles[period - 1].timestamp),
-    value: Number(prevEma.toFixed(5)),
+    value: roundToDynamicPrecision(prevEma, sym, refPrice),
   });
 
   for (let i = period; i < candles.length; i++) {
@@ -216,7 +295,7 @@ export function calculateEMA(candles: Candle[], period: number): IndicatorPoint[
     const currentEma = (currentPrice - prevEma) * multiplier + prevEma;
     result.push({
       time: getCandleTimeSeconds(candles[i].timestamp),
-      value: Number(currentEma.toFixed(5)),
+      value: roundToDynamicPrecision(currentEma, sym, refPrice),
     });
     prevEma = currentEma;
   }
@@ -239,6 +318,8 @@ export function calculateBollingerBands(
   if (candles.length < period || period <= 0) {
     return { upper, middle, lower };
   }
+  const sym = candles[0]?.symbol;
+  const refPrice = candles[candles.length - 1]?.close;
 
   for (let i = period - 1; i < candles.length; i++) {
     const window = candles.slice(i - period + 1, i + 1);
@@ -248,9 +329,9 @@ export function calculateBollingerBands(
     const stdDev = Math.sqrt(variance);
 
     const time = getCandleTimeSeconds(candles[i].timestamp);
-    middle.push({ time, value: Number(mean.toFixed(5)) });
-    upper.push({ time, value: Number((mean + stdDev * stdDevMultiplier).toFixed(5)) });
-    lower.push({ time, value: Number((mean - stdDev * stdDevMultiplier).toFixed(5)) });
+    middle.push({ time, value: roundToDynamicPrecision(mean, sym, refPrice) });
+    upper.push({ time, value: roundToDynamicPrecision(mean + stdDev * stdDevMultiplier, sym, refPrice) });
+    lower.push({ time, value: roundToDynamicPrecision(mean - stdDev * stdDevMultiplier, sym, refPrice) });
   }
 
   return { upper, middle, lower };
@@ -510,17 +591,19 @@ export function calculateATR(candles: Candle[], period: number = 14): IndicatorP
     trueRanges.push({ time: getCandleTimeSeconds(curr.timestamp), tr });
   }
 
+  const sym = candles[0]?.symbol;
+  const refPrice = candles[candles.length - 1]?.close;
   let atr = trueRanges.slice(0, period).reduce((acc, x) => acc + x.tr, 0) / period;
   result.push({
     time: trueRanges[period - 1].time,
-    value: Number(atr.toFixed(5)),
+    value: roundToDynamicPrecision(atr, sym, refPrice),
   });
 
   for (let i = period; i < trueRanges.length; i++) {
     atr = (atr * (period - 1) + trueRanges[i].tr) / period;
     result.push({
       time: trueRanges[i].time,
-      value: Number(atr.toFixed(5)),
+      value: roundToDynamicPrecision(atr, sym, refPrice),
     });
   }
 
@@ -533,6 +616,8 @@ export function calculateATR(candles: Candle[], period: number = 14): IndicatorP
 export function calculateVWAP(candles: Candle[]): IndicatorPoint[] {
   const result: IndicatorPoint[] = [];
   if (candles.length === 0) return result;
+  const sym = candles[0]?.symbol;
+  const refPrice = candles[candles.length - 1]?.close;
 
   let cumTypicalVolume = 0;
   let cumVolume = 0;
@@ -548,7 +633,7 @@ export function calculateVWAP(candles: Candle[]): IndicatorPoint[] {
     const vwap = cumTypicalVolume / cumVolume;
     result.push({
       time: getCandleTimeSeconds(c.timestamp),
-      value: Number(vwap.toFixed(5)),
+      value: roundToDynamicPrecision(vwap, sym, refPrice),
     });
   }
 
@@ -565,6 +650,8 @@ export function calculateSupertrend(
 ): SupertrendPoint[] {
   const result: SupertrendPoint[] = [];
   if (candles.length <= period) return result;
+  const sym = candles[0]?.symbol;
+  const refPrice = candles[candles.length - 1]?.close;
 
   const atrs = calculateATR(candles, period);
   const atrMap = new Map<number, number>();
@@ -603,7 +690,7 @@ export function calculateSupertrend(
     const value = trend === 'bull' ? finalLower : finalUpper;
     result.push({
       time: t,
-      value: Number(value.toFixed(5)),
+      value: roundToDynamicPrecision(value, sym, refPrice),
       direction: trend,
     });
 
@@ -628,6 +715,8 @@ export function calculateIchimoku(
   const kijun: IndicatorPoint[] = [];
   const spanA: IndicatorPoint[] = [];
   const spanB: IndicatorPoint[] = [];
+  const sym = candles[0]?.symbol;
+  const refPrice = candles[candles.length - 1]?.close;
 
   const getMidPrice = (slice: Candle[]) => {
     const h = Math.max(...slice.map((c) => c.high));
@@ -640,23 +729,23 @@ export function calculateIchimoku(
 
     if (i >= tenkanPeriod - 1) {
       const val = getMidPrice(candles.slice(i - tenkanPeriod + 1, i + 1));
-      tenkan.push({ time, value: Number(val.toFixed(5)) });
+      tenkan.push({ time, value: roundToDynamicPrecision(val, sym, refPrice) });
     }
 
     if (i >= kijunPeriod - 1) {
       const val = getMidPrice(candles.slice(i - kijunPeriod + 1, i + 1));
-      kijun.push({ time, value: Number(val.toFixed(5)) });
+      kijun.push({ time, value: roundToDynamicPrecision(val, sym, refPrice) });
     }
 
     if (i >= kijunPeriod - 1 && tenkan.length > 0 && kijun.length > 0) {
       const tVal = tenkan[tenkan.length - 1].value;
       const kVal = kijun[kijun.length - 1].value;
-      spanA.push({ time, value: Number(((tVal + kVal) / 2).toFixed(5)) });
+      spanA.push({ time, value: roundToDynamicPrecision((tVal + kVal) / 2, sym, refPrice) });
     }
 
     if (i >= senkouPeriod - 1) {
       const val = getMidPrice(candles.slice(i - senkouPeriod + 1, i + 1));
-      spanB.push({ time, value: Number(val.toFixed(5)) });
+      spanB.push({ time, value: roundToDynamicPrecision(val, sym, refPrice) });
     }
   }
 
@@ -669,6 +758,8 @@ export function calculateIchimoku(
 export function calculateHeikinAshi(candles: Candle[]): Candle[] {
   if (!candles || candles.length === 0) return [];
   const haCandles: Candle[] = [];
+  const sym = candles[0]?.symbol;
+  const refPrice = candles[candles.length - 1]?.close;
 
   let prevHaOpen = candles[0].open;
   let prevHaClose = candles[0].close;
@@ -684,10 +775,10 @@ export function calculateHeikinAshi(candles: Candle[]): Candle[] {
       symbol: c.symbol,
       timeframe: c.timeframe,
       timestamp: c.timestamp,
-      open: Number(haOpen.toFixed(5)),
-      high: Number(haHigh.toFixed(5)),
-      low: Number(haLow.toFixed(5)),
-      close: Number(haClose.toFixed(5)),
+      open: roundToDynamicPrecision(haOpen, sym, refPrice),
+      high: roundToDynamicPrecision(haHigh, sym, refPrice),
+      low: roundToDynamicPrecision(haLow, sym, refPrice),
+      close: roundToDynamicPrecision(haClose, sym, refPrice),
       volume: c.volume,
       isComplete: c.isComplete,
     });
@@ -699,80 +790,19 @@ export function calculateHeikinAshi(candles: Candle[]): Candle[] {
   return haCandles;
 }
 
-/**
- * Symbol formatting utilities & price precision
- */
-export function getSymbolDigits(symbol: string, samplePrice?: number): number {
-  const s = (symbol || '').toUpperCase();
-
-  // If a sample price is provided and is extremely low (crypto penny tokens)
-  if (samplePrice !== undefined && samplePrice > 0) {
-    if (samplePrice < 0.001) return 6;
-    if (samplePrice < 1) return 5;
-    if (samplePrice < 10 && !s.includes('OIL') && !s.includes('GAS')) return 4;
-  }
-
-  // 1. Forex JPY Crosses (USDJPY, EURJPY, GBPJPY, AUDJPY, CADJPY, NZDJPY, CHFJPY) -> 3 decimals (pipettes)
-  if (s.includes('JPY')) {
-    return 3;
-  }
-
-  // 2. Global Stock Indices (US500, NAS100, US30, GER40, UK100, JP225, US2000, SPX, etc.) -> 2 decimals
-  if (
-    s.includes('US500') ||
-    s.includes('SPX') ||
-    s.includes('NAS100') ||
-    s.includes('NDX') ||
-    s.includes('US30') ||
-    s.includes('DJI') ||
-    s.includes('GER40') ||
-    s.includes('DAX') ||
-    s.includes('UK100') ||
-    s.includes('JP225') ||
-    s.includes('US2000') ||
-    s.startsWith('^')
-  ) {
-    return 2;
-  }
-
-  // 3. Commodities & Energy
-  if (s.includes('XAU') || s.includes('GOLD')) return 2;
-  if (s.includes('XAG') || s.includes('SILVER')) return 3;
-  if (s.includes('OIL') || s.includes('BRENT') || s.includes('WTI')) return 2;
-  if (s.includes('NATGAS') || s.includes('GAS') || s.includes('COPPER')) return 3;
-
-  // 4. Large-Cap Cryptocurrencies
-  if (s.includes('BTC') || s.includes('ETH') || s.includes('SOL') || s.includes('BNB') || s.includes('AVAX')) {
-    return 2;
-  }
-  if (s.includes('DOGE') || s.includes('SHIB') || s.includes('PEPE')) {
-    return 5;
-  }
-  if (s.includes('XRP') || s.includes('ADA') || s.includes('LINK') || s.includes('DOT') || s.includes('MATIC')) {
-    return 4;
-  }
-
-  // 5. Equities / Stocks (e.g. AAPL, NVDA, TSLA, MSFT, AMZN, GOOGL, META)
-  if (
-    ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'GOOGL', 'META', 'AMD', 'NFLX', 'INTC', 'BABA', 'PLTR'].includes(s) ||
-    (samplePrice !== undefined && samplePrice >= 10 && !s.includes('EUR') && !s.includes('GBP') && !s.includes('AUD') && !s.includes('NZD') && !s.includes('CAD') && !s.includes('CHF') && !s.includes('USD'))
-  ) {
-    return 2;
-  }
-
-  // 6. Standard Forex Pairs (EURUSD, GBPUSD, AUDUSD, USDCAD, USDCHF, NZDUSD, EURGBP, etc.)
-  // Institutional standard is 5 decimal places (fractional pips / pipettes)
-  return 5;
-}
-
 export function formatPrice(price: number, symbol: string): string {
   if (typeof price !== 'number' || isNaN(price)) return '0.00';
   const digits = getSymbolDigits(symbol, price);
   return price.toFixed(digits);
 }
 
-export function getSymbolPriceFormat(symbol: string, samplePrice?: number) {
-  const precision = getSymbolDigits(symbol, samplePrice);
+export function getSymbolPriceFormat(symbol: string, samplePrice?: number, extraPrices?: number[]) {
+  let precision = getSymbolDigits(symbol, samplePrice);
+  if (extraPrices && extraPrices.length > 0) {
+    for (const p of extraPrices) {
+      precision = Math.max(precision, getSymbolDigits(symbol, p));
+    }
+  }
   const minMove = Number(Math.pow(10, -precision).toFixed(precision));
   return {
     type: 'price' as const,

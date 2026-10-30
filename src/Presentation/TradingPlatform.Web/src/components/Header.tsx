@@ -5,6 +5,7 @@ import { useTimezone } from '../context/TimezoneContext';
 import { useLanguage } from '../context/LanguageContext';
 import { TimezoneSelectorModal } from './TimezoneSelectorModal';
 import { LanguageSelectorModal } from './LanguageSelectorModal';
+import { formatPrice } from '../utils/indicators';
 
 interface HeaderProps {
   pageTitle: string;
@@ -63,11 +64,9 @@ export const Header: React.FC<HeaderProps> = ({
       ? 'text-amber-400'
       : 'text-emerald-400';
 
-  const formattedPrice = currentPrice >= 100
+  const formattedPrice = currentPrice >= 1000
     ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : currentPrice > 10
-    ? currentPrice.toFixed(3)
-    : currentPrice.toFixed(5);
+    : formatPrice(currentPrice, selectedSymbol);
 
   return (
     <header className="h-13 min-h-[52px] bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 select-none flex-shrink-0 z-10">
