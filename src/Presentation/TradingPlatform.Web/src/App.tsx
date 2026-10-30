@@ -1176,7 +1176,7 @@ export function App() {
         isOpen={isFeedbackOpen}
         onClose={() => setIsFeedbackOpen(false)}
         activeProvider={activeProvider}
-        appVersion="1.4.3"
+        appVersion="1.4.4"
       />
 
       {/* About Trading Platform Modal */}

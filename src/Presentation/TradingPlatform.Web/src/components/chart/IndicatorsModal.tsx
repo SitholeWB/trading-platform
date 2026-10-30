@@ -158,7 +158,7 @@ export const IndicatorsModal: React.FC<IndicatorsModalProps> = ({
               Technical Indicators & Oscillators
             </span>
             <span className="text-[10px] bg-blue-500/10 text-blue-400 font-mono px-2 py-0.5 rounded border border-blue-500/20">
-              TradingView Spec
+              Institutional Spec
             </span>
           </div>
           <button

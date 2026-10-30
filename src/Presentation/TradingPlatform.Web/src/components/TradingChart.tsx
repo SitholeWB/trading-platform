@@ -566,6 +566,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         textColor: '#94a3b8',
         fontFamily: "'JetBrains Mono', 'Fira Code', -apple-system, BlinkMacSystemFont, monospace",
         fontSize: 11,
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: 'rgba(30, 41, 59, 0.45)', style: LineStyle.Dotted },
@@ -1144,6 +1145,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         textColor: '#64748b',
         fontFamily: "'JetBrains Mono', monospace",
         fontSize: 10,
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: 'rgba(30, 41, 59, 0.3)' },
@@ -1260,6 +1262,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         textColor: '#64748b',
         fontFamily: "'JetBrains Mono', monospace",
         fontSize: 10,
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: 'rgba(30, 41, 59, 0.3)' },

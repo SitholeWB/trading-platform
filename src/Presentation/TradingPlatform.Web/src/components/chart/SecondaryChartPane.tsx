@@ -83,6 +83,7 @@ export const SecondaryChartPane: React.FC<SecondaryChartPaneProps> = ({
         textColor: '#64748b',
         fontFamily: "'JetBrains Mono', monospace",
         fontSize: 10,
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: 'rgba(30, 41, 59, 0.4)' },

@@ -26,7 +26,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({
   const electronVersion = electronApi?.versions?.electron || (isElectron ? '33.2.1' : 'Web Browser');
   const chromeVersion = electronApi?.versions?.chrome || (isElectron ? '130.0' : 'Blink');
   const nodeVersion = electronApi?.versions?.node || (isElectron ? '20.18.0' : 'N/A');
-  const appVersion = '1.4.3';
+  const appVersion = '1.4.4';
 
   const handleCopyDiagnostics = async () => {
     const diagText = [
@@ -163,8 +163,8 @@ export const AboutModal: React.FC<AboutModalProps> = ({
               <span className="text-slate-200">React 18 • TypeScript • TailwindCSS</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-500">Charting Library:</span>
-              <span className="text-slate-200">TradingView Lightweight Charts v4.2</span>
+              <span className="text-slate-500">Charting Engine:</span>
+              <span className="text-slate-200">HTML5 Canvas Lightweight Charts v4.2</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-slate-500">Node Runtime:</span>

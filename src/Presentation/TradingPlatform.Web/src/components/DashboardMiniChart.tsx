@@ -164,6 +164,7 @@ export const DashboardMiniChart: React.FC<DashboardMiniChartProps> = ({
         textColor: '#64748b',
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
         fontSize: 10,
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: 'rgba(30, 41, 59, 0.35)' },
