@@ -13,6 +13,8 @@ import {
   PanelLeft,
   Bell,
   Clock,
+  Globe,
+  Cpu,
 } from 'lucide-react';
 import { ChartType, ChartLayoutMode } from './types';
 import { Timeframe } from '../../types/trading';
@@ -53,6 +55,9 @@ interface ChartToolbarProps {
   // Collapsible Watchlist toggle
   isWatchlistCollapsed?: boolean;
   onToggleWatchlist?: () => void;
+  // Chart Engine Mode: Native Bot Chart vs TradingView Live Widget
+  chartEngine?: 'native' | 'tradingview';
+  onChartEngineChange?: (engine: 'native' | 'tradingview') => void;
 }
 
 export const ChartToolbar: React.FC<ChartToolbarProps> = ({
@@ -84,6 +89,8 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
   onDismissHistoryNotice,
   isWatchlistCollapsed,
   onToggleWatchlist,
+  chartEngine = 'native',
+  onChartEngineChange,
 }) => {
   const [showLayoutDropdown, setShowLayoutDropdown] = useState(false);
   const [showChartTypeDropdown, setShowChartTypeDropdown] = useState(false);
@@ -334,10 +341,45 @@ export const ChartToolbar: React.FC<ChartToolbarProps> = ({
           </div>
         </div>
 
-        {/* Right Segment: Load History, Split, Trade, Tools */}
+        {/* Right Segment: Chart Engine Switcher, Load History, Split, Trade, Tools */}
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+          {/* Segmented Toggle: Native Bot Chart vs TradingView Live Widget */}
+          {onChartEngineChange && (
+            <div
+              className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex-shrink-0"
+              title="Switch between Native Algorithmic Bot Chart and Official TradingView Live Widget"
+            >
+              <button
+                type="button"
+                onClick={() => onChartEngineChange('native')}
+                className={`px-2 py-0.5 rounded-md text-[11px] font-sans font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                  chartEngine === 'native'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Native Bot Chart (Supports Bot Signals, Position SL/TP Dragging & Custom Drawings)"
+              >
+                <Cpu className="w-3 h-3 flex-shrink-0" />
+                <span className="hidden md:inline">Bot Chart</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onChartEngineChange('tradingview')}
+                className={`px-2 py-0.5 rounded-md text-[11px] font-sans font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                  chartEngine === 'tradingview'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="TradingView Live Widget (Direct Real-Time TradingView Feed & Built-in Studies)"
+              >
+                <Globe className="w-3 h-3 flex-shrink-0" />
+                <span className="hidden md:inline">TradingView Live</span>
+              </button>
+            </div>
+          )}
+
           {/* Historical Data Loading Trigger */}
-          {onLoadOlderHistory && (
+          {chartEngine === 'native' && onLoadOlderHistory && (
             <button
               onClick={onLoadOlderHistory}
               disabled={isLoadingHistory || !hasMoreHistory}

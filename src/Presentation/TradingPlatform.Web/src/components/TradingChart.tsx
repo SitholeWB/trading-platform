@@ -52,6 +52,7 @@ import { SymbolSearchModal } from './chart/SymbolSearchModal';
 import { IndicatorsModal } from './chart/IndicatorsModal';
 import { QuickOrderWidget } from './chart/QuickOrderWidget';
 import { DraggableSyncBadge } from './chart/DraggableSyncBadge';
+import { TradingViewLiveWidget } from './chart/TradingViewLiveWidget';
 import { HistoryOverlay } from './chart/HistoryOverlay';
 import { ChartTradeOverlay } from './chart/ChartTradeOverlay';
 import { ChartAlertsModal } from './chart/ChartAlertsModal';
@@ -126,6 +127,21 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const { formatDateTime, formatTime, resolvedIana } = useTimezone();
 
   // Chart layout and state
+  const [chartEngine, setChartEngine] = useState<'native' | 'tradingview'>(() => {
+    try {
+      return localStorage.getItem('tp_chart_engine_mode_v1') === 'tradingview' ? 'tradingview' : 'native';
+    } catch {
+      return 'native';
+    }
+  });
+  const handleChartEngineChange = (mode: 'native' | 'tradingview') => {
+    setChartEngine(mode);
+    try {
+      localStorage.setItem('tp_chart_engine_mode_v1', mode);
+    } catch {
+      // ignore
+    }
+  };
   const [chartType, setChartType] = useState<ChartType>('candlestick');
   const [layoutMode, setLayoutMode] = useState<ChartLayoutMode>('single');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1435,6 +1451,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         onManualSyncCandles={onManualSyncCandles}
         isWatchlistCollapsed={isWatchlistCollapsed}
         onToggleWatchlist={onToggleWatchlist}
+        chartEngine={chartEngine}
+        onChartEngineChange={handleChartEngineChange}
       />
 
       {/* Alert Trigger Toast Notification */}
@@ -1459,6 +1477,30 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
       {/* Main Chart Body (Sidebar + Chart Canvas + Overlay) */}
       <div className="flex-1 flex overflow-hidden relative">
+        {/* Official TradingView Live Widget View (when toggled on) */}
+        {chartEngine === 'tradingview' && (
+          <div className="w-full h-full flex-1 relative overflow-hidden bg-[#090d16]">
+            {showOrderWidget && (
+              <QuickOrderWidget
+                symbol={symbol}
+                currentPrice={currentPrice}
+                activeProvider={activeProvider}
+                account={account}
+                onPlaceOrder={onPlaceOrder}
+                onClose={() => setShowOrderWidget(false)}
+              />
+            )}
+            <TradingViewLiveWidget
+              symbol={symbol}
+              timeframe={timeframe}
+              chartType={chartType}
+              timezone={resolvedIana}
+            />
+          </div>
+        )}
+
+        {/* Native Bot Chart View (kept mounted so zoom/drawings are preserved when toggling) */}
+        <div className={`flex-1 flex overflow-hidden relative ${chartEngine === 'tradingview' ? 'hidden' : ''}`}>
         {/* Left Drawing Tools Sidebar */}
         <DrawingToolbar
           activeTool={activeTool}
@@ -1736,6 +1778,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               </div>
             </>
           )}
+        </div>
         </div>
       </div>
 

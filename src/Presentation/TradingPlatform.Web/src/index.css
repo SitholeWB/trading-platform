@@ -86,9 +86,8 @@ input, textarea {
   color-scheme: dark;
 }
 
-/* Hide third-party chart canvas attribution watermark */
-#tv-attr-logo,
-a[href*="tradingview.com"] {
+/* Hide third-party chart canvas attribution watermark on native canvas */
+#tv-attr-logo {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
