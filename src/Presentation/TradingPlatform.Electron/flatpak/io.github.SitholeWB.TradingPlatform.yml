@@ -10,14 +10,9 @@ separate-locales: false
 finish-args:
   - --share=ipc
   - --socket=x11
-  - --socket=wayland
   - --socket=pulseaudio
   - --share=network
   - --device=dri
-  - --filesystem=xdg-download
-  - --talk-name=org.freedesktop.Notifications
-  - --env=TMPDIR=/var/tmp
-  - --env=DOTNET_CLI_TELEMETRY_OPTOUT=1
 
 modules:
   - name: trading-platform
@@ -40,4 +35,9 @@ modules:
         strip-components: 0
         only-arches:
           - x86_64
-
+      - type: file
+        path: run.sh
+      - type: file
+        path: io.github.SitholeWB.TradingPlatform.desktop
+      - type: file
+        path: io.github.SitholeWB.TradingPlatform.metainfo.xml

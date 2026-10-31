@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>io.github.SitholeWB.TradingPlatform</id>
   <name>Trading Platform</name>
-  <summary>Institutional Algorithmic Trading Platform, Live Charts &amp; AI Copilot</summary>
+  <summary>Algorithmic trading workstation and live charts</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <developer id="io.github.SitholeWB">
@@ -15,7 +15,7 @@
     <ul>
       <li>Dual Chart Engines: Switch seamlessly between the Native Algorithmic Bot Chart and the TradingView Live Widget</li>
       <li>Dynamic Decimal Precision: Automatic precision scaling up to 10 decimal places across Forex, Crypto, Indices, Commodities, and Stocks</li>
-      <li>Robotic Market Scanner &amp; Strategy Studio: Multi-indicator rule evaluation, Near-Miss Audit Radar, and automated risk management</li>
+      <li>Robotic Market Scanner and Strategy Studio: Multi-indicator rule evaluation, Near-Miss Audit Radar, and automated risk management</li>
       <li>Self-Contained .NET 10 Backend: Zero external dependencies required</li>
     </ul>
   </description>
@@ -23,6 +23,24 @@
   <url type="homepage">https://github.com/SitholeWB/trading-platform</url>
   <url type="bugtracker">https://github.com/SitholeWB/trading-platform/issues</url>
   <url type="vcs-browser">https://github.com/SitholeWB/trading-platform</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Interactive Live Chart with Multi-Indicator Overlays and TradingView Mode</caption>
+      <image>https://raw.githubusercontent.com/SitholeWB/trading-platform/main/store-assets/screenshots/live-chart.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Algorithmic Strategy Studio and Rule Builder</caption>
+      <image>https://raw.githubusercontent.com/SitholeWB/trading-platform/main/store-assets/screenshots/strategy-studio.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Active Algorithmic Strategies and Execution Engine</caption>
+      <image>https://raw.githubusercontent.com/SitholeWB/trading-platform/main/store-assets/screenshots/strategies.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>AI Market Copilot and Quantitative Diagnostics Assistant</caption>
+      <image>https://raw.githubusercontent.com/SitholeWB/trading-platform/main/store-assets/screenshots/ai-chat.png</image>
+    </screenshot>
+  </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
     <release version="2.0.1" date="2026-10-30">
@@ -32,4 +50,3 @@
     </release>
   </releases>
 </component>
-
