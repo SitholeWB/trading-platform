@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.tradingplatform.desktop</id>
+  <name>Trading Platform</name>
+  <summary>Institutional Algorithmic Trading Platform, Live Charts &amp; AI Copilot</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="com.tradingplatform">
+    <name>Trading Platform Team</name>
+  </developer>
+  <description>
+    <p>
+      Trading Platform is an institutional-grade algorithmic trading workstation combining native technical charting, official TradingView Live charts, multi-timeframe robotic market scanning, deterministic strategy execution, and an AI Quant Copilot.
+    </p>
+    <ul>
+      <li>Dual Chart Engines: Switch seamlessly between the Native Algorithmic Bot Chart and the TradingView Live Widget</li>
+      <li>Dynamic Decimal Precision: Automatic precision scaling up to 10 decimal places across Forex, Crypto, Indices, Commodities, and Stocks</li>
+      <li>Robotic Market Scanner &amp; Strategy Studio: Multi-indicator rule evaluation, Near-Miss Audit Radar, and automated risk management</li>
+      <li>Self-Contained .NET 10 Backend: Zero external dependencies required</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">com.tradingplatform.desktop.desktop</launchable>
+  <url type="homepage">https://github.com/SitholeWB/trading-platform</url>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="2.0.1" date="2026-10-30">
+      <description>
+        <p>Cleaned up top appbar, added top-level Chart Mode toggle (Bot Chart vs TradingView Live), and introduced dynamic decimal precision up to 10 decimal places.</p>
+      </description>
+    </release>
+  </releases>
+</component>
+
