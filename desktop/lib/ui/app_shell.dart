@@ -905,6 +905,10 @@ class _AppShellState extends State<AppShell> {
           timeframe: widget.storage.selectedTimeframe,
           candles: _candles,
           chartEngine: widget.storage.chartEngine,
+          onSelectChartEngine: (engine) {
+            setState(() => widget.storage.chartEngine = engine);
+            widget.storage.save();
+          },
           chartType: widget.storage.chartType,
           onSelectSymbol: (sym) async {
             widget.storage.selectedSymbol = sym;

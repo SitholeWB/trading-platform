@@ -20,6 +20,7 @@ class DukascopyLiveWidget extends StatefulWidget {
     required this.chartType,
     this.isDark = true,
     this.customUrl = '',
+    this.onSelectChartEngine,
   });
 
   final String symbol;
@@ -27,6 +28,7 @@ class DukascopyLiveWidget extends StatefulWidget {
   final ChartType chartType;
   final bool isDark;
   final String customUrl;
+  final ValueChanged<ChartEngineMode>? onSelectChartEngine;
 
   @override
   State<DukascopyLiveWidget> createState() => _DukascopyLiveWidgetState();
@@ -361,6 +363,39 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
                     icon: const Icon(Icons.refresh, size: 16),
                     label: const Text('Retry'),
                   ),
+                  if (widget.onSelectChartEngine != null)
+                    PopupMenuButton<ChartEngineMode>(
+                      onSelected: widget.onSelectChartEngine,
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: ChartEngineMode.native,
+                          child: Row(
+                            children: [
+                              Icon(Icons.memory, size: 16),
+                              SizedBox(width: 8),
+                              Text('Bot Chart (Offline / API)'),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: ChartEngineMode.tradingview,
+                          child: Row(
+                            children: [
+                              Icon(Icons.public, size: 16),
+                              SizedBox(width: 8),
+                              Text('TradingView Live'),
+                            ],
+                          ),
+                        ),
+                      ],
+                      child: IgnorePointer(
+                        child: FilledButton.tonalIcon(
+                          onPressed: () {},
+                          icon: const Icon(Icons.swap_horiz, size: 16),
+                          label: const Text('Try Other Charts'),
+                        ),
+                      ),
+                    ),
                   if (_controller != null)
                     OutlinedButton.icon(
                       onPressed: () => _controller?.openDevTools(),

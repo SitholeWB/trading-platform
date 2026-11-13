@@ -44,6 +44,7 @@ class LiveChartPage extends StatefulWidget {
   final bool isSyncing;
   final VoidCallback onManualSync;
   final VoidCallback? onLoadOlderHistory;
+  final ValueChanged<ChartEngineMode>? onSelectChartEngine;
 
   const LiveChartPage({
     super.key,
@@ -74,6 +75,7 @@ class LiveChartPage extends StatefulWidget {
     required this.isSyncing,
     required this.onManualSync,
     this.onLoadOlderHistory,
+    this.onSelectChartEngine,
   });
 
   @override
@@ -1066,6 +1068,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
             chartType: widget.chartType,
             isDark: isDark,
             customUrl: widget.dukascopyChartUrl,
+            onSelectChartEngine: widget.onSelectChartEngine,
           ),
         ),
         if (_showOrderDock && currentPrice > 0)
