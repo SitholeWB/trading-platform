@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
 import '../../services/symbol_catalog.dart';
+import '../chart/lightweight_chart_widget.dart';
 import '../chart/native_chart_widget.dart';
 import '../chart/tradingview_live_widget.dart';
 
@@ -239,6 +240,8 @@ class _LiveChartPageState extends State<LiveChartPage> {
               ..._buildTriggeredAlertBanners(),
               Expanded(
                 child: switch (widget.chartEngine) {
+                  ChartEngineMode.lightweight =>
+                    _buildLightweightBridge(context, currentPrice),
                   ChartEngineMode.tradingview =>
                     _buildTradingViewBridge(context, currentPrice),
                   ChartEngineMode.native => Row(
@@ -1037,6 +1040,32 @@ class _LiveChartPageState extends State<LiveChartPage> {
             timeframe: widget.timeframe,
             chartType: widget.chartType,
             timezone: widget.timezoneIana,
+            isDark: isDark,
+          ),
+        ),
+        if (_showOrderDock && currentPrice > 0)
+          Positioned(
+            top: 48,
+            left: 56,
+            child: _buildQuickOrderDock(currentPrice),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLightweightBridge(BuildContext context, double currentPrice) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: LightweightChartWidget(
+            symbol: widget.symbol,
+            timeframe: widget.timeframe,
+            chartType: widget.chartType,
+            candles: widget.candles,
+            positions: widget.positions,
+            alerts: widget.alerts,
+            timezoneOffsetHours: widget.timezoneOffsetHours,
             isDark: isDark,
           ),
         ),

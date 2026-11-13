@@ -18,7 +18,7 @@ class StorageService {
 
   String selectedSymbol = 'EURUSD';
   Timeframe selectedTimeframe = Timeframe.m5;
-  ChartEngineMode chartEngine = ChartEngineMode.native;
+  ChartEngineMode chartEngine = ChartEngineMode.lightweight;
   ChartType chartType = ChartType.candlestick;
   ThemeMode themeMode = ThemeMode.dark;
   int timezoneOffsetHours = 2;
@@ -69,10 +69,10 @@ class StorageService {
         selectedSymbol = data['selectedSymbol'] as String? ?? 'EURUSD';
         selectedTimeframe =
             Timeframe.fromCode(data['selectedTimeframe'] as String? ?? 'M5');
-        final ceName = data['chartEngine'] as String? ?? 'native';
+        final ceName = data['chartEngine'] as String? ?? 'lightweight';
         chartEngine = ChartEngineMode.values.firstWhere(
           (e) => e.name == ceName,
-          orElse: () => ChartEngineMode.native,
+          orElse: () => ChartEngineMode.lightweight,
         );
         final ctName = data['chartType'] as String? ?? 'candlestick';
         chartType = ChartType.values.firstWhere(
