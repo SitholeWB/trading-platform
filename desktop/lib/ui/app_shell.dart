@@ -758,6 +758,7 @@ class _AppShellState extends State<AppShell> {
         ),
       AppPage.scanner => MarketScannerPage(
           marketData: widget.marketData,
+          strategies: widget.storage.strategies,
           onOpenChart: (sym, tf) {
             widget.storage.selectedSymbol = sym;
             widget.storage.selectedTimeframe = tf;
@@ -770,6 +771,7 @@ class _AppShellState extends State<AppShell> {
         ),
       AppPage.strategies => StrategyStudioPage(
           strategies: widget.storage.strategies,
+          marketData: widget.marketData,
           onSaveStrategy: (s) async {
             final idx =
                 widget.storage.strategies.indexWhere((e) => e.id == s.id);

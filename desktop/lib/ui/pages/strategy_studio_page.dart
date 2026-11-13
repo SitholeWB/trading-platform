@@ -1,11 +1,16 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/trading_models.dart';
+import '../../services/indicator_engine.dart';
+import '../../services/market_data_service.dart';
+import '../../services/strategy_scanner.dart';
 import '../../services/symbol_catalog.dart';
 
 class StrategyStudioPage extends StatefulWidget {
   final List<StrategyDefinition> strategies;
+  final MarketDataService marketData;
   final ValueChanged<StrategyDefinition> onSaveStrategy;
   final ValueChanged<String> onDeleteStrategy;
   final ValueChanged<StrategyDefinition> onRunEvaluation;
@@ -13,6 +18,7 @@ class StrategyStudioPage extends StatefulWidget {
   const StrategyStudioPage({
     super.key,
     required this.strategies,
+    required this.marketData,
     required this.onSaveStrategy,
     required this.onDeleteStrategy,
     required this.onRunEvaluation,
@@ -40,9 +46,12 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
 
   String? _selectedId;
   bool _isCreatingNew = false;
-  int _activeTab = 0; // 0 = Visual Builder, 1 = JSON Preview, 2 = Evaluation
+  int _activeTab = 0; // 0 = Visual Builder, 1 = JSON Preview, 2 = Test & Results
   String _combinator = 'AND';
   String? _statusBanner;
+  int _testLookbackBars = 100;
+  bool _testing = false;
+  StrategyBacktestResult? _testResult;
 
   late final TextEditingController _nameCtrl;
   late final TextEditingController _descCtrl;
@@ -575,18 +584,15 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
-                      onPressed: () {
-                        final draft = _buildCurrentDraft();
-                        widget.onSaveStrategy(draft);
-                        widget.onRunEvaluation(draft);
-                        setState(() {
-                          _isCreatingNew = false;
-                          _activeTab = 2;
-                          _statusBanner = 'Evaluated "${draft.name}"';
-                        });
-                      },
-                      icon: const Icon(Icons.play_arrow, size: 16),
-                      label: const Text('Evaluate'),
+                      onPressed: _testing ? null : _runPeriodTest,
+                      icon: _testing
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.play_arrow, size: 16),
+                      label: const Text('Test Strategy'),
                     ),
                     const SizedBox(width: 8),
                     FilledButton.icon(
@@ -1037,8 +1043,41 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
     );
   }
 
+  Future<void> _runPeriodTest() async {
+    final draft = _buildCurrentDraft();
+    widget.onSaveStrategy(draft);
+    setState(() {
+      _isCreatingNew = false;
+      _activeTab = 2;
+      _testing = true;
+    });
+
+    final fetchCount = math.max(_testLookbackBars + 60, 140);
+    final res = await widget.marketData.fetchCandles(
+      draft.symbol,
+      draft.timeframe,
+      count: fetchCount,
+    );
+    final bt = StrategyScanner.backtestStrategy(
+      draft,
+      res.candles,
+      lookbackBars: _testLookbackBars,
+      requireAllRules: _combinator == 'AND',
+    );
+    widget.onRunEvaluation(draft);
+    if (!mounted) return;
+    setState(() {
+      _testing = false;
+      _testResult = bt;
+      _statusBanner =
+          'Tested "${draft.name}" over ${bt.barsTested} bars (${bt.totalTrades} trades)';
+    });
+  }
+
   Widget _buildEvaluationTab(BuildContext context, double rr) {
     final draft = _buildCurrentDraft();
+    final bt = _testResult;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -1049,39 +1088,298 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Evaluation Summary · ${draft.name}',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Historical Period Test · ${draft.name}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
+                    const Text('Period: ',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    DropdownButton<int>(
+                      value: _testLookbackBars,
+                      isDense: true,
+                      underline: const SizedBox.shrink(),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 50, child: Text('Last 50 Bars')),
+                        DropdownMenuItem(
+                            value: 100, child: Text('Last 100 Bars')),
+                        DropdownMenuItem(
+                            value: 200, child: Text('Last 200 Bars')),
+                        DropdownMenuItem(
+                            value: 300, child: Text('Last 300 Bars')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _testLookbackBars = v);
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    FilledButton.icon(
+                      onPressed: _testing ? null : _runPeriodTest,
+                      icon: _testing
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.play_arrow, size: 16),
+                      label: Text(_testing ? 'Testing...' : 'Run Period Test'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  runSpacing: 8,
+                  runSpacing: 6,
                   children: [
-                    Chip(label: Text('Symbol: ${draft.symbol}')),
-                    Chip(label: Text('Timeframe: ${draft.timeframe.code}')),
-                    Chip(label: Text('Combinator: $_combinator')),
-                    Chip(label: Text('Rules: ${draft.entryRules.length}')),
-                    Chip(label: Text('R:R 1:${rr.toStringAsFixed(1)}')),
+                    Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text('Symbol: ${draft.symbol}')),
+                    Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text('TF: ${draft.timeframe.code}')),
+                    Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text('Logic: $_combinator')),
+                    Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text('R:R 1:${rr.toStringAsFixed(1)}')),
                   ],
-                ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: () {
-                    widget.onSaveStrategy(draft);
-                    widget.onRunEvaluation(draft);
-                    setState(() =>
-                        _statusBanner = 'Evaluation triggered for ${draft.symbol}');
-                  },
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Run Live Evaluation & Log to Audit Radar'),
                 ),
               ],
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        if (bt == null)
+          const Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  'Select a previous period above and click "Run Period Test" to list all rule evaluations and simulated trades.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ),
+          )
+        else ...[
+          // Summary KPIs
+          Row(
+            children: [
+              _btStatCard('Bars Tested', '${bt.barsTested}',
+                  const Color(0xFF38BDF8)),
+              const SizedBox(width: 8),
+              _btStatCard('Signals / Trades',
+                  '${bt.totalSignals} / ${bt.totalTrades}', const Color(0xFFA855F7)),
+              const SizedBox(width: 8),
+              _btStatCard(
+                  'Win Rate',
+                  '${bt.winRate.toStringAsFixed(1)}%',
+                  bt.winRate >= 50
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF59E0B)),
+              const SizedBox(width: 8),
+              _btStatCard(
+                  'Net Return',
+                  '${bt.netReturnPct >= 0 ? '+' : ''}${bt.netReturnPct.toStringAsFixed(2)}%',
+                  bt.netReturnPct >= 0
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFEF4444)),
+              const SizedBox(width: 8),
+              _btStatCard(
+                  'Profit Factor',
+                  bt.profitFactor.toStringAsFixed(2),
+                  bt.profitFactor >= 1.2
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF59E0B)),
+              const SizedBox(width: 8),
+              _btStatCard('Max DD', '${bt.maxDrawdownPct.toStringAsFixed(2)}%',
+                  const Color(0xFFEF4444)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Latest Bar Rule Breakdown
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Latest Bar Rule Breakdown',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${bt.latestDirection} · Match ${bt.latestScore.toStringAsFixed(0)}%',
+                        style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: bt.latestRuleBreakdown
+                        .map((lbl) => Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text(lbl,
+                                  style: const TextStyle(
+                                      fontSize: 11, fontFamily: 'monospace')),
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Trade Results List
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Simulated Trades (${bt.trades.length})',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13.5),
+                  ),
+                  const SizedBox(height: 8),
+                  if (bt.trades.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text(
+                        'No entry signals triggered in this period. Try a longer period, switching Logic to ANY (OR), or adjusting rule thresholds.',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    )
+                  else
+                    ...bt.trades.map((tr) {
+                      final isWin = tr.pnlPercent >= 0;
+                      final isBuy = tr.direction == 'Buy';
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: Theme.of(context).dividerColor),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: (isBuy
+                                        ? const Color(0xFF10B981)
+                                        : const Color(0xFFEF4444))
+                                    .withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                tr.direction.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: isBuy
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFFEF4444),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Entry ${IndicatorEngine.formatPrice(tr.entryPrice, draft.symbol)} → Exit ${IndicatorEngine.formatPrice(tr.exitPrice, draft.symbol)} (${tr.exitReason})',
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        fontFamily: 'monospace'),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${tr.entryTime.toIso8601String().substring(0, 16).replaceFirst('T', ' ')} → ${tr.exitTime.toIso8601String().substring(11, 16)} · ${tr.matchedRules.join(', ')}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 10.5, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${tr.pnlPercent >= 0 ? '+' : ''}${tr.pnlPercent.toStringAsFixed(2)}%',
+                              style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: isWin
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFFEF4444),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
+    );
+  }
+
+  Widget _btStatCard(String label, String value, Color accent) {
+    return Expanded(
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'monospace',
+                  color: accent,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

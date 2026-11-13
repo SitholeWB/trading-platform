@@ -7,6 +7,7 @@ import '../../services/symbol_catalog.dart';
 
 class MarketScannerPage extends StatefulWidget {
   final MarketDataService marketData;
+  final List<StrategyDefinition> strategies;
   final void Function(String symbol, Timeframe tf) onOpenChart;
   final Future<void> Function(String side, String symbol, double lots, double price)
       onQuickOrder;
@@ -14,6 +15,7 @@ class MarketScannerPage extends StatefulWidget {
   const MarketScannerPage({
     super.key,
     required this.marketData,
+    this.strategies = const [],
     required this.onOpenChart,
     required this.onQuickOrder,
   });
@@ -24,10 +26,13 @@ class MarketScannerPage extends StatefulWidget {
 
 class _MarketScannerPageState extends State<MarketScannerPage> {
   int _tabIndex = 0; // 0 = Live Scan, 1 = Historical Backtester
+  bool _strategyScanMode = false;
+  String _selectedStrategyId = '__ALL__';
   Timeframe _tf = Timeframe.m15;
   AssetCategory _category = AssetCategory.all;
   bool _scanning = false;
   List<ScannerHit> _hits = [];
+  List<StrategyScanHit> _strategyHits = [];
 
   // Backtester state
   String _btSymbol = 'EURUSD';
@@ -131,12 +136,35 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
         .take(18)
         .map((s) => s.symbol)
         .toList();
-    final res = await StrategyScanner.scanMarket(widget.marketData, symbols, _tf);
-    if (!mounted) return;
-    setState(() {
-      _hits = res;
-      _scanning = false;
-    });
+
+    if (_strategyScanMode) {
+      final strats = _selectedStrategyId == '__ALL__'
+          ? (widget.strategies.where((s) => s.isEnabled).isNotEmpty
+              ? widget.strategies.where((s) => s.isEnabled).toList()
+              : widget.strategies)
+          : widget.strategies
+              .where((s) => s.id == _selectedStrategyId)
+              .toList();
+      final res = await StrategyScanner.scanWithStrategies(
+        widget.marketData,
+        symbols,
+        strats,
+        _tf,
+      );
+      if (!mounted) return;
+      setState(() {
+        _strategyHits = res;
+        _scanning = false;
+      });
+    } else {
+      final res =
+          await StrategyScanner.scanMarket(widget.marketData, symbols, _tf);
+      if (!mounted) return;
+      setState(() {
+        _hits = res;
+        _scanning = false;
+      });
+    }
   }
 
   @override
@@ -168,6 +196,44 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
               ),
               const Spacer(),
               if (_tabIndex == 0) ...[
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Generic')),
+                    ButtonSegment(value: true, label: Text('Strategies')),
+                  ],
+                  selected: {_strategyScanMode},
+                  onSelectionChanged: (s) {
+                    setState(() => _strategyScanMode = s.first);
+                    _runScan();
+                  },
+                ),
+                if (_strategyScanMode && widget.strategies.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  DropdownButton<String>(
+                    value: _selectedStrategyId == '__ALL__' ||
+                            widget.strategies
+                                .any((s) => s.id == _selectedStrategyId)
+                        ? _selectedStrategyId
+                        : '__ALL__',
+                    items: [
+                      const DropdownMenuItem(
+                        value: '__ALL__',
+                        child: Text('All Active Strategies'),
+                      ),
+                      ...widget.strategies.map((s) => DropdownMenuItem(
+                            value: s.id,
+                            child: Text(s.name),
+                          )),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() => _selectedStrategyId = v);
+                        _runScan();
+                      }
+                    },
+                  ),
+                ],
+                const SizedBox(width: 8),
                 DropdownButton<AssetCategory>(
                   value: _category,
                   items: AssetCategory.values
@@ -240,6 +306,8 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
           const SizedBox(height: 12),
           if (_tabIndex == 1)
             Expanded(child: _buildBacktesterBody())
+          else if (_strategyScanMode)
+            Expanded(child: _buildStrategyScanBody())
           else
           Expanded(
             child: Card(
@@ -373,6 +441,121 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildStrategyScanBody() {
+    if (_strategyHits.isEmpty && _scanning) {
+      return const Card(child: Center(child: CircularProgressIndicator()));
+    }
+    if (widget.strategies.isEmpty) {
+      return const Card(
+        child: Center(
+          child: Text(
+            'No strategies configured yet. Create one in Rule Studio to scan by strategy.',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+    if (_strategyHits.isEmpty) {
+      return const Card(
+        child: Center(
+          child: Text(
+            'No strategy scan results yet. Click "Scan Now" to evaluate your strategies across the market.',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: ListView.separated(
+        itemCount: _strategyHits.length,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (ctx, i) {
+          final hit = _strategyHits[i];
+          final isBuy = hit.signal == 'Buy';
+          final isSell = hit.signal == 'Sell';
+          final sigColor = isBuy
+              ? const Color(0xFF10B981)
+              : isSell
+                  ? const Color(0xFFEF4444)
+                  : Colors.grey;
+          return ListTile(
+            leading: Chip(
+              label: Text(
+                hit.spec.symbol,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+            title: Row(
+              children: [
+                Text(
+                  hit.strategy.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${hit.timeframe.code} · ${IndicatorEngine.formatPrice(hit.price, hit.spec.symbol)}',
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11.5,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+            subtitle: Text(
+              hit.ruleBreakdown.join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 11.5),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Chip(
+                  backgroundColor: sigColor.withValues(alpha: 0.16),
+                  label: Text(
+                    '${hit.signal} (${hit.matchScore.toStringAsFixed(0)}%)',
+                    style: TextStyle(
+                      color: sigColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () => widget.onOpenChart(hit.spec.symbol, _tf),
+                  child: const Text('Chart'),
+                ),
+                if (isBuy || isSell) ...[
+                  const SizedBox(width: 6),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: sigColor,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
+                    onPressed: () => widget.onQuickOrder(
+                      isBuy ? 'Buy' : 'Sell',
+                      hit.spec.symbol,
+                      0.10,
+                      hit.price,
+                    ),
+                    child: Text(isBuy ? 'Buy' : 'Sell'),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
