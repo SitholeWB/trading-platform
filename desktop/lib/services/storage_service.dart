@@ -15,11 +15,10 @@ class StorageService {
   String aiProvider = 'BuiltIn'; // BuiltIn | OpenAI | Gemini | Ollama
   String aiApiKey = '';
   String aiEndpoint = 'http://localhost:11434';
-  String dukascopyChartUrl = '';
 
   String selectedSymbol = 'EURUSD';
   Timeframe selectedTimeframe = Timeframe.m5;
-  ChartEngineMode chartEngine = ChartEngineMode.dukascopy;
+  ChartEngineMode chartEngine = ChartEngineMode.native;
   ChartType chartType = ChartType.candlestick;
   ThemeMode themeMode = ThemeMode.dark;
   int timezoneOffsetHours = 2;
@@ -67,14 +66,13 @@ class StorageService {
         aiProvider = data['aiProvider'] as String? ?? 'BuiltIn';
         aiApiKey = data['aiApiKey'] as String? ?? '';
         aiEndpoint = data['aiEndpoint'] as String? ?? 'http://localhost:11434';
-        dukascopyChartUrl = data['dukascopyChartUrl'] as String? ?? '';
         selectedSymbol = data['selectedSymbol'] as String? ?? 'EURUSD';
         selectedTimeframe =
             Timeframe.fromCode(data['selectedTimeframe'] as String? ?? 'M5');
-        final ceName = data['chartEngine'] as String? ?? 'dukascopy';
+        final ceName = data['chartEngine'] as String? ?? 'native';
         chartEngine = ChartEngineMode.values.firstWhere(
           (e) => e.name == ceName,
-          orElse: () => ChartEngineMode.dukascopy,
+          orElse: () => ChartEngineMode.native,
         );
         final ctName = data['chartType'] as String? ?? 'candlestick';
         chartType = ChartType.values.firstWhere(
@@ -218,7 +216,6 @@ class StorageService {
         'aiProvider': aiProvider,
         'aiApiKey': aiApiKey,
         'aiEndpoint': aiEndpoint,
-        'dukascopyChartUrl': dukascopyChartUrl,
         'selectedSymbol': selectedSymbol,
         'selectedTimeframe': selectedTimeframe.code,
         'chartEngine': chartEngine.name,

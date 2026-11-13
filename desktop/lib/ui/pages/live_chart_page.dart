@@ -5,7 +5,6 @@ import 'package:flutter/rendering.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
 import '../../services/symbol_catalog.dart';
-import '../chart/dukascopy_live_widget.dart';
 import '../chart/native_chart_widget.dart';
 import '../chart/tradingview_live_widget.dart';
 
@@ -39,12 +38,10 @@ class LiveChartPage extends StatefulWidget {
   final int timezoneOffsetHours;
   final String timezoneIana;
   final String providerName;
-  final String dukascopyChartUrl;
   final int secondsUntilSync;
   final bool isSyncing;
   final VoidCallback onManualSync;
   final VoidCallback? onLoadOlderHistory;
-  final ValueChanged<ChartEngineMode>? onSelectChartEngine;
 
   const LiveChartPage({
     super.key,
@@ -70,12 +67,10 @@ class LiveChartPage extends StatefulWidget {
     required this.timezoneOffsetHours,
     this.timezoneIana = 'Etc/UTC',
     this.providerName = 'KeylessPublic',
-    this.dukascopyChartUrl = '',
     required this.secondsUntilSync,
     required this.isSyncing,
     required this.onManualSync,
     this.onLoadOlderHistory,
-    this.onSelectChartEngine,
   });
 
   @override
@@ -246,8 +241,6 @@ class _LiveChartPageState extends State<LiveChartPage> {
                 child: switch (widget.chartEngine) {
                   ChartEngineMode.tradingview =>
                     _buildTradingViewBridge(context, currentPrice),
-                  ChartEngineMode.dukascopy =>
-                    _buildDukascopyBridge(context, currentPrice),
                   ChartEngineMode.native => Row(
                       children: [
                         _buildDrawingToolbar(context),
@@ -1045,30 +1038,6 @@ class _LiveChartPageState extends State<LiveChartPage> {
             chartType: widget.chartType,
             timezone: widget.timezoneIana,
             isDark: isDark,
-          ),
-        ),
-        if (_showOrderDock && currentPrice > 0)
-          Positioned(
-            top: 48,
-            left: 56,
-            child: _buildQuickOrderDock(currentPrice),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildDukascopyBridge(BuildContext context, double currentPrice) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: DukascopyLiveWidget(
-            symbol: widget.symbol,
-            timeframe: widget.timeframe,
-            chartType: widget.chartType,
-            isDark: isDark,
-            customUrl: widget.dukascopyChartUrl,
-            onSelectChartEngine: widget.onSelectChartEngine,
           ),
         ),
         if (_showOrderDock && currentPrice > 0)

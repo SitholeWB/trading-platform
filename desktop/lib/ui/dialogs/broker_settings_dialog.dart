@@ -26,7 +26,6 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
   late final TextEditingController _twelveKey;
   late final TextEditingController _aiKey;
   late final TextEditingController _aiEndpoint;
-  late final TextEditingController _dukascopyUrl;
 
   @override
   void initState() {
@@ -41,7 +40,6 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
     _twelveKey = TextEditingController(text: widget.storage.twelveDataApiKey);
     _aiKey = TextEditingController(text: widget.storage.aiApiKey);
     _aiEndpoint = TextEditingController(text: widget.storage.aiEndpoint);
-    _dukascopyUrl = TextEditingController(text: widget.storage.dukascopyChartUrl);
   }
 
   @override
@@ -51,7 +49,6 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
     _twelveKey.dispose();
     _aiKey.dispose();
     _aiEndpoint.dispose();
-    _dukascopyUrl.dispose();
     super.dispose();
   }
 
@@ -194,16 +191,6 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                   value: _desktopNotifs,
                   onChanged: (v) => setState(() => _desktopNotifs = v),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _dukascopyUrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Dukascopy Live Chart URL (blank = Auto-Discover)',
-                    hintText: 'https://chart.dukascopy.com/',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -224,8 +211,6 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                         widget.storage.aiProvider = _aiProvider;
                         widget.storage.aiApiKey = _aiKey.text.trim();
                         widget.storage.aiEndpoint = _aiEndpoint.text.trim();
-                        widget.storage.dukascopyChartUrl =
-                            _dukascopyUrl.text.trim();
                         widget.storage.themeMode = _themeMode;
                         widget.storage.desktopNotificationsEnabled =
                             _desktopNotifs;
