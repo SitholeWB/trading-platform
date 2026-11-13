@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_cef/webview_cef.dart';
 
 import '../../models/trading_models.dart';
+import 'cef_bootstrap.dart';
 
 /// Embedded Dukascopy Live Chart powered by Chromium Embedded Framework (webview_cef).
 /// Navigates directly to Dukascopy's SWFX live chart URL so CSP `frame-ancestors https:`
@@ -29,9 +30,6 @@ class DukascopyLiveWidget extends StatefulWidget {
 }
 
 class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
-  static bool _cefInitialized = false;
-  static Future<void>? _cefInitFuture;
-
   WebViewController? _controller;
   bool _loading = true;
   bool _bootstrappedReferer = false;
@@ -54,17 +52,9 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
     }
   }
 
-  Future<void> _ensureCefInitialized() async {
-    if (_cefInitialized) return;
-    _cefInitFuture ??= WebviewManager().initialize().then((_) {
-      _cefInitialized = true;
-    });
-    await _cefInitFuture;
-  }
-
   Future<void> _initWebView() async {
     try {
-      await _ensureCefInitialized();
+      await CefBootstrap.ensureInitialized();
 
       final controller = WebviewManager().createWebView(
         loading: const Center(
@@ -101,6 +91,14 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
       );
 
       await controller.initialize('https://www.dukascopy.com/robots.txt');
+      // If robots.txt already finished before listener fired, trigger redirect right after init
+      Future<void>.delayed(const Duration(milliseconds: 400), () {
+        if (!mounted || _bootstrappedReferer) return;
+        _bootstrappedReferer = true;
+        controller.executeJavaScript(
+          'window.location.replace(${jsonEncode(_widgetUrl())});',
+        );
+      });
       Future<void>.delayed(const Duration(seconds: 6), () {
         if (mounted && _loading) setState(() => _loading = false);
       });

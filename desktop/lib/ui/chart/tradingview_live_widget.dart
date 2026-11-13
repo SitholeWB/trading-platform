@@ -7,6 +7,7 @@ import 'package:webview_cef/webview_cef.dart';
 
 import '../../models/trading_models.dart';
 import '../../services/symbol_catalog.dart';
+import 'cef_bootstrap.dart';
 
 /// Embedded TradingView Advanced Chart powered by Chromium Embedded Framework (webview_cef).
 /// Serves an isolated local HTML page over 127.0.0.1 so TradingView's embed-widget-advanced-chart.js
@@ -32,9 +33,6 @@ class TradingViewLiveWidget extends StatefulWidget {
 }
 
 class _TradingViewLiveWidgetState extends State<TradingViewLiveWidget> {
-  static bool _cefInitialized = false;
-  static Future<void>? _cefInitFuture;
-
   WebViewController? _controller;
   HttpServer? _localServer;
   int? _port;
@@ -59,17 +57,9 @@ class _TradingViewLiveWidgetState extends State<TradingViewLiveWidget> {
     }
   }
 
-  Future<void> _ensureCefInitialized() async {
-    if (_cefInitialized) return;
-    _cefInitFuture ??= WebviewManager().initialize().then((_) {
-      _cefInitialized = true;
-    });
-    await _cefInitFuture;
-  }
-
   Future<void> _initWebView() async {
     try {
-      await _ensureCefInitialized();
+      await CefBootstrap.ensureInitialized();
       _localServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       _port = _localServer!.port;
       _localServer!.listen((HttpRequest request) {
