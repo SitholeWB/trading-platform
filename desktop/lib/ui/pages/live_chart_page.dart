@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
 import '../../services/symbol_catalog.dart';
+import '../chart/dukascopy_live_widget.dart';
 import '../chart/native_chart_widget.dart';
 import '../chart/tradingview_live_widget.dart';
 
@@ -238,29 +239,33 @@ class _LiveChartPageState extends State<LiveChartPage> {
                 _buildActiveIndicatorsRow(context),
               ..._buildTriggeredAlertBanners(),
               Expanded(
-                child: widget.chartEngine == ChartEngineMode.tradingview
-                    ? _buildTradingViewBridge(context, currentPrice)
-                    : Row(
-                        children: [
-                          _buildDrawingToolbar(context),
-                          Expanded(
-                            child: RepaintBoundary(
-                              key: _chartRepaintKey,
-                              child: Stack(
-                                children: [
-                                  _buildMultiChartGrid(openPositions),
-                                  if (_showOrderDock && currentPrice > 0)
-                                    Positioned(
-                                      top: 48,
-                                      left: 12,
-                                      child: _buildQuickOrderDock(currentPrice),
-                                    ),
-                                ],
-                              ),
+                child: switch (widget.chartEngine) {
+                  ChartEngineMode.tradingview =>
+                    _buildTradingViewBridge(context, currentPrice),
+                  ChartEngineMode.dukascopy =>
+                    _buildDukascopyBridge(context, currentPrice),
+                  ChartEngineMode.native => Row(
+                      children: [
+                        _buildDrawingToolbar(context),
+                        Expanded(
+                          child: RepaintBoundary(
+                            key: _chartRepaintKey,
+                            child: Stack(
+                              children: [
+                                _buildMultiChartGrid(openPositions),
+                                if (_showOrderDock && currentPrice > 0)
+                                  Positioned(
+                                    top: 48,
+                                    left: 12,
+                                    child: _buildQuickOrderDock(currentPrice),
+                                  ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
+                },
               ),
             ],
           ),
@@ -1035,6 +1040,28 @@ class _LiveChartPageState extends State<LiveChartPage> {
             timeframe: widget.timeframe,
             chartType: widget.chartType,
             timezone: widget.timezoneIana,
+            isDark: isDark,
+          ),
+        ),
+        if (_showOrderDock && currentPrice > 0)
+          Positioned(
+            top: 48,
+            left: 56,
+            child: _buildQuickOrderDock(currentPrice),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDukascopyBridge(BuildContext context, double currentPrice) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: DukascopyLiveWidget(
+            symbol: widget.symbol,
+            timeframe: widget.timeframe,
+            chartType: widget.chartType,
             isDark: isDark,
           ),
         ),

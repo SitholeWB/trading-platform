@@ -591,6 +591,20 @@ class _AppShellState extends State<AppShell> {
                     widget.storage.save();
                   },
                 ),
+                const SizedBox(width: 4),
+                _engineBtn(
+                  label: 'Dukascopy Live',
+                  icon: Icons.account_balance,
+                  active:
+                      widget.storage.chartEngine == ChartEngineMode.dukascopy,
+                  onTap: () {
+                    setState(() {
+                      widget.storage.chartEngine = ChartEngineMode.dukascopy;
+                      _activePage = AppPage.chart;
+                    });
+                    widget.storage.save();
+                  },
+                ),
               ],
             ),
           ),

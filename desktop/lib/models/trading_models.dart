@@ -36,7 +36,7 @@ enum ChartType {
   const ChartType(this.label, this.shortLabel);
 }
 
-enum ChartEngineMode { native, tradingview }
+enum ChartEngineMode { native, tradingview, dukascopy }
 
 enum ChartLayoutMode { single, splitV, splitH, grid4 }
 
