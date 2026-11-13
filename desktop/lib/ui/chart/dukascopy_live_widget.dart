@@ -42,6 +42,9 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
   String _activeUrl = _fallbackUrl;
   bool _loading = true;
   String? _error;
+  String? _lastConsoleError;
+  Timer? _loadTimeoutTimer;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -115,23 +118,140 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
     return _fallbackUrl;
   }
 
+  Future<String?> _preflightCheck(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) {
+      return 'Invalid chart URL: $url';
+    }
+    try {
+      var res = await http.head(uri).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 405) {
+        res = await http.get(uri).timeout(const Duration(seconds: 5));
+      }
+      if (res.statusCode >= 400) {
+        return 'Server returned HTTP ${res.statusCode} for ${uri.host}.';
+      }
+      return null;
+    } on TimeoutException {
+      return 'Timed out connecting to ${uri.host}.';
+    } catch (e) {
+      return 'Unable to reach ${uri.host}: $e';
+    }
+  }
+
+  void _startLoadTimeout(int gen) {
+    _loadTimeoutTimer?.cancel();
+    _loadTimeoutTimer = Timer(const Duration(seconds: 12), () {
+      if (!mounted || gen != _loadGeneration || !_loading) return;
+      setState(() {
+        _loading = false;
+        _error = _lastConsoleError != null
+            ? 'Timed out loading Dukascopy chart ($_lastConsoleError).'
+            : 'Timed out loading Dukascopy chart after 12s.';
+      });
+    });
+  }
+
+  Future<void> _verifyChartRendered(int gen) async {
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    if (!mounted || gen != _loadGeneration || _error != null) return;
+    final c = _controller;
+    if (c == null || !c.value) return;
+    try {
+      final raw = await c.evaluateJavascript('''
+        (() => {
+          const hasApp = !!document.querySelector('app-chart');
+          const hasCanvas = document.querySelectorAll('canvas').length > 0;
+          const bodyLen = (document.body && document.body.innerText || '').trim().length;
+          return JSON.stringify({ hasApp, hasCanvas, bodyLen });
+        })()
+      ''');
+      if (!mounted || gen != _loadGeneration) return;
+      if (raw is String && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          final hasApp = decoded['hasApp'] == true;
+          final hasCanvas = decoded['hasCanvas'] == true;
+          final bodyLen = (decoded['bodyLen'] as num?)?.toInt() ?? 0;
+          if (!hasApp && !hasCanvas && bodyLen == 0) {
+            setState(() {
+              _error = _lastConsoleError != null
+                  ? 'Dukascopy chart rendered blank ($_lastConsoleError).'
+                  : 'Dukascopy chart rendered blank (no chart canvas found).';
+            });
+          }
+        }
+      }
+    } catch (_) {
+      // evaluateJavascript is best-effort; ignore if page is still navigating.
+    }
+  }
+
   Future<void> _reloadWithResolvedUrl() async {
+    final gen = ++_loadGeneration;
+    _lastConsoleError = null;
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     final url = _applyThemeParam(await _resolveChartUrl());
+    if (!mounted || gen != _loadGeneration) return;
     _activeUrl = url;
+
+    final preflightErr = await _preflightCheck(url);
+    if (!mounted || gen != _loadGeneration) return;
+    if (preflightErr != null) {
+      _loadTimeoutTimer?.cancel();
+      setState(() {
+        _error = preflightErr;
+        _loading = false;
+      });
+      return;
+    }
+
     final c = _controller;
     if (c != null && c.value) {
-      setState(() => _loading = true);
-      c.loadUrl(url);
-      Future<void>.delayed(const Duration(seconds: 6), () {
-        if (mounted && _loading) setState(() => _loading = false);
-      });
+      _startLoadTimeout(gen);
+      await c.loadUrl(url);
+    }
+  }
+
+  Future<void> _retry() async {
+    _cachedDiscoveredUrl = null;
+    final c = _controller;
+    if (c == null || !c.value) {
+      await _initWebView();
+    } else {
+      await _reloadWithResolvedUrl();
     }
   }
 
   Future<void> _initWebView() async {
+    final gen = ++_loadGeneration;
+    _lastConsoleError = null;
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       await CefBootstrap.ensureInitialized();
-      _activeUrl = _applyThemeParam(await _resolveChartUrl());
+      final url = _applyThemeParam(await _resolveChartUrl());
+      if (!mounted || gen != _loadGeneration) return;
+      _activeUrl = url;
+
+      final preflightErr = await _preflightCheck(url);
+      if (!mounted || gen != _loadGeneration) return;
+      if (preflightErr != null) {
+        setState(() {
+          _error = preflightErr;
+          _loading = false;
+        });
+        return;
+      }
 
       final controller = WebviewManager().createWebView(
         loading: const Center(
@@ -151,17 +271,41 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
       _controller = controller;
       controller.setWebviewListener(
         WebviewEventsListener(
-          onLoadEnd: (_, url) {
-            if (mounted) setState(() => _loading = false);
+          onLoadStart: (_, navUrl) {
+            if (!mounted) return;
+            if (navUrl.startsWith('chrome-error://')) {
+              _loadTimeoutTimer?.cancel();
+              setState(() {
+                _loading = false;
+                _error = 'Chromium failed to load Dukascopy chart ($navUrl).';
+              });
+            }
+          },
+          onConsoleMessage: (level, message, _, _) {
+            if (_loading && level >= 4 && message.trim().isNotEmpty) {
+              _lastConsoleError = message.trim();
+            }
+          },
+          onLoadEnd: (_, navUrl) {
+            if (!mounted) return;
+            _loadTimeoutTimer?.cancel();
+            if (navUrl.startsWith('chrome-error://')) {
+              setState(() {
+                _loading = false;
+                _error = 'Failed to load Dukascopy chart ($navUrl).';
+              });
+              return;
+            }
+            setState(() => _loading = false);
+            _verifyChartRendered(_loadGeneration);
           },
         ),
       );
 
+      _startLoadTimeout(gen);
       await controller.initialize(_activeUrl);
-      Future<void>.delayed(const Duration(seconds: 6), () {
-        if (mounted && _loading) setState(() => _loading = false);
-      });
     } catch (e) {
+      _loadTimeoutTimer?.cancel();
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -173,6 +317,7 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
 
   @override
   void dispose() {
+    _loadTimeoutTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -206,10 +351,28 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
                 style: const TextStyle(fontSize: 11, color: Colors.white60),
               ),
               const SizedBox(height: 14),
-              FilledButton.icon(
-                onPressed: () => Process.run('xdg-open', [_activeUrl]),
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text('Open Dukascopy Live Charts in Browser'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _retry,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Retry'),
+                  ),
+                  if (_controller != null)
+                    OutlinedButton.icon(
+                      onPressed: () => _controller?.openDevTools(),
+                      icon: const Icon(Icons.bug_report_outlined, size: 16),
+                      label: const Text('DevTools'),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: () => Process.run('xdg-open', [_activeUrl]),
+                    icon: const Icon(Icons.open_in_new, size: 16),
+                    label: const Text('Open in Browser'),
+                  ),
+                ],
               ),
             ],
           ),

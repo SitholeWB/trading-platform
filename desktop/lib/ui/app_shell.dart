@@ -566,6 +566,20 @@ class _AppShellState extends State<AppShell> {
                 ),
                 const SizedBox(width: 8),
                 _engineBtn(
+                  label: 'Dukascopy Live',
+                  icon: Icons.account_balance,
+                  active:
+                      widget.storage.chartEngine == ChartEngineMode.dukascopy,
+                  onTap: () {
+                    setState(() {
+                      widget.storage.chartEngine = ChartEngineMode.dukascopy;
+                      _activePage = AppPage.chart;
+                    });
+                    widget.storage.save();
+                  },
+                ),
+                const SizedBox(width: 4),
+                _engineBtn(
                   label: 'Bot Chart',
                   icon: Icons.memory,
                   active: widget.storage.chartEngine == ChartEngineMode.native,
@@ -586,20 +600,6 @@ class _AppShellState extends State<AppShell> {
                   onTap: () {
                     setState(() {
                       widget.storage.chartEngine = ChartEngineMode.tradingview;
-                      _activePage = AppPage.chart;
-                    });
-                    widget.storage.save();
-                  },
-                ),
-                const SizedBox(width: 4),
-                _engineBtn(
-                  label: 'Dukascopy Live',
-                  icon: Icons.account_balance,
-                  active:
-                      widget.storage.chartEngine == ChartEngineMode.dukascopy,
-                  onTap: () {
-                    setState(() {
-                      widget.storage.chartEngine = ChartEngineMode.dukascopy;
                       _activePage = AppPage.chart;
                     });
                     widget.storage.save();
