@@ -49,7 +49,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
   int _activeTab = 0; // 0 = Visual Builder, 1 = JSON Preview, 2 = Test & Results
   String _combinator = 'AND';
   String? _statusBanner;
-  int _testLookbackBars = 100;
+  int _testLookbackBars = 500;
   bool _testing = false;
   StrategyBacktestResult? _testResult;
 
@@ -113,6 +113,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       _slMult = s.stopLossAtrMult.clamp(0.5, 4.0);
       _tpMult = s.takeProfitAtrMult.clamp(1.0, 8.0);
       _rules = List<StrategyRule>.from(s.entryRules);
+      _testResult = null;
+      _testing = false;
     });
   }
 
@@ -121,6 +123,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       _isCreatingNew = true;
       _selectedId = 'strat_${DateTime.now().millisecondsSinceEpoch}';
       _statusBanner = null;
+      _testResult = null;
+      _testing = false;
       _nameCtrl.text = 'Custom Momentum Strategy';
       _descCtrl.text = 'Quantitative multi-indicator rule';
       _symbol = 'EURUSD';
@@ -582,18 +586,20 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: _testing ? null : _runPeriodTest,
-                      icon: _testing
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.play_arrow, size: 16),
-                      label: const Text('Test Strategy'),
-                    ),
+                    if (_activeTab != 2) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: _testing ? null : _runPeriodTest,
+                        icon: _testing
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.play_arrow, size: 16),
+                        label: const Text('Test Strategy'),
+                      ),
+                    ],
                     const SizedBox(width: 8),
                     FilledButton.icon(
                       onPressed: _saveCurrent,
@@ -1105,13 +1111,17 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       underline: const SizedBox.shrink(),
                       items: const [
                         DropdownMenuItem(
-                            value: 50, child: Text('Last 50 Bars')),
-                        DropdownMenuItem(
                             value: 100, child: Text('Last 100 Bars')),
                         DropdownMenuItem(
-                            value: 200, child: Text('Last 200 Bars')),
-                        DropdownMenuItem(
                             value: 300, child: Text('Last 300 Bars')),
+                        DropdownMenuItem(
+                            value: 500, child: Text('Last 500 Bars')),
+                        DropdownMenuItem(
+                            value: 1000, child: Text('Last 1,000 Bars')),
+                        DropdownMenuItem(
+                            value: 2000, child: Text('Last 2,000 Bars')),
+                        DropdownMenuItem(
+                            value: 5000, child: Text('Last 5,000 Bars')),
                       ],
                       onChanged: (v) {
                         if (v != null) setState(() => _testLookbackBars = v);
