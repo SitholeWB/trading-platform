@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -33,6 +34,7 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
 
   WebViewController? _controller;
   bool _loading = true;
+  bool _bootstrappedReferer = false;
   String? _error;
 
   @override
@@ -82,14 +84,24 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
       _controller = controller;
       controller.setWebviewListener(
         WebviewEventsListener(
-          onLoadEnd: (_, _) {
-            if (mounted) setState(() => _loading = false);
+          onLoadEnd: (_, url) {
+            if (!mounted) return;
+            if (!_bootstrappedReferer && url.contains('www.dukascopy.com')) {
+              _bootstrappedReferer = true;
+              controller.executeJavaScript(
+                'window.location.replace(${jsonEncode(_widgetUrl())});',
+              );
+              return;
+            }
+            setState(() => _loading = false);
           },
         ),
       );
 
-      await controller.initialize(_widgetUrl());
-      if (mounted) {
+      await controller.initialize(
+        'https://www.dukascopy.com/swiss/english/marketwatch/charts/',
+      );
+      if (mounted && _bootstrappedReferer) {
         setState(() => _loading = false);
       }
     } catch (e) {
@@ -108,30 +120,33 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
     final chartType = _mapChartType(widget.chartType);
     final theme = widget.isDark ? 'dark' : 'light';
 
-    final uri = Uri.https('freeserv.dukascopy.com', '/2.0/', {
-      'path': 'chart/index',
-      'showUI': 'true',
-      'showTabs': 'true',
-      'showToolbar': 'true',
-      'toolbar': 'true',
-      'allowPan': 'true',
-      'allowInstrumentChange': 'true',
-      'instrument': instrument,
-      'period': interval,
-      'chartType': chartType,
-      'theme': theme,
-      'studies': 'ema',
-      'width': '100%',
-      'height': '100%',
-    });
-    return uri.toString();
+    return 'https://freeserv.dukascopy.com/2.0/?path=chart/index'
+        '&showUI=true'
+        '&showTabs=true'
+        '&showToolbar=true'
+        '&toolbar=true'
+        '&allowPan=true'
+        '&allowInstrumentChange=true'
+        '&instrument=$instrument'
+        '&period=$interval'
+        '&chartType=$chartType'
+        '&theme=$theme'
+        '&studies=ema'
+        '&width=100%25'
+        '&height=100%25';
   }
 
   void _reloadWidget() {
     final c = _controller;
     if (c != null && c.value) {
       setState(() => _loading = true);
-      c.loadUrl(_widgetUrl());
+      if (_bootstrappedReferer) {
+        c.executeJavaScript(
+          'window.location.replace(${jsonEncode(_widgetUrl())});',
+        );
+      } else {
+        c.loadUrl('https://www.dukascopy.com/swiss/english/marketwatch/charts/');
+      }
     }
   }
 
