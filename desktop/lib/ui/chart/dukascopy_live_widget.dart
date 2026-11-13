@@ -93,17 +93,17 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
               );
               return;
             }
-            setState(() => _loading = false);
+            if (url.contains('freeserv.dukascopy.com')) {
+              setState(() => _loading = false);
+            }
           },
         ),
       );
 
-      await controller.initialize(
-        'https://www.dukascopy.com/swiss/english/marketwatch/charts/',
-      );
-      if (mounted && _bootstrappedReferer) {
-        setState(() => _loading = false);
-      }
+      await controller.initialize('https://www.dukascopy.com/robots.txt');
+      Future<void>.delayed(const Duration(seconds: 6), () {
+        if (mounted && _loading) setState(() => _loading = false);
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -145,7 +145,7 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
           'window.location.replace(${jsonEncode(_widgetUrl())});',
         );
       } else {
-        c.loadUrl('https://www.dukascopy.com/swiss/english/marketwatch/charts/');
+        c.loadUrl('https://www.dukascopy.com/robots.txt');
       }
     }
   }
