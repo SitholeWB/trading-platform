@@ -566,20 +566,6 @@ class _AppShellState extends State<AppShell> {
                 ),
                 const SizedBox(width: 8),
                 _engineBtn(
-                  label: 'Lightweight',
-                  icon: Icons.candlestick_chart,
-                  active:
-                      widget.storage.chartEngine == ChartEngineMode.lightweight,
-                  onTap: () {
-                    setState(() {
-                      widget.storage.chartEngine = ChartEngineMode.lightweight;
-                      _activePage = AppPage.chart;
-                    });
-                    widget.storage.save();
-                  },
-                ),
-                const SizedBox(width: 4),
-                _engineBtn(
                   label: 'Bot Chart',
                   icon: Icons.memory,
                   active: widget.storage.chartEngine == ChartEngineMode.native,
