@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,8 +7,8 @@ import 'package:webview_cef/webview_cef.dart';
 import '../../models/trading_models.dart';
 
 /// Embedded Dukascopy Live Chart powered by Chromium Embedded Framework (webview_cef).
-/// Serves a local HTML page over 127.0.0.1 embedding Dukascopy's SWFX live chart applet
-/// synced one-way with the active symbol, timeframe, and theme.
+/// Navigates directly to Dukascopy's SWFX live chart URL so CSP `frame-ancestors https:`
+/// is satisfied (top-level navigation instead of http://127.0.0.1 iframe).
 class DukascopyLiveWidget extends StatefulWidget {
   const DukascopyLiveWidget({
     super.key,
@@ -33,8 +32,6 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
   static Future<void>? _cefInitFuture;
 
   WebViewController? _controller;
-  HttpServer? _localServer;
-  int? _port;
   bool _loading = true;
   String? _error;
 
@@ -66,15 +63,6 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
   Future<void> _initWebView() async {
     try {
       await _ensureCefInitialized();
-      _localServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      _port = _localServer!.port;
-      _localServer!.listen((HttpRequest request) {
-        request.response
-          ..statusCode = HttpStatus.ok
-          ..headers.contentType = ContentType.html
-          ..write(_buildHtmlPage())
-          ..close();
-      });
 
       final controller = WebviewManager().createWebView(
         loading: const Center(
@@ -115,13 +103,33 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
   }
 
   String _widgetUrl() {
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    return 'http://127.0.0.1:$_port/?v=$ts';
+    final instrument = _mapSymbolToDukascopy(widget.symbol);
+    final interval = _mapTimeframe(widget.timeframe);
+    final chartType = _mapChartType(widget.chartType);
+    final theme = widget.isDark ? 'dark' : 'light';
+
+    final uri = Uri.https('freeserv.dukascopy.com', '/2.0/', {
+      'path': 'chart/index',
+      'showUI': 'true',
+      'showTabs': 'true',
+      'showToolbar': 'true',
+      'toolbar': 'true',
+      'allowPan': 'true',
+      'allowInstrumentChange': 'true',
+      'instrument': instrument,
+      'period': interval,
+      'chartType': chartType,
+      'theme': theme,
+      'studies': 'ema',
+      'width': '100%',
+      'height': '100%',
+    });
+    return uri.toString();
   }
 
   void _reloadWidget() {
     final c = _controller;
-    if (c != null && _port != null && c.value) {
+    if (c != null && c.value) {
       setState(() => _loading = true);
       c.loadUrl(_widgetUrl());
     }
@@ -216,64 +224,9 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
     }
   }
 
-  String _buildHtmlPage() {
-    final instrument = _mapSymbolToDukascopy(widget.symbol);
-    final interval = _mapTimeframe(widget.timeframe);
-    final chartType = _mapChartType(widget.chartType);
-
-    final appletConfig = {
-      'type': 'chart',
-      'params': {
-        'showUI': true,
-        'showTabs': true,
-        'showToolbar': true,
-        'toolbar': true,
-        'allowPan': true,
-        'allowInstrumentChange': true,
-        'instrument': instrument,
-        'period': interval,
-        'chartType': chartType,
-        'theme': widget.isDark ? 'dark' : 'light',
-        'studies': ['ema'],
-        'width': '100%',
-        'height': '100%',
-        'adv': 'popup',
-      },
-    };
-
-    final jsonConfig = jsonEncode(appletConfig);
-
-    return '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: ${widget.isDark ? '#090d16' : '#f8fafc'};
-    }
-  </style>
-</head>
-<body>
-  <script type="text/javascript">
-    DukascopyApplet = $jsonConfig;
-  </script>
-  <script type="text/javascript" src="https://freeserv-static.dukascopy.com/2.0/core.js"></script>
-</body>
-</html>
-''';
-  }
-
   @override
   void dispose() {
     _controller?.dispose();
-    _localServer?.close(force: true);
     super.dispose();
   }
 
@@ -307,10 +260,7 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
               ),
               const SizedBox(height: 14),
               FilledButton.icon(
-                onPressed: () => Process.run(
-                  'xdg-open',
-                  ['https://www.dukascopy.com/swiss/english/marketwatch/charts/'],
-                ),
+                onPressed: () => Process.run('xdg-open', [_widgetUrl()]),
                 icon: const Icon(Icons.open_in_new, size: 16),
                 label: const Text('Open Dukascopy Live Charts in Browser'),
               ),
