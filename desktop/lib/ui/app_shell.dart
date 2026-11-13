@@ -969,6 +969,7 @@ class _AppShellState extends State<AppShell> {
           timezoneOffsetHours: widget.storage.timezoneOffsetHours,
           timezoneIana: _timezoneIana,
           providerName: widget.storage.activeProvider,
+          dukascopyChartUrl: widget.storage.dukascopyChartUrl,
           secondsUntilSync: _secondsUntilSync,
           isSyncing: _isSyncing,
           onManualSync: () => _refreshMarketData(force: true),

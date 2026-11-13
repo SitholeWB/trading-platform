@@ -39,6 +39,7 @@ class LiveChartPage extends StatefulWidget {
   final int timezoneOffsetHours;
   final String timezoneIana;
   final String providerName;
+  final String dukascopyChartUrl;
   final int secondsUntilSync;
   final bool isSyncing;
   final VoidCallback onManualSync;
@@ -68,6 +69,7 @@ class LiveChartPage extends StatefulWidget {
     required this.timezoneOffsetHours,
     this.timezoneIana = 'Etc/UTC',
     this.providerName = 'KeylessPublic',
+    this.dukascopyChartUrl = '',
     required this.secondsUntilSync,
     required this.isSyncing,
     required this.onManualSync,
@@ -1063,6 +1065,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
             timeframe: widget.timeframe,
             chartType: widget.chartType,
             isDark: isDark,
+            customUrl: widget.dukascopyChartUrl,
           ),
         ),
         if (_showOrderDock && currentPrice > 0)
