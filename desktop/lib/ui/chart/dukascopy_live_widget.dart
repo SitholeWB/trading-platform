@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,10 +8,7 @@ import '../../models/trading_models.dart';
 import 'cef_bootstrap.dart';
 
 /// Embedded Dukascopy Live Chart powered by Chromium Embedded Framework (webview_cef).
-/// Uses an in-process local loopback proxy on 127.0.0.1 that forwards requests to
-/// `https://freeserv.dukascopy.com` with the required `Referer: https://www.dukascopy.com/`
-/// header and strips `frame-ancestors` CSP restrictions so the SWFX live chart loads
-/// reliably inline.
+/// Loads `https://chart.dukascopy.com/` directly (HTTP 200, `frame-ancestors *`).
 class DukascopyLiveWidget extends StatefulWidget {
   const DukascopyLiveWidget({
     super.key,
@@ -32,13 +28,7 @@ class DukascopyLiveWidget extends StatefulWidget {
 }
 
 class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
-  static const String _browserUa =
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
-
   WebViewController? _controller;
-  HttpServer? _proxyServer;
-  HttpClient? _httpClient;
-  int? _port;
   bool _loading = true;
   String? _error;
 
@@ -59,90 +49,9 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
     }
   }
 
-  Future<void> _startProxy() async {
-    _httpClient = HttpClient()
-      ..userAgent = _browserUa
-      ..autoUncompress = true;
-
-    _proxyServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    _port = _proxyServer!.port;
-    _proxyServer!.listen(_handleProxyRequest);
-  }
-
-  Future<void> _handleProxyRequest(HttpRequest req) async {
-    final client = _httpClient;
-    if (client == null || _port == null) {
-      req.response
-        ..statusCode = HttpStatus.serviceUnavailable
-        ..close();
-      return;
-    }
-
-    try {
-      final pathAndQuery = req.uri.hasQuery
-          ? '${req.uri.path}?${req.uri.query}'
-          : req.uri.path;
-      final upstreamUri = Uri.parse('https://freeserv.dukascopy.com$pathAndQuery');
-
-      final upstreamReq = await client.openUrl(req.method, upstreamUri);
-      upstreamReq.headers.set('User-Agent', _browserUa);
-      upstreamReq.headers.set('Referer', 'https://www.dukascopy.com/');
-      upstreamReq.headers.set('Origin', 'https://www.dukascopy.com');
-      upstreamReq.headers.set('Accept', req.headers.value('accept') ?? '*/*');
-      upstreamReq.headers.set('Accept-Language', 'en-US,en;q=0.9');
-
-      if (req.method == 'POST' || req.method == 'PUT') {
-        final bodyBytes = await req.fold<List<int>>(
-          <int>[],
-          (prev, chunk) => prev..addAll(chunk),
-        );
-        upstreamReq.add(bodyBytes);
-      }
-
-      final upstreamRes = await upstreamReq.close();
-      final bytes = await upstreamRes.fold<List<int>>(
-        <int>[],
-        (prev, chunk) => prev..addAll(chunk),
-      );
-
-      req.response.statusCode = upstreamRes.statusCode;
-      final contentType = upstreamRes.headers.contentType;
-      if (contentType != null) {
-        req.response.headers.contentType = contentType;
-      }
-
-      final mime = contentType?.mimeType.toLowerCase() ?? '';
-      final isText = mime.contains('html') ||
-          mime.contains('javascript') ||
-          mime.contains('json') ||
-          mime.contains('css') ||
-          mime.startsWith('text/');
-
-      if (isText) {
-        var text = utf8.decode(bytes, allowMalformed: true);
-        text = text.replaceAll(
-          'https://freeserv.dukascopy.com/',
-          'http://127.0.0.1:$_port/',
-        );
-        req.response.add(utf8.encode(text));
-      } else {
-        req.response.add(bytes);
-      }
-      await req.response.close();
-    } catch (e) {
-      try {
-        req.response
-          ..statusCode = HttpStatus.badGateway
-          ..write('Proxy error: $e')
-          ..close();
-      } catch (_) {}
-    }
-  }
-
   Future<void> _initWebView() async {
     try {
       await CefBootstrap.ensureInitialized();
-      await _startProxy();
 
       final controller = WebviewManager().createWebView(
         loading: const Center(
@@ -152,7 +61,7 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
               CircularProgressIndicator(strokeWidth: 2),
               SizedBox(height: 12),
               Text(
-                'Loading Dukascopy Live Chart...',
+                'Loading Dukascopy Online Charts...',
                 style: TextStyle(fontSize: 12, color: Colors.white70),
               ),
             ],
@@ -184,29 +93,14 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
 
   String _widgetUrl() {
     final instrument = _mapSymbolToDukascopy(widget.symbol);
-    final interval = _mapTimeframe(widget.timeframe);
-    final chartType = _mapChartType(widget.chartType);
+    final period = _mapTimeframe(widget.timeframe);
     final theme = widget.isDark ? 'dark' : 'light';
-
-    return 'http://127.0.0.1:$_port/2.0/?path=chart/index'
-        '&showUI=true'
-        '&showTabs=true'
-        '&showToolbar=true'
-        '&toolbar=true'
-        '&allowPan=true'
-        '&allowInstrumentChange=true'
-        '&instrument=$instrument'
-        '&period=$interval'
-        '&chartType=$chartType'
-        '&theme=$theme'
-        '&studies=ema'
-        '&width=100%25'
-        '&height=100%25';
+    return 'https://chart.dukascopy.com/?instrument=$instrument&period=$period&theme=$theme';
   }
 
   void _reloadWidget() {
     final c = _controller;
-    if (c != null && _port != null && c.value) {
+    if (c != null && c.value) {
       setState(() => _loading = true);
       c.loadUrl(_widgetUrl());
       Future<void>.delayed(const Duration(seconds: 6), () {
@@ -290,25 +184,9 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
     }
   }
 
-  String _mapChartType(ChartType ct) {
-    switch (ct) {
-      case ChartType.line:
-      case ChartType.area:
-      case ChartType.baseline:
-        return 'line';
-      case ChartType.bar:
-        return 'ohlc';
-      case ChartType.candlestick:
-      case ChartType.heikinAshi:
-        return 'candle';
-    }
-  }
-
   @override
   void dispose() {
     _controller?.dispose();
-    _proxyServer?.close(force: true);
-    _httpClient?.close(force: true);
     super.dispose();
   }
 
@@ -342,10 +220,7 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
               ),
               const SizedBox(height: 14),
               FilledButton.icon(
-                onPressed: () => Process.run(
-                  'xdg-open',
-                  ['https://www.dukascopy.com/swiss/english/marketwatch/charts/'],
-                ),
+                onPressed: () => Process.run('xdg-open', [_widgetUrl()]),
                 icon: const Icon(Icons.open_in_new, size: 16),
                 label: const Text('Open Dukascopy Live Charts in Browser'),
               ),
@@ -391,7 +266,7 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
                     child: CircularProgressIndicator(strokeWidth: 1.8),
                   ),
                   SizedBox(width: 8),
-                  Text('Connecting Dukascopy SWFX...',
+                  Text('Connecting Dukascopy Charts...',
                       style: TextStyle(fontSize: 11, color: Colors.white70)),
                 ],
               ),
