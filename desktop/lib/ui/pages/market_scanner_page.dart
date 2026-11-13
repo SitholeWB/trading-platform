@@ -36,6 +36,7 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
 
   // Backtester state
   String _btSymbol = 'EURUSD';
+  String _btStrategyId = '__builtin__';
   bool _btRunning = false;
   int _btTrades = 0;
   double _btWinRate = 0;
@@ -52,10 +53,37 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
 
   Future<void> _runBacktest() async {
     setState(() => _btRunning = true);
-    final res = await widget.marketData.fetchCandles(_btSymbol, _tf);
+    final res = await widget.marketData.fetchCandles(_btSymbol, _tf, count: 600);
     final candles = res.candles;
     if (candles.length < 30) {
       if (mounted) setState(() => _btRunning = false);
+      return;
+    }
+
+    final customStrat = widget.strategies
+        .where((s) => s.id == _btStrategyId)
+        .firstOrNull;
+    if (customStrat != null) {
+      final scoped = customStrat.copyWith(symbol: _btSymbol, timeframe: _tf);
+      final bt = StrategyScanner.backtestStrategy(
+        scoped,
+        candles,
+        lookbackBars: 500,
+        requireAllRules: scoped.combinator != 'OR',
+      );
+      if (!mounted) return;
+      setState(() {
+        _btTrades = bt.totalTrades;
+        _btWinRate = bt.winRate;
+        _btProfitFactor = bt.profitFactor;
+        _btReturnPct = bt.netReturnPct;
+        _btMaxDdPct = bt.maxDrawdownPct;
+        _btLog = bt.trades
+            .map((t) =>
+                '${t.direction.toUpperCase()} $_btSymbol @ ${IndicatorEngine.formatPrice(t.entryPrice, _btSymbol)} → ${IndicatorEngine.formatPrice(t.exitPrice, _btSymbol)} (${t.exitReason}, ${t.pnlPercent >= 0 ? "+" : ""}${t.pnlPercent.toStringAsFixed(2)}%)')
+            .toList();
+        _btRunning = false;
+      });
       return;
     }
 
@@ -272,6 +300,25 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                   label: Text(_scanning ? 'Scanning...' : 'Scan Now'),
                 ),
               ] else ...[
+                DropdownButton<String>(
+                  value: widget.strategies.any((s) => s.id == _btStrategyId)
+                      ? _btStrategyId
+                      : '__builtin__',
+                  items: [
+                    const DropdownMenuItem(
+                      value: '__builtin__',
+                      child: Text('Built-in EMA+RSI'),
+                    ),
+                    ...widget.strategies.map((s) => DropdownMenuItem(
+                          value: s.id,
+                          child: Text(s.name),
+                        )),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => _btStrategyId = v);
+                  },
+                ),
+                const SizedBox(width: 10),
                 DropdownButton<String>(
                   value: _btSymbol,
                   items: SymbolCatalog.allSymbols

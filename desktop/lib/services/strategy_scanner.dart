@@ -36,6 +36,7 @@ class StrategyBacktestResult {
   final double profitFactor;
   final double maxDrawdownPct;
   final List<StrategyTestTrade> trades;
+  final List<double> equityCurve;
   final List<String> latestRuleBreakdown;
   final double latestScore;
   final String latestDirection;
@@ -50,6 +51,7 @@ class StrategyBacktestResult {
     required this.profitFactor,
     required this.maxDrawdownPct,
     required this.trades,
+    this.equityCurve = const [10000.0],
     required this.latestRuleBreakdown,
     required this.latestScore,
     required this.latestDirection,
@@ -89,9 +91,13 @@ class _IndicatorBundle {
   final String symbol;
   final Map<int, double> atrMap = {};
   final Map<int, Map<int, double>> emaCache = {};
+  final Map<int, Map<int, double>> smaCache = {};
   final Map<int, Map<int, double>> rsiCache = {};
   final Map<String, Map<int, BollingerPoint>> bbCache = {};
+  final Map<String, Map<int, SupertrendPoint>> stCache = {};
   Map<int, MacdPoint>? macdCache;
+  Map<int, double>? vwapCache;
+  Map<int, IchimokuPoint>? ichimokuCache;
 
   _IndicatorBundle(this.candles, this.symbol) {
     final atrPts = IndicatorEngine.calculateATR(candles, 14, symbol);
@@ -103,6 +109,13 @@ class _IndicatorBundle {
   Map<int, double> ema(int period) {
     return emaCache.putIfAbsent(period, () {
       final pts = IndicatorEngine.calculateEMA(candles, period, symbol);
+      return {for (final p in pts) p.timeSeconds: p.value};
+    });
+  }
+
+  Map<int, double> sma(int period) {
+    return smaCache.putIfAbsent(period, () {
+      final pts = IndicatorEngine.calculateSMA(candles, period, symbol);
       return {for (final p in pts) p.timeSeconds: p.value};
     });
   }
@@ -130,6 +143,29 @@ class _IndicatorBundle {
   Map<int, MacdPoint> macd() {
     return macdCache ??= {
       for (final p in IndicatorEngine.calculateMACD(candles, 12, 26, 9))
+        p.timeSeconds: p,
+    };
+  }
+
+  Map<int, double> vwap() {
+    return vwapCache ??= {
+      for (final p in IndicatorEngine.calculateVWAP(candles, symbol))
+        p.timeSeconds: p.value,
+    };
+  }
+
+  Map<int, SupertrendPoint> supertrend(int period, double mult) {
+    final m = mult > 0 ? mult : 3.0;
+    final key = '${period}_${m.toStringAsFixed(1)}';
+    return stCache.putIfAbsent(key, () {
+      final pts = IndicatorEngine.calculateSupertrend(candles, period, m, symbol);
+      return {for (final p in pts) p.timeSeconds: p};
+    });
+  }
+
+  Map<int, IchimokuPoint> ichimoku() {
+    return ichimokuCache ??= {
+      for (final p in IndicatorEngine.calculateIchimoku(candles, symbol))
         p.timeSeconds: p,
     };
   }
@@ -230,6 +266,90 @@ class StrategyScanner {
           'MACD(${mNow.macd.toStringAsFixed(5)}) ${ok ? '✓' : '·'}',
         );
 
+      case 'SMA_CROSS':
+        final fastMap = bundle.sma(p);
+        final slowMap = bundle.sma((p * 2).clamp(p + 5, 200));
+        final fNow = fastMap[t] ?? c.close;
+        final sNow = slowMap[t] ?? c.close;
+        final fPrev = fastMap[prevT] ?? prev.close;
+        final sPrev = slowMap[prevT] ?? prev.close;
+        final ok = rule.condition == 'CrossAbove'
+            ? (fPrev <= sPrev && fNow > sNow)
+            : rule.condition == 'GreaterThan'
+                ? fNow > sNow
+                : rule.condition == 'CrossBelow'
+                    ? (fPrev >= sPrev && fNow < sNow)
+                    : fNow < sNow;
+        final dir =
+            (rule.condition == 'CrossBelow' || rule.condition == 'LessThan')
+                ? 'Sell'
+                : 'Buy';
+        return _RuleBarEval(
+          ok,
+          dir,
+          'SMA($p/${p * 2}) ${ok ? '✓' : '·'}',
+        );
+
+      case 'SUPERTREND':
+        final stMap = bundle.supertrend(p, rule.threshold > 0 ? rule.threshold : 3.0);
+        final stNow = stMap[t];
+        final stPrev = stMap[prevT];
+        if (stNow == null) {
+          return const _RuleBarEval(false, 'Neutral', 'Supertrend warming up');
+        }
+        final isSellCond =
+            rule.condition == 'CrossBelow' || rule.condition == 'LessThan';
+        final ok = rule.condition == 'CrossAbove'
+            ? ((stPrev?.direction ?? stNow.direction) == -1 && stNow.direction == 1)
+            : rule.condition == 'CrossBelow'
+                ? ((stPrev?.direction ?? stNow.direction) == 1 && stNow.direction == -1)
+                : isSellCond
+                    ? stNow.direction == -1
+                    : stNow.direction == 1;
+        return _RuleBarEval(
+          ok,
+          isSellCond ? 'Sell' : 'Buy',
+          'Supertrend(${stNow.direction == 1 ? 'Bull' : 'Bear'}) ${ok ? '✓' : '·'}',
+        );
+
+      case 'VWAP_CROSS':
+        final vMap = bundle.vwap();
+        final vNow = vMap[t] ?? c.close;
+        final vPrev = vMap[prevT] ?? prev.close;
+        final isSellCond =
+            rule.condition == 'CrossBelow' || rule.condition == 'LessThan';
+        final ok = rule.condition == 'CrossAbove'
+            ? (prev.close <= vPrev && c.close > vNow)
+            : rule.condition == 'CrossBelow'
+                ? (prev.close >= vPrev && c.close < vNow)
+                : isSellCond
+                    ? c.close < vNow
+                    : c.close > vNow;
+        return _RuleBarEval(
+          ok,
+          isSellCond ? 'Sell' : 'Buy',
+          'VWAP(${vNow.toStringAsFixed(2)}) ${ok ? '✓' : '·'}',
+        );
+
+      case 'ICHIMOKU_BULL':
+        final iMap = bundle.ichimoku();
+        final iNow = iMap[t];
+        if (iNow == null || iNow.spanA == null || iNow.spanB == null) {
+          return const _RuleBarEval(false, 'Neutral', 'Ichimoku warming up');
+        }
+        final cloudTop = math.max(iNow.spanA!, iNow.spanB!);
+        final cloudBot = math.min(iNow.spanA!, iNow.spanB!);
+        final isSellCond =
+            rule.condition == 'CrossBelow' || rule.condition == 'LessThan';
+        final ok = isSellCond
+            ? (c.close < cloudBot && (iNow.tenkan ?? c.close) <= (iNow.kijun ?? c.close))
+            : (c.close > cloudTop && (iNow.tenkan ?? c.close) >= (iNow.kijun ?? c.close));
+        return _RuleBarEval(
+          ok,
+          isSellCond ? 'Sell' : 'Buy',
+          'Ichimoku(${isSellCond ? 'Bear' : 'Bull'}) ${ok ? '✓' : '·'}',
+        );
+
       case 'BB_BREAK':
       default:
         final std = rule.threshold > 0 ? rule.threshold : 2.0;
@@ -291,6 +411,7 @@ class StrategyScanner {
     double grossLoss = 0.0;
     int wins = 0;
     int signals = 0;
+    final equityCurve = <double>[10000.0];
 
     List<String> latestBreakdown = [];
     double latestScore = 0;
@@ -390,6 +511,8 @@ class StrategyScanner {
             ? entryPrice + safeAtr * strat.takeProfitAtrMult
             : entryPrice - safeAtr * strat.takeProfitAtrMult;
       }
+
+      equityCurve.add(equity);
     }
 
     final netReturnPct = ((equity - 10000.0) / 10000.0) * 100.0;
@@ -408,6 +531,7 @@ class StrategyScanner {
       profitFactor: pf,
       maxDrawdownPct: maxDdPct,
       trades: trades.reversed.toList(),
+      equityCurve: equityCurve,
       latestRuleBreakdown: latestBreakdown,
       latestScore: latestScore,
       latestDirection: latestDir,
@@ -438,7 +562,7 @@ class StrategyScanner {
           scopedStrat,
           candles,
           lookbackBars: 20,
-          requireAllRules: true,
+          requireAllRules: strat.combinator != 'OR',
         );
         hits.add(StrategyScanHit(
           strategy: strat,
@@ -554,7 +678,13 @@ class StrategyScanner {
     StrategyDefinition strat,
     List<Candle> candles,
   ) {
-    final bt = backtestStrategy(strat, candles, lookbackBars: 30);
+    final requireAll = strat.combinator != 'OR';
+    final bt = backtestStrategy(
+      strat,
+      candles,
+      lookbackBars: 30,
+      requireAllRules: requireAll,
+    );
     final matchScore = bt.latestScore;
     final direction = bt.latestDirection;
     final breakdownText = bt.latestRuleBreakdown.join(' · ');
@@ -563,12 +693,13 @@ class StrategyScanner {
     String reason = breakdownText.isEmpty
         ? 'Score ${matchScore.toStringAsFixed(0)}%'
         : '$breakdownText · Score ${matchScore.toStringAsFixed(0)}%';
+    final isTriggered = requireAll ? matchScore >= 100 : matchScore > 0;
     if (!strat.isEnabled) {
       outcome = 'Rejected';
       reason = 'Strategy paused · $reason';
-    } else if (matchScore >= 100 && direction != 'Neutral') {
+    } else if (isTriggered && direction != 'Neutral') {
       outcome = 'Executed';
-      reason = 'All rule thresholds aligned ($direction) · $reason';
+      reason = 'Rule threshold triggered ($direction) · $reason';
     }
 
     return SignalAuditLog(

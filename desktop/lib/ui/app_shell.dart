@@ -154,47 +154,189 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
     _candles = res.candles;
     _recalculatePositionsAndAlerts();
+    if (force) {
+      await _runAutonomousBotCycle();
+    }
 
+    if (!mounted) return;
     setState(() {
       _isSyncing = false;
       if (force) _secondsUntilSync = 60;
     });
   }
 
+  Future<void> _runAutonomousBotCycle() async {
+    if (widget.storage.risk.isKillSwitchEngaged) return;
+    final enabled =
+        widget.storage.strategies.where((s) => s.isEnabled).toList();
+    if (enabled.isEmpty) return;
+
+    for (final s in enabled) {
+      final res = await widget.marketData.fetchCandles(
+        s.symbol,
+        s.timeframe,
+      );
+      if (res.candles.length < 30) continue;
+      final log = StrategyScanner.evaluateStrategyOnCandles(s, res.candles);
+      widget.storage.auditLogs = [log, ...widget.storage.auditLogs.take(149)];
+
+      if (s.autoTrade &&
+          log.outcome == 'Executed' &&
+          (log.direction == 'Buy' || log.direction == 'Sell')) {
+        final alreadyOpen = widget.storage.positions.any((p) =>
+            p.status == 'Open' &&
+            p.symbol.toUpperCase() == s.symbol.toUpperCase() &&
+            p.strategyName == s.name);
+        if (!alreadyOpen) {
+          final lastC = res.candles.last;
+          final atrPts =
+              IndicatorEngine.calculateATR(res.candles, 14, s.symbol);
+          final atr = atrPts.isNotEmpty
+              ? atrPts.last.value
+              : (lastC.close * 0.002);
+          final safeAtr = atr > 0 ? atr : (lastC.close * 0.002);
+          final isBuy = log.direction == 'Buy';
+          final sl = IndicatorEngine.roundDynamic(
+            isBuy
+                ? lastC.close - safeAtr * s.stopLossAtrMult
+                : lastC.close + safeAtr * s.stopLossAtrMult,
+            s.symbol,
+            lastC.close,
+          );
+          final tp = IndicatorEngine.roundDynamic(
+            isBuy
+                ? lastC.close + safeAtr * s.takeProfitAtrMult
+                : lastC.close - safeAtr * s.takeProfitAtrMult,
+            s.symbol,
+            lastC.close,
+          );
+          final riskCap = widget.storage.risk.maxRiskPerTradePercent;
+          final effRisk = s.riskPercent.clamp(0.1, riskCap > 0 ? riskCap : 5.0);
+          final lots = (effRisk * 0.1).clamp(0.01, 5.0);
+
+          await _placeOrder(
+            log.direction,
+            s.symbol,
+            lots,
+            lastC.close,
+            sl: sl,
+            tp: tp,
+            strategyName: s.name,
+          );
+        }
+      }
+    }
+    await widget.storage.save();
+  }
+
   void _recalculatePositionsAndAlerts() {
     final currentPrice = _candles.isNotEmpty ? _candles.last.close : 0.0;
-    if (currentPrice <= 0) return;
+    if (currentPrice <= 0 && _watchlistQuotes.isEmpty) return;
 
+    final lastCandle = _candles.isNotEmpty ? _candles.last : null;
     double totalUnrealized = 0;
+    double newlyRealized = 0;
     final updatedPositions = <Position>[];
 
     for (final p in widget.storage.positions) {
-      if (p.status == 'Open' &&
-          p.symbol.toUpperCase() ==
-              widget.storage.selectedSymbol.toUpperCase()) {
-        final pnl = StrategyScanner.calculatePositionPnl(p, currentPrice);
+      if (p.status != 'Open') {
+        updatedPositions.add(p);
+        continue;
+      }
+
+      final isSelectedSym = p.symbol.toUpperCase() ==
+          widget.storage.selectedSymbol.toUpperCase();
+      final quotePrice = _watchlistQuotes[p.symbol]?.price;
+      final markPrice = isSelectedSym && currentPrice > 0
+          ? currentPrice
+          : (quotePrice != null && quotePrice > 0
+              ? quotePrice
+              : p.currentPrice);
+      final barHigh = isSelectedSym && lastCandle != null
+          ? lastCandle.high
+          : markPrice;
+      final barLow = isSelectedSym && lastCandle != null
+          ? lastCandle.low
+          : markPrice;
+
+      String? hitReason;
+      double exitPrice = markPrice;
+      if (p.isBuy) {
+        if (p.stopLossPrice != null && barLow <= p.stopLossPrice!) {
+          exitPrice = p.stopLossPrice!;
+          hitReason = 'Stop Loss';
+        } else if (p.takeProfitPrice != null && barHigh >= p.takeProfitPrice!) {
+          exitPrice = p.takeProfitPrice!;
+          hitReason = 'Take Profit';
+        }
+      } else {
+        if (p.stopLossPrice != null && barHigh >= p.stopLossPrice!) {
+          exitPrice = p.stopLossPrice!;
+          hitReason = 'Stop Loss';
+        } else if (p.takeProfitPrice != null && barLow <= p.takeProfitPrice!) {
+          exitPrice = p.takeProfitPrice!;
+          hitReason = 'Take Profit';
+        }
+      }
+
+      if (hitReason != null) {
+        final pnl = StrategyScanner.calculatePositionPnl(p, exitPrice);
+        newlyRealized += pnl;
+        updatedPositions.add(p.copyWith(
+          currentPrice: exitPrice,
+          unrealizedPnl: 0,
+          realizedPnl: pnl,
+          status: 'Closed',
+          closedAt: DateTime.now().toUtc(),
+        ));
+        if (widget.storage.desktopNotificationsEnabled) {
+          widget.notifications.sendDesktopNotification(
+            title: '$hitReason Hit · ${p.symbol}',
+            body:
+                '${p.orderType} ${p.lots.toStringAsFixed(2)} lots closed @ ${IndicatorEngine.formatPrice(exitPrice, p.symbol)} (${pnl >= 0 ? "+" : "-"}\$${pnl.abs().toStringAsFixed(2)})',
+            urgent: true,
+          );
+        }
+      } else {
+        final pnl = StrategyScanner.calculatePositionPnl(p, markPrice);
         totalUnrealized += pnl;
         updatedPositions.add(
-            p.copyWith(currentPrice: currentPrice, unrealizedPnl: pnl));
-      } else {
-        if (p.status == 'Open') totalUnrealized += p.unrealizedPnl;
-        updatedPositions.add(p);
+            p.copyWith(currentPrice: markPrice, unrealizedPnl: pnl));
       }
     }
 
     widget.storage.positions = updatedPositions;
-    final newEquity = widget.storage.account.balance + totalUnrealized;
-    final dd = widget.storage.account.balance > 0
-        ? ((widget.storage.account.balance - newEquity) /
-                widget.storage.account.balance *
-                100)
-            .clamp(0.0, 100.0)
+    final newBalance = widget.storage.account.balance + newlyRealized;
+    final newDailyRealized =
+        widget.storage.account.dailyRealizedPnl + newlyRealized;
+    final newEquity = newBalance + totalUnrealized;
+    final dd = newBalance > 0
+        ? ((newBalance - newEquity) / newBalance * 100).clamp(0.0, 100.0)
         : 0.0;
     widget.storage.account = widget.storage.account.copyWith(
+      balance: newBalance,
+      dailyRealizedPnl: newDailyRealized,
       equity: newEquity,
       unrealizedPnl: totalUnrealized,
       currentDrawdownPercent: dd,
     );
+
+    if (!widget.storage.risk.isKillSwitchEngaged &&
+        dd >= widget.storage.risk.maxDailyDrawdownPercent) {
+      widget.storage.risk = widget.storage.risk.copyWith(
+        isKillSwitchEngaged: true,
+        killSwitchReason:
+            'Auto-triggered: Daily drawdown ${dd.toStringAsFixed(2)}% reached limit ${widget.storage.risk.maxDailyDrawdownPercent.toStringAsFixed(1)}%',
+      );
+      if (widget.storage.desktopNotificationsEnabled) {
+        widget.notifications.sendDesktopNotification(
+          title: 'Emergency Kill Switch Engaged',
+          body:
+              'Daily drawdown (${dd.toStringAsFixed(2)}%) exceeded limit (${widget.storage.risk.maxDailyDrawdownPercent.toStringAsFixed(1)}%).',
+          urgent: true,
+        );
+      }
+    }
 
     // Check price alerts
     for (int i = 0; i < widget.storage.alerts.length; i++) {
@@ -227,13 +369,31 @@ class _AppShellState extends State<AppShell> {
     double price, {
     double? sl,
     double? tp,
+    String strategyName = 'Manual',
   }) async {
     if (widget.storage.risk.isKillSwitchEngaged) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Order blocked: Emergency Kill Switch is engaged!'),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order blocked: Emergency Kill Switch is engaged!'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final openCount =
+        widget.storage.positions.where((p) => p.status == 'Open').length;
+    if (openCount >= widget.storage.risk.maxOpenPositions) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Order blocked: Max open positions (${widget.storage.risk.maxOpenPositions}) reached.',
+            ),
+          ),
+        );
+      }
       return;
     }
 
@@ -248,19 +408,19 @@ class _AppShellState extends State<AppShell> {
       stopLossPrice: sl,
       takeProfitPrice: tp,
       openedAt: DateTime.now().toUtc(),
+      strategyName: strategyName,
     );
     widget.storage.positions = [pos, ...widget.storage.positions];
     await widget.storage.save();
+    if (!mounted) return;
     setState(() {});
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '$side $lots $symbol @ ${IndicatorEngine.formatPrice(price, symbol)}',
-          ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$side ${lots.toStringAsFixed(2)} $symbol @ ${IndicatorEngine.formatPrice(price, symbol)} ($strategyName)',
         ),
-      );
-    }
+      ),
+    );
   }
 
   Future<void> _closePosition(int ticket) async {
@@ -275,8 +435,10 @@ class _AppShellState extends State<AppShell> {
       closedAt: DateTime.now().toUtc(),
     );
     final newBalance = widget.storage.account.balance + pnl;
+    final newDaily = widget.storage.account.dailyRealizedPnl + pnl;
     widget.storage.account = widget.storage.account.copyWith(
       balance: newBalance,
+      dailyRealizedPnl: newDaily,
       equity: newBalance,
     );
     _recalculatePositionsAndAlerts();
@@ -869,6 +1031,18 @@ class _AppShellState extends State<AppShell> {
             widget.storage.risk = updated;
             await widget.storage.save();
             setState(() {});
+          },
+          onResetDemoAccount: (startingBalance) async {
+            await widget.storage.resetDemoAccount(startingBalance);
+            if (!mounted) return;
+            setState(() {});
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Demo account reset to \$${startingBalance.toStringAsFixed(0)}',
+                ),
+              ),
+            );
           },
           onToggleKillSwitch: () async {
             widget.storage.risk = widget.storage.risk.copyWith(

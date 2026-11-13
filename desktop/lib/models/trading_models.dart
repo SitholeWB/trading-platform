@@ -284,6 +284,7 @@ class Position {
   });
 
   bool get isBuy => orderType.toLowerCase() == 'buy';
+  bool get isOpen => status.toLowerCase() == 'open';
 
   Position copyWith({
     double? currentPrice,
@@ -382,6 +383,8 @@ class StrategyDefinition {
   final String symbol;
   final Timeframe timeframe;
   final bool isEnabled;
+  final bool autoTrade;
+  final String combinator;
   final double riskPercent;
   final double stopLossAtrMult;
   final double takeProfitAtrMult;
@@ -394,6 +397,8 @@ class StrategyDefinition {
     required this.symbol,
     required this.timeframe,
     this.isEnabled = true,
+    this.autoTrade = true,
+    this.combinator = 'AND',
     this.riskPercent = 1.0,
     this.stopLossAtrMult = 1.5,
     this.takeProfitAtrMult = 3.0,
@@ -406,6 +411,8 @@ class StrategyDefinition {
     String? symbol,
     Timeframe? timeframe,
     bool? isEnabled,
+    bool? autoTrade,
+    String? combinator,
     double? riskPercent,
     double? stopLossAtrMult,
     double? takeProfitAtrMult,
@@ -418,6 +425,8 @@ class StrategyDefinition {
         symbol: symbol ?? this.symbol,
         timeframe: timeframe ?? this.timeframe,
         isEnabled: isEnabled ?? this.isEnabled,
+        autoTrade: autoTrade ?? this.autoTrade,
+        combinator: combinator ?? this.combinator,
         riskPercent: riskPercent ?? this.riskPercent,
         stopLossAtrMult: stopLossAtrMult ?? this.stopLossAtrMult,
         takeProfitAtrMult: takeProfitAtrMult ?? this.takeProfitAtrMult,
@@ -431,6 +440,8 @@ class StrategyDefinition {
         'symbol': symbol,
         'timeframe': timeframe.code,
         'isEnabled': isEnabled,
+        'autoTrade': autoTrade,
+        'combinator': combinator,
         'riskPercent': riskPercent,
         'stopLossAtrMult': stopLossAtrMult,
         'takeProfitAtrMult': takeProfitAtrMult,
@@ -445,6 +456,8 @@ class StrategyDefinition {
         symbol: json['symbol'] as String,
         timeframe: Timeframe.fromCode(json['timeframe'] as String? ?? 'M5'),
         isEnabled: json['isEnabled'] as bool? ?? true,
+        autoTrade: json['autoTrade'] as bool? ?? true,
+        combinator: json['combinator'] as String? ?? 'AND',
         riskPercent: (json['riskPercent'] as num?)?.toDouble() ?? 1.0,
         stopLossAtrMult: (json['stopLossAtrMult'] as num?)?.toDouble() ?? 1.5,
         takeProfitAtrMult:

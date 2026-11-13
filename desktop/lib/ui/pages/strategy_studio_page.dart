@@ -31,10 +31,14 @@ class StrategyStudioPage extends StatefulWidget {
 class _StrategyStudioPageState extends State<StrategyStudioPage> {
   static const List<String> _indicators = [
     'EMA_CROSS',
+    'SMA_CROSS',
     'RSI_OS',
     'RSI_OB',
     'MACD_CROSS',
     'BB_BREAK',
+    'SUPERTREND',
+    'VWAP_CROSS',
+    'ICHIMOKU_BULL',
   ];
 
   static const List<String> _conditions = [
@@ -58,6 +62,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
   String _symbol = 'EURUSD';
   Timeframe _timeframe = Timeframe.m15;
   bool _isEnabled = true;
+  bool _autoTrade = true;
   double _riskPercent = 1.0;
   double _slMult = 1.5;
   double _tpMult = 3.0;
@@ -109,6 +114,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
           : 'EURUSD';
       _timeframe = s.timeframe;
       _isEnabled = s.isEnabled;
+      _autoTrade = s.autoTrade;
+      _combinator = s.combinator;
       _riskPercent = s.riskPercent.clamp(0.25, 5.0);
       _slMult = s.stopLossAtrMult.clamp(0.5, 4.0);
       _tpMult = s.takeProfitAtrMult.clamp(1.0, 8.0);
@@ -130,6 +137,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       _symbol = 'EURUSD';
       _timeframe = Timeframe.m15;
       _isEnabled = true;
+      _autoTrade = true;
+      _combinator = 'AND';
       _riskPercent = 1.0;
       _slMult = 1.5;
       _tpMult = 3.0;
@@ -155,6 +164,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       symbol: _symbol,
       timeframe: _timeframe,
       isEnabled: _isEnabled,
+      autoTrade: _autoTrade,
+      combinator: _combinator,
       riskPercent: _riskPercent,
       stopLossAtrMult: _slMult,
       takeProfitAtrMult: _tpMult,
@@ -585,6 +596,22 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                           onChanged: (v) => setState(() => _isEnabled = v),
                         ),
                       ],
+                    ),
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message:
+                          'Auto-execute demo trades when all rules align on live/simulated bars',
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Auto-Trade',
+                              style: TextStyle(fontSize: 12)),
+                          Switch(
+                            value: _autoTrade,
+                            onChanged: (v) => setState(() => _autoTrade = v),
+                          ),
+                        ],
+                      ),
                     ),
                     if (_activeTab != 2) ...[
                       const SizedBox(width: 8),
@@ -1260,6 +1287,49 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
             ),
           ),
           const SizedBox(height: 12),
+          if (bt.equityCurve.length >= 2) ...[
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Simulated Equity Curve (\$10,000 Base)',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        const Spacer(),
+                        Text(
+                          'End: \$${bt.equityCurve.last.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: bt.equityCurve.last >= 10000
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFFEF4444),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 110,
+                      width: double.infinity,
+                      child: CustomPaint(
+                        painter: _EquityCurvePainter(bt.equityCurve),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           // Trade Results List
           Card(
             margin: EdgeInsets.zero,
@@ -1392,4 +1462,77 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       ),
     );
   }
+}
+
+class _EquityCurvePainter extends CustomPainter {
+  final List<double> points;
+
+  _EquityCurvePainter(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+    double minVal = points.first;
+    double maxVal = points.first;
+    for (final v in points) {
+      if (v < minVal) minVal = v;
+      if (v > maxVal) maxVal = v;
+    }
+    if ((maxVal - minVal).abs() < 1e-6) {
+      maxVal += 100;
+      minVal -= 100;
+    }
+
+    final isPositive = points.last >= points.first;
+    final lineColor =
+        isPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+
+    // Draw baseline ($10,000)
+    final baseRatio =
+        ((10000.0 - minVal) / (maxVal - minVal)).clamp(0.0, 1.0);
+    final baseY = size.height - baseRatio * size.height;
+    final basePaint = Paint()
+      ..color = const Color(0xFF64748B).withValues(alpha: 0.35)
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(0, baseY), Offset(size.width, baseY), basePaint);
+
+    final path = Path();
+    final fillPath = Path();
+    for (int i = 0; i < points.length; i++) {
+      final x = (i / (points.length - 1)) * size.width;
+      final norm = (points[i] - minVal) / (maxVal - minVal);
+      final y = size.height - (norm * (size.height - 8) + 4);
+      if (i == 0) {
+        path.moveTo(x, y);
+        fillPath.moveTo(x, size.height);
+        fillPath.lineTo(x, y);
+      } else {
+        path.lineTo(x, y);
+        fillPath.lineTo(x, y);
+      }
+    }
+    fillPath.lineTo(size.width, size.height);
+    fillPath.close();
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          lineColor.withValues(alpha: 0.28),
+          lineColor.withValues(alpha: 0.02),
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawPath(fillPath, fillPaint);
+
+    final strokePaint = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    canvas.drawPath(path, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _EquityCurvePainter oldDelegate) =>
+      oldDelegate.points != points;
 }

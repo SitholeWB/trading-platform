@@ -246,4 +246,24 @@ class StorageService {
       // ignore write errors
     }
   }
+
+  /// Resets the paper/demo trading account to a fresh starting balance,
+  /// clearing open & closed positions, execution logs, and resetting risk state.
+  Future<void> resetDemoAccount(double startingBalance) async {
+    account = AccountSummary(
+      balance: startingBalance,
+      equity: startingBalance,
+      unrealizedPnl: 0.0,
+      dailyRealizedPnl: 0.0,
+      currentDrawdownPercent: 0.0,
+      currency: account.currency,
+    );
+    positions = [];
+    auditLogs = [];
+    risk = risk.copyWith(
+      isKillSwitchEngaged: false,
+      killSwitchReason: '',
+    );
+    await save();
+  }
 }

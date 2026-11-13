@@ -10,6 +10,7 @@ class PositionsPage extends StatelessWidget {
   final VoidCallback? onCloseAllPositions;
   final void Function(int ticket, double? sl, double? tp)? onUpdateSlTp;
   final ValueChanged<RiskProfile>? onUpdateRisk;
+  final ValueChanged<double>? onResetDemoAccount;
   final VoidCallback onToggleKillSwitch;
 
   const PositionsPage({
@@ -21,8 +22,95 @@ class PositionsPage extends StatelessWidget {
     this.onCloseAllPositions,
     this.onUpdateSlTp,
     this.onUpdateRisk,
+    this.onResetDemoAccount,
     required this.onToggleKillSwitch,
   });
+
+  Future<void> _showResetDemoDialog(BuildContext context) async {
+    double selectedBalance = 100000.0;
+    final customCtrl = TextEditingController(text: '100000');
+    const presets = [10000.0, 50000.0, 100000.0, 250000.0];
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.restart_alt, color: Color(0xFF38BDF8)),
+              SizedBox(width: 8),
+              Text('Reset Demo Account'),
+            ],
+          ),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Choose a starting paper balance. This will clear open/closed positions, reset PnL metrics, and disengage the kill switch.',
+                  style: TextStyle(fontSize: 12.5, color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: presets.map((amt) {
+                    final active = (selectedBalance - amt).abs() < 1;
+                    return ChoiceChip(
+                      label: Text('\$${(amt ~/ 1000)}k'),
+                      selected: active,
+                      onSelected: (_) {
+                        setDialogState(() {
+                          selectedBalance = amt;
+                          customCtrl.text = amt.toStringAsFixed(0);
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: customCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Starting Balance (USD)',
+                    prefixText: '\$ ',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (v) {
+                    final parsed = double.tryParse(v.trim());
+                    if (parsed != null && parsed >= 100) {
+                      setDialogState(() => selectedBalance = parsed);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              icon: const Icon(Icons.check, size: 16),
+              label: const Text('Reset Account'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true && onResetDemoAccount != null) {
+      final parsed = double.tryParse(customCtrl.text.trim()) ?? selectedBalance;
+      onResetDemoAccount!(parsed.clamp(100.0, 10000000.0));
+    }
+  }
 
   Future<void> _showEditSlTpDialog(BuildContext context, Position p) async {
     final slCtrl = TextEditingController(
@@ -348,74 +436,200 @@ class PositionsPage extends StatelessWidget {
           ),
           const SizedBox(width: 14),
           Expanded(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
+            child: ListView(
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
-                          'Risk Console',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
+                        Row(
+                          children: [
+                            const Text(
+                              'Risk Console',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            const Spacer(),
+                            if (onResetDemoAccount != null)
+                              TextButton.icon(
+                                onPressed: () => _showResetDemoDialog(context),
+                                icon: const Icon(Icons.restart_alt, size: 16),
+                                label: const Text('Reset Demo',
+                                    style: TextStyle(fontSize: 12)),
+                              ),
+                            if (onUpdateRisk != null)
+                              IconButton(
+                                tooltip: 'Edit Risk Guardrails',
+                                icon: const Icon(Icons.tune, size: 18),
+                                onPressed: () => _showRiskEditor(context),
+                              ),
+                          ],
                         ),
-                        const Spacer(),
-                        if (onUpdateRisk != null)
-                          IconButton(
-                            tooltip: 'Edit Risk Guardrails',
-                            icon: const Icon(Icons.tune, size: 18),
-                            onPressed: () => _showRiskEditor(context),
+                        const Divider(),
+                        _metric(
+                            'Balance', '\$${account.balance.toStringAsFixed(2)}'),
+                        _metric('Equity', '\$${account.equity.toStringAsFixed(2)}'),
+                        _metric(
+                          'Daily Realized PnL',
+                          '${account.dailyRealizedPnl >= 0 ? '+' : '-'}\$${account.dailyRealizedPnl.abs().toStringAsFixed(2)}',
+                        ),
+                        _metric(
+                          'Daily Drawdown',
+                          '${account.currentDrawdownPercent.toStringAsFixed(2)}% / ${risk.maxDailyDrawdownPercent.toStringAsFixed(1)}%',
+                        ),
+                        _metric('Max Risk / Trade',
+                            '${risk.maxRiskPerTradePercent.toStringAsFixed(2)}%'),
+                        _metric('Max Open Positions', '${risk.maxOpenPositions}'),
+                        if (risk.isKillSwitchEngaged &&
+                            (risk.killSwitchReason ?? '').isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Halt reason: ${risk.killSwitchReason}',
+                              style: const TextStyle(
+                                  fontSize: 11.5, color: Color(0xFFEF4444)),
+                            ),
                           ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: risk.isKillSwitchEngaged
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFFDC2626),
+                            ),
+                            onPressed: () => _showKillSwitchConfirm(context),
+                            icon: Icon(risk.isKillSwitchEngaged
+                                ? Icons.play_arrow
+                                : Icons.dangerous),
+                            label: Text(risk.isKillSwitchEngaged
+                                ? 'DISENGAGE KILL SWITCH'
+                                : 'ENGAGE KILL SWITCH'),
+                          ),
+                        ),
                       ],
                     ),
-                    const Divider(),
-                    _metric(
-                        'Balance', '\$${account.balance.toStringAsFixed(2)}'),
-                    _metric('Equity', '\$${account.equity.toStringAsFixed(2)}'),
-                    _metric(
-                      'Daily Drawdown',
-                      '${account.currentDrawdownPercent.toStringAsFixed(2)}% / ${risk.maxDailyDrawdownPercent.toStringAsFixed(1)}%',
-                    ),
-                    _metric('Max Risk / Trade',
-                        '${risk.maxRiskPerTradePercent.toStringAsFixed(2)}%'),
-                    _metric('Max Open Positions', '${risk.maxOpenPositions}'),
-                    if (risk.isKillSwitchEngaged &&
-                        (risk.killSwitchReason ?? '').isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          'Halt reason: ${risk.killSwitchReason}',
-                          style: const TextStyle(
-                              fontSize: 11.5, color: Color(0xFFEF4444)),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: risk.isKillSwitchEngaged
-                              ? const Color(0xFF10B981)
-                              : const Color(0xFFDC2626),
-                        ),
-                        onPressed: () => _showKillSwitchConfirm(context),
-                        icon: Icon(risk.isKillSwitchEngaged
-                            ? Icons.play_arrow
-                            : Icons.dangerous),
-                        label: Text(risk.isKillSwitchEngaged
-                            ? 'DISENGAGE KILL SWITCH'
-                            : 'ENGAGE KILL SWITCH'),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                _buildStrategyLeaderboardCard(context),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStrategyLeaderboardCard(BuildContext context) {
+    final byStrat = <String, List<Position>>{};
+    for (final p in positions) {
+      final key = p.strategyName.trim().isEmpty ? 'Manual' : p.strategyName;
+      byStrat.putIfAbsent(key, () => []).add(p);
+    }
+    final entries = byStrat.entries.toList()
+      ..sort((a, b) {
+        double netOf(List<Position> list) => list.fold(
+              0.0,
+              (s, p) => s + (p.isOpen ? p.unrealizedPnl : p.realizedPnl),
+            );
+        return netOf(b.value).compareTo(netOf(a.value));
+      });
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.emoji_events_outlined,
+                    size: 18, color: Color(0xFFF59E0B)),
+                SizedBox(width: 8),
+                Text(
+                  'Strategy Paper Leaderboard',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const Divider(),
+            if (entries.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No paper trades yet. Place a manual order or enable Auto-Trade on a strategy.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              )
+            else
+              ...entries.map((e) {
+                final list = e.value;
+                final openCount = list.where((p) => p.isOpen).length;
+                final closedList = list.where((p) => !p.isOpen).toList();
+                final wins =
+                    closedList.where((p) => p.realizedPnl >= 0).length;
+                final winRate = closedList.isEmpty
+                    ? 0.0
+                    : (wins / closedList.length) * 100.0;
+                final netPnl = list.fold<double>(
+                  0.0,
+                  (s, p) => s + (p.isOpen ? p.unrealizedPnl : p.realizedPnl),
+                );
+                final posColor = netPnl >= 0
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFFEF4444);
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              e.key,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 12.5),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Open: $openCount · Closed: ${closedList.length} · Win: ${winRate.toStringAsFixed(0)}%',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey,
+                                  fontFamily: 'monospace'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${netPnl >= 0 ? '+' : '-'}\$${netPnl.abs().toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: posColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+          ],
+        ),
       ),
     );
   }
