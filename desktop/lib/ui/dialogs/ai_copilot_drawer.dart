@@ -8,6 +8,8 @@ class AiCopilotDrawer extends StatefulWidget {
   final Timeframe timeframe;
   final List<Candle> candles;
   final VoidCallback onClose;
+  final VoidCallback? onOpenSettings;
+  final Future<void> Function(CopilotAction action)? onExecuteAction;
 
   const AiCopilotDrawer({
     super.key,
@@ -16,6 +18,8 @@ class AiCopilotDrawer extends StatefulWidget {
     required this.timeframe,
     required this.candles,
     required this.onClose,
+    this.onOpenSettings,
+    this.onExecuteAction,
   });
 
   @override
@@ -24,6 +28,7 @@ class AiCopilotDrawer extends StatefulWidget {
 
 class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
   final _ctrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
   final List<ChatMessage> _messages = [];
   bool _loading = false;
 
@@ -32,8 +37,9 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
     super.initState();
     _messages.add(ChatMessage(
       role: 'assistant',
+      providerUsed: AiCopilotService.specFor(widget.copilot.storage.aiProvider).label,
       content:
-          'Ready to analyze ${widget.symbol} (${widget.timeframe.code}). Ask for trend diagnostics, SL/TP ATR envelopes, or strategy critiques.',
+          'Ready to assist on ${widget.symbol} (${widget.timeframe.code}). Ask for chart diagnostics, position sizing, portfolio risk checks, or 1-click trade/strategy setups.',
       timestamp: DateTime.now(),
     ));
   }
@@ -41,6 +47,7 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
   @override
   void dispose() {
     _ctrl.dispose();
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -49,6 +56,7 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
     if (text.isEmpty || _loading) return;
     if (preset == null) _ctrl.clear();
 
+    final historySnapshot = List<ChatMessage>.from(_messages);
     setState(() {
       _messages.add(ChatMessage(
         role: 'user',
@@ -57,29 +65,60 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
       ));
       _loading = true;
     });
+    _scrollToBottom();
 
     final reply = await widget.copilot.ask(
       prompt: text,
       symbol: widget.symbol,
       timeframe: widget.timeframe,
       candles: widget.candles,
+      history: historySnapshot,
     );
 
     if (!mounted) return;
     setState(() {
       _messages.add(ChatMessage(
         role: 'assistant',
-        content: reply,
+        content: reply.content,
+        providerUsed: reply.providerUsed,
+        actions: reply.actions,
         timestamp: DateTime.now(),
       ));
       _loading = false;
     });
+    _scrollToBottom();
   }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollCtrl.hasClients) {
+        _scrollCtrl.animateTo(
+          _scrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  IconData _iconForAction(String type) => switch (type) {
+        'order' => Icons.bolt,
+        'strategy' => Icons.auto_fix_high,
+        'alert' => Icons.notifications_active_outlined,
+        'close_position' => Icons.close_fullscreen,
+        _ => Icons.play_arrow,
+      };
 
   @override
   Widget build(BuildContext context) {
+    final activeSpec =
+        AiCopilotService.specFor(widget.copilot.storage.aiProvider);
+    final activeModel = widget.copilot.storage.aiModel.trim().isNotEmpty
+        ? widget.copilot.storage.aiModel.trim()
+        : activeSpec.defaultModel;
+
     return Container(
-      width: 340,
+      width: 390,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(
@@ -89,7 +128,7 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
       child: Column(
         children: [
           Container(
-            height: 48,
+            height: 52,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               border: Border(
@@ -101,11 +140,40 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
                 const Icon(Icons.auto_awesome,
                     size: 18, color: Color(0xFF06B6D4)),
                 const SizedBox(width: 8),
-                const Text(
-                  'AI Quant Copilot',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'AI Quant Copilot',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      Text(
+                        '${activeSpec.label} · $activeModel',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 10.5, color: Color(0xFF94A3B8)),
+                      ),
+                    ],
+                  ),
                 ),
-                const Spacer(),
+                if (widget.onOpenSettings != null)
+                  IconButton(
+                    tooltip: 'Switch AI Provider / Model',
+                    icon: const Icon(Icons.tune, size: 17),
+                    onPressed: widget.onOpenSettings,
+                  ),
+                IconButton(
+                  tooltip: 'Clear Chat',
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 17),
+                  onPressed: () {
+                    setState(() {
+                      _messages.removeRange(1, _messages.length);
+                    });
+                  },
+                ),
                 IconButton(
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: widget.onClose,
@@ -114,7 +182,7 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
             child: Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -122,18 +190,33 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
                 ActionChip(
                   label: Text('Analyze ${widget.symbol}',
                       style: const TextStyle(fontSize: 11)),
-                  onPressed: () => _send('Analyze ${widget.symbol} structure'),
+                  onPressed: () =>
+                      _send('Analyze ${widget.symbol} (${widget.timeframe.code}) structure, trend, and key levels.'),
                 ),
                 ActionChip(
-                  label: const Text('Suggest SL/TP',
+                  label: const Text('Trade Setup & Lots',
                       style: TextStyle(fontSize: 11)),
-                  onPressed: () => _send('Suggest ATR Stop Loss and Take Profit'),
+                  onPressed: () => _send(
+                      'Suggest a complete ${widget.symbol} trade setup with ATR SL/TP and exact lot sizing for my risk profile.'),
+                ),
+                ActionChip(
+                  label: const Text('Risk & Positions',
+                      style: TextStyle(fontSize: 11)),
+                  onPressed: () => _send(
+                      'Review my open positions, floating PnL, and daily drawdown risk.'),
+                ),
+                ActionChip(
+                  label: const Text('Draft Bot Strategy',
+                      style: TextStyle(fontSize: 11)),
+                  onPressed: () => _send(
+                      'Design an automated rule-based bot strategy for ${widget.symbol} on ${widget.timeframe.code}.'),
                 ),
               ],
             ),
           ),
           Expanded(
             child: ListView.builder(
+              controller: _scrollCtrl,
               padding: const EdgeInsets.all(10),
               itemCount: _messages.length,
               itemBuilder: (ctx, i) {
@@ -143,18 +226,65 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
                   alignment:
                       isUser ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(10),
-                    constraints: const BoxConstraints(maxWidth: 290),
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(11),
+                    constraints: const BoxConstraints(maxWidth: 340),
                     decoration: BoxDecoration(
                       color: isUser
                           ? const Color(0xFF2563EB).withValues(alpha: 0.22)
                           : const Color(0xFF1E293B).withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isUser
+                            ? const Color(0xFF3B82F6).withValues(alpha: 0.35)
+                            : Colors.white.withValues(alpha: 0.06),
+                      ),
                     ),
-                    child: SelectableText(
-                      m.content,
-                      style: const TextStyle(fontSize: 12, height: 1.4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (!isUser && (m.providerUsed ?? '').isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              m.providerUsed!,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF22D3EE),
+                              ),
+                            ),
+                          ),
+                        SelectableText(
+                          m.content,
+                          style: const TextStyle(fontSize: 12, height: 1.42),
+                        ),
+                        if (m.actions.isNotEmpty &&
+                            widget.onExecuteAction != null) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: m.actions.map((act) {
+                              return FilledButton.tonalIcon(
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () => widget.onExecuteAction!(act),
+                                icon: Icon(_iconForAction(act.type), size: 14),
+                                label: Text(
+                                  act.label,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 );
@@ -163,7 +293,7 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
           ),
           if (_loading)
             const Padding(
-              padding: EdgeInsets.all(6),
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               child: LinearProgressIndicator(minHeight: 2),
             ),
           Padding(
@@ -173,9 +303,11 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
                 Expanded(
                   child: TextField(
                     controller: _ctrl,
+                    minLines: 1,
+                    maxLines: 3,
                     onSubmitted: (_) => _send(),
                     decoration: const InputDecoration(
-                      hintText: 'Ask AI Copilot...',
+                      hintText: 'Ask Copilot anything...',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),

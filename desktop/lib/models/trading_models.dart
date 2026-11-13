@@ -705,15 +705,31 @@ class IndicatorSettings {
       );
 }
 
+class CopilotAction {
+  final String type; // 'order' | 'strategy' | 'alert' | 'close_position'
+  final String label;
+  final Map<String, dynamic> payload;
+
+  const CopilotAction({
+    required this.type,
+    required this.label,
+    required this.payload,
+  });
+}
+
 class ChatMessage {
   final String role; // 'user' or 'assistant'
   final String content;
   final DateTime timestamp;
+  final String? providerUsed;
+  final List<CopilotAction> actions;
 
   const ChatMessage({
     required this.role,
     required this.content,
     required this.timestamp,
+    this.providerUsed,
+    this.actions = const [],
   });
 }
 

@@ -12,7 +12,8 @@ class StorageService {
   String oandaAccountId = '';
   bool oandaIsPractice = true;
   String twelveDataApiKey = '';
-  String aiProvider = 'BuiltIn'; // BuiltIn | OpenAI | Gemini | Ollama
+  String aiProvider = 'BuiltIn'; // BuiltIn | OpenAI | Anthropic | Gemini | Groq | DeepSeek | OpenRouter | Ollama | Custom
+  String aiModel = '';
   String aiApiKey = '';
   String aiEndpoint = 'http://localhost:11434';
 
@@ -64,6 +65,7 @@ class StorageService {
         oandaIsPractice = data['oandaIsPractice'] as bool? ?? true;
         twelveDataApiKey = data['twelveDataApiKey'] as String? ?? '';
         aiProvider = data['aiProvider'] as String? ?? 'BuiltIn';
+        aiModel = data['aiModel'] as String? ?? '';
         aiApiKey = data['aiApiKey'] as String? ?? '';
         aiEndpoint = data['aiEndpoint'] as String? ?? 'http://localhost:11434';
         selectedSymbol = data['selectedSymbol'] as String? ?? 'EURUSD';
@@ -214,6 +216,7 @@ class StorageService {
         'oandaIsPractice': oandaIsPractice,
         'twelveDataApiKey': twelveDataApiKey,
         'aiProvider': aiProvider,
+        'aiModel': aiModel,
         'aiApiKey': aiApiKey,
         'aiEndpoint': aiEndpoint,
         'selectedSymbol': selectedSymbol,

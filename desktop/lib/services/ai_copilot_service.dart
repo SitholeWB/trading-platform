@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import '../models/trading_models.dart';
 import 'indicator_engine.dart';
@@ -6,76 +7,393 @@ import 'storage_service.dart';
 import 'strategy_scanner.dart';
 import 'symbol_catalog.dart';
 
+class AiProviderSpec {
+  final String id;
+  final String label;
+  final String defaultModel;
+  final String defaultEndpoint;
+  final bool requiresKey;
+  final bool supportsCustomEndpoint;
+
+  const AiProviderSpec({
+    required this.id,
+    required this.label,
+    required this.defaultModel,
+    required this.defaultEndpoint,
+    required this.requiresKey,
+    this.supportsCustomEndpoint = false,
+  });
+}
+
+class CopilotReply {
+  final String content;
+  final String providerUsed;
+  final List<CopilotAction> actions;
+
+  const CopilotReply({
+    required this.content,
+    required this.providerUsed,
+    this.actions = const [],
+  });
+}
+
 class AiCopilotService {
+  static const List<AiProviderSpec> providers = [
+    AiProviderSpec(
+      id: 'BuiltIn',
+      label: 'Built-in Quant',
+      defaultModel: 'quant-engine-v2',
+      defaultEndpoint: '',
+      requiresKey: false,
+    ),
+    AiProviderSpec(
+      id: 'OpenAI',
+      label: 'OpenAI',
+      defaultModel: 'gpt-4o-mini',
+      defaultEndpoint: 'https://api.openai.com/v1',
+      requiresKey: true,
+    ),
+    AiProviderSpec(
+      id: 'Anthropic',
+      label: 'Anthropic Claude',
+      defaultModel: 'claude-3-5-sonnet-latest',
+      defaultEndpoint: 'https://api.anthropic.com/v1',
+      requiresKey: true,
+    ),
+    AiProviderSpec(
+      id: 'Gemini',
+      label: 'Google Gemini',
+      defaultModel: 'gemini-2.5-flash',
+      defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta',
+      requiresKey: true,
+    ),
+    AiProviderSpec(
+      id: 'Groq',
+      label: 'Groq',
+      defaultModel: 'llama-3.3-70b-versatile',
+      defaultEndpoint: 'https://api.groq.com/openai/v1',
+      requiresKey: true,
+    ),
+    AiProviderSpec(
+      id: 'DeepSeek',
+      label: 'DeepSeek',
+      defaultModel: 'deepseek-chat',
+      defaultEndpoint: 'https://api.deepseek.com/v1',
+      requiresKey: true,
+    ),
+    AiProviderSpec(
+      id: 'OpenRouter',
+      label: 'OpenRouter',
+      defaultModel: 'openai/gpt-4o-mini',
+      defaultEndpoint: 'https://openrouter.ai/api/v1',
+      requiresKey: true,
+    ),
+    AiProviderSpec(
+      id: 'Ollama',
+      label: 'Local Ollama',
+      defaultModel: 'llama3.2',
+      defaultEndpoint: 'http://localhost:11434',
+      requiresKey: false,
+      supportsCustomEndpoint: true,
+    ),
+    AiProviderSpec(
+      id: 'Custom',
+      label: 'Custom OpenAI-Compatible',
+      defaultModel: 'local-model',
+      defaultEndpoint: 'http://localhost:1234/v1',
+      requiresKey: false,
+      supportsCustomEndpoint: true,
+    ),
+  ];
+
+  static AiProviderSpec specFor(String id) {
+    return providers.firstWhere(
+      (p) => p.id == id,
+      orElse: () => providers.first,
+    );
+  }
+
   final StorageService storage;
   AiCopilotService(this.storage);
 
-  Future<String> ask({
+  Future<CopilotReply> ask({
     required String prompt,
     required String symbol,
     required Timeframe timeframe,
     required List<Candle> candles,
+    List<ChatMessage> history = const [],
   }) async {
-    final diag = _buildLocalDiagnostics(symbol, timeframe, candles);
+    final diag = _buildTraderContext(symbol, timeframe, candles);
+    final provider = storage.aiProvider;
+    final spec = specFor(provider);
+    final model = storage.aiModel.trim().isNotEmpty
+        ? storage.aiModel.trim()
+        : spec.defaultModel;
+    final key = storage.aiApiKey.trim();
 
-    if (storage.aiProvider == 'OpenAI' && storage.aiApiKey.isNotEmpty) {
-      try {
-        final resp = await http
-            .post(
-              Uri.parse('https://api.openai.com/v1/chat/completions'),
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ${storage.aiApiKey}',
-              },
-              body: jsonEncode({
-                'model': 'gpt-4o-mini',
-                'messages': [
-                  {
-                    'role': 'system',
-                    'content':
-                        'You are an institutional quantitative trading analyst. Context:\n$diag',
-                  },
-                  {'role': 'user', 'content': prompt},
-                ],
-                'max_tokens': 450,
-              }),
-            )
-            .timeout(const Duration(seconds: 15));
-        if (resp.statusCode == 200) {
-          final data = jsonDecode(resp.body) as Map<String, dynamic>;
-          final choices = data['choices'] as List<dynamic>;
-          if (choices.isNotEmpty) {
-            return choices.first['message']['content'] as String;
-          }
+    String? rawText;
+    String? errorNote;
+
+    if (provider != 'BuiltIn') {
+      if (spec.requiresKey && key.isEmpty) {
+        errorNote =
+            'No API key configured for ${spec.label}. Showing built-in Quant analysis instead.';
+      } else {
+        try {
+          rawText = switch (provider) {
+            'Anthropic' => await _callAnthropic(
+                prompt: prompt,
+                context: diag,
+                model: model,
+                apiKey: key,
+                history: history,
+              ),
+            'Gemini' => await _callGemini(
+                prompt: prompt,
+                context: diag,
+                model: model,
+                apiKey: key,
+                history: history,
+              ),
+            'Ollama' => await _callOllama(
+                prompt: prompt,
+                context: diag,
+                model: model,
+                endpoint: storage.aiEndpoint.trim().isNotEmpty
+                    ? storage.aiEndpoint.trim()
+                    : spec.defaultEndpoint,
+                history: history,
+              ),
+            _ => await _callOpenAiCompatible(
+                prompt: prompt,
+                context: diag,
+                model: model,
+                apiKey: key,
+                baseUrl: provider == 'Custom'
+                    ? (storage.aiEndpoint.trim().isNotEmpty
+                        ? storage.aiEndpoint.trim()
+                        : spec.defaultEndpoint)
+                    : spec.defaultEndpoint,
+                history: history,
+              ),
+          };
+        } catch (e) {
+          errorNote =
+              '${spec.label} request failed ($e). Falling back to Built-in Quant Engine.';
         }
-      } catch (_) {}
+      }
     }
 
-    if (storage.aiProvider == 'Ollama') {
-      try {
-        final resp = await http
-            .post(
-              Uri.parse('${storage.aiEndpoint}/api/generate'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'model': 'llama3.2',
-                'prompt': 'Market context:\n$diag\n\nUser question: $prompt',
-                'stream': false,
-              }),
-            )
-            .timeout(const Duration(seconds: 15));
-        if (resp.statusCode == 200) {
-          final data = jsonDecode(resp.body) as Map<String, dynamic>;
-          final text = data['response'] as String?;
-          if (text != null && text.isNotEmpty) return text;
-        }
-      } catch (_) {}
+    if (rawText != null && rawText.trim().isNotEmpty) {
+      final parsed = _extractCopilotActions(rawText, symbol, timeframe, candles);
+      return CopilotReply(
+        content: parsed.cleanedText,
+        providerUsed: '${spec.label} ($model)',
+        actions: parsed.actions,
+      );
     }
 
-    return _builtInQuantReply(prompt, symbol, timeframe, candles, diag);
+    final fallback = _builtInQuantReply(prompt, symbol, timeframe, candles, diag);
+    final finalText = errorNote != null ? '> _${errorNote}_\n\n$fallback' : fallback;
+    return CopilotReply(
+      content: finalText,
+      providerUsed: 'Built-in Quant',
+      actions: _builtInSuggestedActions(prompt, symbol, timeframe, candles),
+    );
   }
 
-  String _buildLocalDiagnostics(
+  String _systemInstruction(String context) => '''
+You are an institutional quantitative trading copilot embedded inside a 100% Demo / Paper Trading Desktop Platform.
+You can inspect the trader's live chart context, open positions, risk profile, and active strategies below.
+Be concise, concrete, and directly actionable for the trader. Use exact prices, ATR levels, and position sizing math.
+
+If you recommend a concrete trade setup, strategy draft, price alert, or closing a position, you MAY append one or more action blocks at the very end of your response using this exact syntax so the user gets 1-click execution buttons in the UI:
+[[ACTION:{"type":"order","label":"Buy 0.10 EURUSD @ Market","side":"Buy","symbol":"EURUSD","lots":0.10,"sl":1.0800,"tp":1.0920}]]
+[[ACTION:{"type":"alert","label":"Alert EURUSD >= 1.0900","symbol":"EURUSD","condition":"Above","price":1.0900}]]
+[[ACTION:{"type":"strategy","label":"Create RSI + EMA Strategy","name":"AI Momentum","symbol":"EURUSD","timeframe":"M15","combinator":"AND","riskPercent":1.0,"slMult":1.5,"tpMult":3.0,"rules":[{"indicator":"EMA_CROSS","condition":"CrossAbove","period":20,"threshold":0},{"indicator":"RSI_OS","condition":"LessThan","period":14,"threshold":35}]}]]
+[[ACTION:{"type":"close_position","label":"Close #12345","ticket":12345}]]
+
+Valid rule indicators: EMA_CROSS, SMA_CROSS, RSI_OS, RSI_OB, MACD_CROSS, BB_BREAK, SUPERTREND, VWAP_CROSS, ICHIMOKU_BULL.
+Valid rule conditions: CrossAbove, CrossBelow, LessThan, GreaterThan.
+
+LIVE PLATFORM CONTEXT:
+$context
+''';
+
+  Future<String?> _callOpenAiCompatible({
+    required String prompt,
+    required String context,
+    required String model,
+    required String apiKey,
+    required String baseUrl,
+    required List<ChatMessage> history,
+  }) async {
+    final cleanBase = baseUrl.replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse(
+      cleanBase.endsWith('/chat/completions')
+          ? cleanBase
+          : '$cleanBase/chat/completions',
+    );
+    final messages = <Map<String, String>>[
+      {'role': 'system', 'content': _systemInstruction(context)},
+      ...history.take(8).map((m) => {'role': m.role, 'content': m.content}),
+      {'role': 'user', 'content': prompt},
+    ];
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+    };
+    final resp = await http
+        .post(
+          uri,
+          headers: headers,
+          body: jsonEncode({
+            'model': model,
+            'messages': messages,
+            'max_tokens': 900,
+            'temperature': 0.3,
+          }),
+        )
+        .timeout(const Duration(seconds: 25));
+
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('HTTP ${resp.statusCode}');
+    }
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    final choices = data['choices'] as List<dynamic>?;
+    if (choices == null || choices.isEmpty) return null;
+    final msg = choices.first['message'] as Map<String, dynamic>?;
+    return msg?['content'] as String?;
+  }
+
+  Future<String?> _callAnthropic({
+    required String prompt,
+    required String context,
+    required String model,
+    required String apiKey,
+    required List<ChatMessage> history,
+  }) async {
+    final messages = <Map<String, String>>[
+      ...history
+          .where((m) => m.role == 'user' || m.role == 'assistant')
+          .take(8)
+          .map((m) => {'role': m.role, 'content': m.content}),
+      {'role': 'user', 'content': prompt},
+    ];
+    final resp = await http
+        .post(
+          Uri.parse('https://api.anthropic.com/v1/messages'),
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: jsonEncode({
+            'model': model,
+            'max_tokens': 900,
+            'system': _systemInstruction(context),
+            'messages': messages,
+          }),
+        )
+        .timeout(const Duration(seconds: 25));
+
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('HTTP ${resp.statusCode}');
+    }
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    final content = data['content'] as List<dynamic>?;
+    if (content == null || content.isEmpty) return null;
+    return content.first['text'] as String?;
+  }
+
+  Future<String?> _callGemini({
+    required String prompt,
+    required String context,
+    required String model,
+    required String apiKey,
+    required List<ChatMessage> history,
+  }) async {
+    final uri = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
+    );
+    final contents = <Map<String, dynamic>>[
+      ...history.take(8).map((m) => {
+            'role': m.role == 'assistant' ? 'model' : 'user',
+            'parts': [
+              {'text': m.content}
+            ],
+          }),
+      {
+        'role': 'user',
+        'parts': [
+          {'text': prompt}
+        ],
+      },
+    ];
+    final resp = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'systemInstruction': {
+              'parts': [
+                {'text': _systemInstruction(context)}
+              ],
+            },
+            'contents': contents,
+            'generationConfig': {
+              'maxOutputTokens': 900,
+              'temperature': 0.3,
+            },
+          }),
+        )
+        .timeout(const Duration(seconds: 25));
+
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('HTTP ${resp.statusCode}');
+    }
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    final candidates = data['candidates'] as List<dynamic>?;
+    if (candidates == null || candidates.isEmpty) return null;
+    final parts = candidates.first['content']?['parts'] as List<dynamic>?;
+    if (parts == null || parts.isEmpty) return null;
+    return parts.first['text'] as String?;
+  }
+
+  Future<String?> _callOllama({
+    required String prompt,
+    required String context,
+    required String model,
+    required String endpoint,
+    required List<ChatMessage> history,
+  }) async {
+    final cleanBase = endpoint.replaceAll(RegExp(r'/+$'), '');
+    final messages = <Map<String, String>>[
+      {'role': 'system', 'content': _systemInstruction(context)},
+      ...history.take(8).map((m) => {'role': m.role, 'content': m.content}),
+      {'role': 'user', 'content': prompt},
+    ];
+    final resp = await http
+        .post(
+          Uri.parse('$cleanBase/api/chat'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'model': model,
+            'messages': messages,
+            'stream': false,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('HTTP ${resp.statusCode}');
+    }
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    final msg = data['message'] as Map<String, dynamic>?;
+    return msg?['content'] as String?;
+  }
+
+  String _buildTraderContext(
     String symbol,
     Timeframe tf,
     List<Candle> candles,
@@ -84,10 +402,180 @@ class AiCopilotService {
     final hit = StrategyScanner.analyzeCandles(spec, tf, candles);
     final priceStr = IndicatorEngine.formatPrice(hit.price, symbol);
     final atrStr = IndicatorEngine.formatPrice(hit.atr, symbol);
-    return 'Symbol: $symbol (${spec.name}) | Timeframe: ${tf.code}\n'
-        'Price: $priceStr (${hit.changePct >= 0 ? '+' : ''}${hit.changePct.toStringAsFixed(2)}%)\n'
-        'Trend: ${hit.trend} | RSI(14): ${hit.rsi.toStringAsFixed(1)} | ATR(14): $atrStr\n'
-        'Quant Score: ${hit.score.toStringAsFixed(0)}/100 (${hit.signal})';
+
+    final ema20 = IndicatorEngine.calculateEMA(candles, 20, symbol);
+    final ema50 = IndicatorEngine.calculateEMA(candles, 50, symbol);
+    final macd = IndicatorEngine.calculateMACD(candles, 12, 26, 9);
+    final st = IndicatorEngine.calculateSupertrend(candles, 10, 3.0, symbol);
+    final bb = IndicatorEngine.calculateBollingerBands(candles, 20, 2.0, symbol);
+
+    final e20Str = ema20.isNotEmpty
+        ? IndicatorEngine.formatPrice(ema20.last.value, symbol)
+        : 'n/a';
+    final e50Str = ema50.isNotEmpty
+        ? IndicatorEngine.formatPrice(ema50.last.value, symbol)
+        : 'n/a';
+    final macdStr = macd.isNotEmpty
+        ? 'MACD=${macd.last.macd.toStringAsFixed(5)} Sig=${macd.last.signal.toStringAsFixed(5)}'
+        : 'n/a';
+    final stStr = st.isNotEmpty
+        ? (st.last.direction == 1 ? 'Bullish' : 'Bearish')
+        : 'n/a';
+    final bbStr = bb.isNotEmpty
+        ? '${IndicatorEngine.formatPrice(bb.last.lower, symbol)}..${IndicatorEngine.formatPrice(bb.last.upper, symbol)}'
+        : 'n/a';
+
+    final openPos =
+        storage.positions.where((p) => p.status == 'Open').toList();
+    final posSummary = openPos.isEmpty
+        ? 'None'
+        : openPos
+            .take(8)
+            .map((p) =>
+                '#${p.ticket} ${p.orderType} ${p.lots} ${p.symbol} @ ${IndicatorEngine.formatPrice(p.entryPrice, p.symbol)} (PnL: ${p.unrealizedPnl >= 0 ? "+" : ""}\$${p.unrealizedPnl.toStringAsFixed(2)}, SL=${p.stopLossPrice ?? "none"}, TP=${p.takeProfitPrice ?? "none"}, Strat=${p.strategyName})')
+            .join('\n  - ');
+
+    final stratSummary = storage.strategies.isEmpty
+        ? 'None'
+        : storage.strategies
+            .take(8)
+            .map((s) =>
+                '${s.name} [${s.symbol} ${s.timeframe.code}] enabled=${s.isEnabled} autoTrade=${s.autoTrade} logic=${s.combinator} rules=${s.entryRules.length}')
+            .join('\n  - ');
+
+    return '''
+Active Chart: $symbol (${spec.name}) | Timeframe: ${tf.code} | Provider: ${storage.activeProvider}
+Price: $priceStr (${hit.changePct >= 0 ? '+' : ''}${hit.changePct.toStringAsFixed(2)}%)
+Indicators: Trend=${hit.trend} | RSI(14)=${hit.rsi.toStringAsFixed(1)} | ATR(14)=$atrStr | EMA20=$e20Str | EMA50=$e50Str | Supertrend=$stStr | $macdStr | BB=$bbStr
+Quant Score: ${hit.score.toStringAsFixed(0)}/100 (${hit.signal})
+Demo Account: Balance=\$${storage.account.balance.toStringAsFixed(2)} | Equity=\$${storage.account.equity.toStringAsFixed(2)} | Unrealized=\$${storage.account.unrealizedPnl.toStringAsFixed(2)} | Daily Realized=\$${storage.account.dailyRealizedPnl.toStringAsFixed(2)} | Drawdown=${storage.account.currentDrawdownPercent.toStringAsFixed(2)}%
+Risk Guard: MaxDD=${storage.risk.maxDailyDrawdownPercent}% | MaxRisk/Trade=${storage.risk.maxRiskPerTradePercent}% | MaxPositions=${storage.risk.maxOpenPositions} | KillSwitch=${storage.risk.isKillSwitchEngaged}
+Open Positions (${openPos.length}):
+  - $posSummary
+Configured Strategies (${storage.strategies.length}):
+  - $stratSummary''';
+  }
+
+  ({String cleanedText, List<CopilotAction> actions}) _extractCopilotActions(
+    String raw,
+    String symbol,
+    Timeframe tf,
+    List<Candle> candles,
+  ) {
+    final actions = <CopilotAction>[];
+    final regex = RegExp(r'\[\[ACTION:(\{.*?\})\]\]', dotAll: true);
+    final cleaned = raw.replaceAllMapped(regex, (m) {
+      try {
+        final decoded = jsonDecode(m.group(1)!) as Map<String, dynamic>;
+        final type = decoded['type'] as String? ?? '';
+        final label = decoded['label'] as String? ?? 'Execute Action';
+        if (type.isNotEmpty) {
+          actions.add(CopilotAction(type: type, label: label, payload: decoded));
+        }
+      } catch (_) {}
+      return '';
+    }).trim();
+
+    return (cleanedText: cleaned, actions: actions);
+  }
+
+  List<CopilotAction> _builtInSuggestedActions(
+    String prompt,
+    String symbol,
+    Timeframe tf,
+    List<Candle> candles,
+  ) {
+    final spec = SymbolCatalog.find(symbol);
+    final hit = StrategyScanner.analyzeCandles(spec, tf, candles);
+    final atr = hit.atr > 0 ? hit.atr : hit.price * 0.002;
+    final isBull = hit.score >= 50;
+    final side = isBull ? 'Buy' : 'Sell';
+    final sl = IndicatorEngine.roundDynamic(
+      isBull ? hit.price - atr * 1.5 : hit.price + atr * 1.5,
+      symbol,
+      hit.price,
+    );
+    final tp = IndicatorEngine.roundDynamic(
+      isBull ? hit.price + atr * 3.0 : hit.price - atr * 3.0,
+      symbol,
+      hit.price,
+    );
+    final riskDollars =
+        storage.account.balance * (storage.risk.maxRiskPerTradePercent / 100.0);
+    final pipMult = StrategyScanner.calculatePositionPnl(
+      Position(
+        ticket: 0,
+        symbol: symbol,
+        orderType: 'Buy',
+        lots: 1.0,
+        entryPrice: hit.price,
+        currentPrice: hit.price,
+        openedAt: DateTime.now().toUtc(),
+      ),
+      hit.price + atr * 1.5,
+    );
+    final rawLots = pipMult > 0 ? (riskDollars / pipMult) : 0.10;
+    final lots = double.parse(rawLots.clamp(0.01, 5.0).toStringAsFixed(2));
+
+    final actions = <CopilotAction>[
+      CopilotAction(
+        type: 'order',
+        label: '$side $lots $symbol (SL/TP)',
+        payload: {
+          'type': 'order',
+          'side': side,
+          'symbol': symbol,
+          'lots': lots,
+          'sl': sl,
+          'tp': tp,
+        },
+      ),
+      CopilotAction(
+        type: 'alert',
+        label:
+            'Alert $symbol ${isBull ? "Above" : "Below"} ${IndicatorEngine.formatPrice(tp, symbol)}',
+        payload: {
+          'type': 'alert',
+          'symbol': symbol,
+          'condition': isBull ? 'Above' : 'Below',
+          'price': tp,
+        },
+      ),
+    ];
+
+    final lower = prompt.toLowerCase();
+    if (lower.contains('strateg') || lower.contains('bot') || lower.contains('rule')) {
+      actions.add(CopilotAction(
+        type: 'strategy',
+        label: 'Save $symbol ${tf.code} Bot Strategy',
+        payload: {
+          'type': 'strategy',
+          'name': 'Copilot $symbol ${tf.code}',
+          'symbol': symbol,
+          'timeframe': tf.code,
+          'combinator': 'AND',
+          'riskPercent': storage.risk.maxRiskPerTradePercent,
+          'slMult': 1.5,
+          'tpMult': 3.0,
+          'rules': [
+            {
+              'indicator': isBull ? 'SUPERTREND' : 'EMA_CROSS',
+              'condition': isBull ? 'GreaterThan' : 'CrossBelow',
+              'period': isBull ? 10 : 20,
+              'threshold': isBull ? 3.0 : 0.0,
+            },
+            {
+              'indicator': isBull ? 'RSI_OS' : 'RSI_OB',
+              'condition': isBull ? 'LessThan' : 'GreaterThan',
+              'period': 14,
+              'threshold': isBull ? 42.0 : 58.0,
+            },
+          ],
+        },
+      ));
+    }
+
+    return actions;
   }
 
   String _builtInQuantReply(
@@ -99,20 +587,55 @@ class AiCopilotService {
   ) {
     final spec = SymbolCatalog.find(symbol);
     final hit = StrategyScanner.analyzeCandles(spec, tf, candles);
-    final slDist = hit.atr * 1.5;
-    final tpDist = hit.atr * 3.0;
+    final atr = hit.atr > 0 ? hit.atr : hit.price * 0.002;
+    final slDist = atr * 1.5;
+    final tpDist = atr * 3.0;
     final isBull = hit.score >= 50;
     final sl = isBull ? hit.price - slDist : hit.price + slDist;
     final tp = isBull ? hit.price + tpDist : hit.price - tpDist;
+    final lower = prompt.toLowerCase();
+
+    final openPos = storage.positions.where((p) => p.status == 'Open').toList();
+    if (lower.contains('position') || lower.contains('risk') || lower.contains('portfolio')) {
+      final totalUnrealized =
+          openPos.fold<double>(0.0, (s, p) => s + p.unrealizedPnl);
+      return '''**Portfolio & Risk Review**
+- **Account**: Balance `\$${storage.account.balance.toStringAsFixed(2)}` · Equity `\$${storage.account.equity.toStringAsFixed(2)}` · Open Positions: `${openPos.length}/${storage.risk.maxOpenPositions}`
+- **Floating PnL**: `${totalUnrealized >= 0 ? "+" : "-"}\$${totalUnrealized.abs().toStringAsFixed(2)}` · Drawdown `${storage.account.currentDrawdownPercent.toStringAsFixed(2)}%` (Limit `${storage.risk.maxDailyDrawdownPercent}%`)
+- **Active Risk Per Trade**: `${storage.risk.maxRiskPerTradePercent.toStringAsFixed(2)}%` (`\$${(storage.account.balance * storage.risk.maxRiskPerTradePercent / 100).toStringAsFixed(2)}` max risk)
+
+${openPos.isEmpty ? '_No open positions currently exposed._' : openPos.map((p) => '- **${p.symbol}** ${p.orderType} `${p.lots}` lots (${p.strategyName}): `${p.unrealizedPnl >= 0 ? "+" : "-"}\$${p.unrealizedPnl.abs().toStringAsFixed(2)}`').join('\n')}''';
+    }
+
+    final riskAmt =
+        storage.account.balance * (storage.risk.maxRiskPerTradePercent / 100.0);
+    final riskPerLot = StrategyScanner.calculatePositionPnl(
+      Position(
+        ticket: 0,
+        symbol: symbol,
+        orderType: 'Buy',
+        lots: 1.0,
+        entryPrice: hit.price,
+        currentPrice: hit.price,
+        openedAt: DateTime.now().toUtc(),
+      ),
+      hit.price + slDist,
+    ).abs();
+    final recLots = riskPerLot > 0
+        ? (riskAmt / riskPerLot).clamp(0.01, 5.0)
+        : math.max(0.01, 0.10);
 
     return '''**Quant Diagnostics — $symbol (${tf.code})**
-$diag
+- **Price**: `${IndicatorEngine.formatPrice(hit.price, symbol)}` (${hit.changePct >= 0 ? '+' : ''}${hit.changePct.toStringAsFixed(2)}%)
+- **Regime**: `${hit.trend}` · **RSI(14)**: `${hit.rsi.toStringAsFixed(1)}` · **Score**: `${hit.score.toStringAsFixed(0)}/100` (**${hit.signal}**)
+- **ATR(14)**: `${IndicatorEngine.formatPrice(atr, symbol)}`
 
-**Actionable Structure:**
-- **Bias**: ${hit.signal} (${hit.trend} regime)
-- **Suggested Risk Envelope (1.5x / 3.0x ATR)**:
-  - Stop Loss: `${IndicatorEngine.formatPrice(sl, symbol)}`
-  - Take Profit: `${IndicatorEngine.formatPrice(tp, symbol)}`
-- **Note**: Configure an OpenAI or local Ollama endpoint in **Settings** for free-form LLM reasoning.''';
+**Actionable Trade Plan (2.0R):**
+- **Direction**: `${isBull ? 'BUY / Long' : 'SELL / Short'}`
+- **Position Size** (${storage.risk.maxRiskPerTradePercent.toStringAsFixed(2)}% risk = `\$${riskAmt.toStringAsFixed(2)}`): `${recLots.toStringAsFixed(2)} lots`
+- **Stop Loss (1.5x ATR)**: `${IndicatorEngine.formatPrice(sl, symbol)}`
+- **Take Profit (3.0x ATR)**: `${IndicatorEngine.formatPrice(tp, symbol)}`
+
+_Tip: Connect OpenAI, Claude, Gemini, Groq, DeepSeek, OpenRouter, or local Ollama in **Settings** for full conversational LLM reasoning with 1-click trade & strategy actions._''';
   }
 }

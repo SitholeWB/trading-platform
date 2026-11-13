@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/ai_copilot_service.dart';
 import '../../services/storage_service.dart';
 
 class BrokerSettingsDialog extends StatefulWidget {
@@ -24,6 +25,7 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
   late final TextEditingController _oandaKey;
   late final TextEditingController _oandaAccount;
   late final TextEditingController _twelveKey;
+  late final TextEditingController _aiModel;
   late final TextEditingController _aiKey;
   late final TextEditingController _aiEndpoint;
 
@@ -38,6 +40,7 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
     _oandaKey = TextEditingController(text: widget.storage.oandaApiKey);
     _oandaAccount = TextEditingController(text: widget.storage.oandaAccountId);
     _twelveKey = TextEditingController(text: widget.storage.twelveDataApiKey);
+    _aiModel = TextEditingController(text: widget.storage.aiModel);
     _aiKey = TextEditingController(text: widget.storage.aiApiKey);
     _aiEndpoint = TextEditingController(text: widget.storage.aiEndpoint);
   }
@@ -47,6 +50,7 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
     _oandaKey.dispose();
     _oandaAccount.dispose();
     _twelveKey.dispose();
+    _aiModel.dispose();
     _aiKey.dispose();
     _aiEndpoint.dispose();
     super.dispose();
@@ -138,35 +142,74 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                 const Text('AI Quant Copilot Engine',
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'BuiltIn', label: Text('Built-in Quant')),
-                    ButtonSegment(value: 'OpenAI', label: Text('OpenAI')),
-                    ButtonSegment(value: 'Ollama', label: Text('Local Ollama')),
-                  ],
-                  selected: {_aiProvider},
-                  onSelectionChanged: (s) =>
-                      setState(() => _aiProvider = s.first),
+                DropdownButtonFormField<String>(
+                  initialValue: AiCopilotService.providers
+                          .any((p) => p.id == _aiProvider)
+                      ? _aiProvider
+                      : 'BuiltIn',
+                  decoration: const InputDecoration(
+                    labelText: 'AI Provider',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: AiCopilotService.providers
+                      .map((p) => DropdownMenuItem(
+                            value: p.id,
+                            child: Text('${p.label} (${p.defaultModel})',
+                                style: const TextStyle(fontSize: 13)),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    final spec = AiCopilotService.specFor(v);
+                    setState(() {
+                      _aiProvider = v;
+                      _aiModel.text = spec.defaultModel;
+                      if (spec.defaultEndpoint.isNotEmpty) {
+                        _aiEndpoint.text = spec.defaultEndpoint;
+                      }
+                    });
+                  },
                 ),
-                if (_aiProvider == 'OpenAI') ...[
+                if (_aiProvider != 'BuiltIn') ...[
                   const SizedBox(height: 10),
                   TextField(
-                    controller: _aiKey,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'OpenAI API Key',
-                      border: OutlineInputBorder(),
+                    controller: _aiModel,
+                    decoration: InputDecoration(
+                      labelText: 'Model Name',
+                      hintText:
+                          AiCopilotService.specFor(_aiProvider).defaultModel,
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
                 ],
-                if (_aiProvider == 'Ollama') ...[
+                if (AiCopilotService.specFor(_aiProvider).requiresKey ||
+                    _aiProvider == 'Custom') ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _aiKey,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText:
+                          '${AiCopilotService.specFor(_aiProvider).label} API Key${_aiProvider == 'Custom' ? ' (optional)' : ''}',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ],
+                if (AiCopilotService.specFor(_aiProvider)
+                    .supportsCustomEndpoint) ...[
                   const SizedBox(height: 10),
                   TextField(
                     controller: _aiEndpoint,
-                    decoration: const InputDecoration(
-                      labelText: 'Ollama Endpoint',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: _aiProvider == 'Ollama'
+                          ? 'Ollama Endpoint'
+                          : 'OpenAI-Compatible Base URL',
+                      hintText: AiCopilotService.specFor(_aiProvider)
+                          .defaultEndpoint,
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -209,6 +252,7 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                         widget.storage.oandaIsPractice = _oandaPractice;
                         widget.storage.twelveDataApiKey = _twelveKey.text.trim();
                         widget.storage.aiProvider = _aiProvider;
+                        widget.storage.aiModel = _aiModel.text.trim();
                         widget.storage.aiApiKey = _aiKey.text.trim();
                         widget.storage.aiEndpoint = _aiEndpoint.text.trim();
                         widget.storage.themeMode = _themeMode;
