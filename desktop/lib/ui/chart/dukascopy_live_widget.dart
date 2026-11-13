@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -51,9 +52,33 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
   @override
   void didUpdateWidget(covariant DukascopyLiveWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.customUrl != widget.customUrl) {
+    if (oldWidget.customUrl != widget.customUrl ||
+        oldWidget.isDark != widget.isDark) {
       _reloadWithResolvedUrl();
     }
+  }
+
+  String _applyThemeParam(String rawUrl) {
+    final themeValue = widget.isDark ? 'DARK' : 'LIGHT';
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null) return rawUrl;
+
+    final params = Map<String, String>.from(uri.queryParameters);
+    final existingInit = params['init'];
+    if (existingInit != null && existingInit.trim().startsWith('{')) {
+      try {
+        final decoded = jsonDecode(existingInit);
+        if (decoded is Map<String, dynamic>) {
+          decoded['theme'] = themeValue;
+          params['init'] = jsonEncode(decoded);
+          return uri.replace(queryParameters: params).toString();
+        }
+      } catch (_) {
+        // Fall through to overwrite init param if malformed.
+      }
+    }
+    params['init'] = jsonEncode({'theme': themeValue});
+    return uri.replace(queryParameters: params).toString();
   }
 
   Future<String> _resolveChartUrl() async {
@@ -91,7 +116,7 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
   }
 
   Future<void> _reloadWithResolvedUrl() async {
-    final url = await _resolveChartUrl();
+    final url = _applyThemeParam(await _resolveChartUrl());
     _activeUrl = url;
     final c = _controller;
     if (c != null && c.value) {
@@ -106,7 +131,7 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
   Future<void> _initWebView() async {
     try {
       await CefBootstrap.ensureInitialized();
-      _activeUrl = await _resolveChartUrl();
+      _activeUrl = _applyThemeParam(await _resolveChartUrl());
 
       final controller = WebviewManager().createWebView(
         loading: const Center(

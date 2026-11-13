@@ -236,6 +236,22 @@ class _TradingViewLiveWidgetState extends State<TradingViewLiveWidget> {
       $jsonConfig
     </script>
   </div>
+  <script>
+    (function () {
+      function stripIframeTitles() {
+        document.querySelectorAll('iframe[title]').forEach(function (el) {
+          el.removeAttribute('title');
+        });
+      }
+      stripIframeTitles();
+      new MutationObserver(stripIframeTitles).observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['title']
+      });
+    })();
+  </script>
 </body>
 </html>
 ''';
