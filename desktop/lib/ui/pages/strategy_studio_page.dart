@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/trading_models.dart';
 import '../../services/symbol_catalog.dart';
 
@@ -21,322 +23,152 @@ class StrategyStudioPage extends StatefulWidget {
 }
 
 class _StrategyStudioPageState extends State<StrategyStudioPage> {
-  Future<void> _showStrategyEditorDialog({StrategyDefinition? existing}) async {
-    final nameCtrl = TextEditingController(
-        text: existing?.name ?? 'Custom Momentum Strategy');
-    final descCtrl = TextEditingController(
-        text: existing?.description ?? 'Quantitative multi-indicator rule');
-    String sym = existing?.symbol ?? 'EURUSD';
-    Timeframe tf = existing?.timeframe ?? Timeframe.m15;
-    double risk = existing?.riskPercent ?? 1.0;
-    double slMult = existing?.stopLossAtrMult ?? 1.5;
-    double tpMult = existing?.takeProfitAtrMult ?? 3.0;
-    final rules = List<StrategyRule>.from(
-      existing?.entryRules ??
-          const [
-            StrategyRule(
-              indicator: 'RSI_OS',
-              condition: 'LessThan',
-              threshold: 35,
-              period: 14,
-            ),
-          ],
-    );
+  static const List<String> _indicators = [
+    'EMA_CROSS',
+    'RSI_OS',
+    'RSI_OB',
+    'MACD_CROSS',
+    'BB_BREAK',
+  ];
 
-    final saved = await showDialog<StrategyDefinition>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: Text(existing == null
-              ? 'New Algorithmic Strategy'
-              : 'Edit Strategy · ${existing.name}'),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Strategy Name',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: descCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Description',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: sym,
-                          decoration: const InputDecoration(
-                            labelText: 'Symbol',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: SymbolCatalog.allSymbols
-                              .map((s) => DropdownMenuItem(
-                                    value: s.symbol,
-                                    child: Text(s.symbol),
-                                  ))
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) setS(() => sym = v);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DropdownButtonFormField<Timeframe>(
-                          initialValue: tf,
-                          decoration: const InputDecoration(
-                            labelText: 'Timeframe',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: Timeframe.values
-                              .map((t) => DropdownMenuItem(
-                                    value: t,
-                                    child: Text(t.code),
-                                  ))
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) setS(() => tf = v);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text('Risk %: ${risk.toStringAsFixed(1)}%',
-                            style: const TextStyle(fontSize: 12)),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Slider(
-                          value: risk,
-                          min: 0.25,
-                          max: 5.0,
-                          divisions: 19,
-                          onChanged: (v) => setS(() => risk = v),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text('SL ATR: ${slMult.toStringAsFixed(1)}x',
-                            style: const TextStyle(fontSize: 12)),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Slider(
-                          value: slMult,
-                          min: 0.5,
-                          max: 4.0,
-                          divisions: 14,
-                          onChanged: (v) => setS(() => slMult = v),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text('TP ATR: ${tpMult.toStringAsFixed(1)}x',
-                            style: const TextStyle(fontSize: 12)),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Slider(
-                          value: tpMult,
-                          min: 1.0,
-                          max: 8.0,
-                          divisions: 14,
-                          onChanged: (v) => setS(() => tpMult = v),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  Row(
-                    children: [
-                      const Text('Entry Rules',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 13)),
-                      const Spacer(),
-                      TextButton.icon(
-                        onPressed: () {
-                          setS(() {
-                            rules.add(const StrategyRule(
-                              indicator: 'EMA_CROSS',
-                              condition: 'CrossAbove',
-                              threshold: 0,
-                              period: 20,
-                            ));
-                          });
-                        },
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Add Rule'),
-                      ),
-                    ],
-                  ),
-                  ...rules.asMap().entries.map((entry) {
-                    final idx = entry.key;
-                    final r = entry.value;
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: DropdownButton<String>(
-                                value: r.indicator,
-                                isExpanded: true,
-                                isDense: true,
-                                underline: const SizedBox.shrink(),
-                                items: const [
-                                  DropdownMenuItem(value: 'EMA_CROSS', child: Text('EMA Cross')),
-                                  DropdownMenuItem(value: 'RSI_OS', child: Text('RSI Oversold')),
-                                  DropdownMenuItem(value: 'RSI_OB', child: Text('RSI Overbought')),
-                                  DropdownMenuItem(value: 'MACD_CROSS', child: Text('MACD Cross')),
-                                  DropdownMenuItem(value: 'BB_BREAK', child: Text('Bollinger Break')),
-                                ],
-                                onChanged: (v) {
-                                  if (v != null) {
-                                    setS(() => rules[idx] = StrategyRule(
-                                          indicator: v,
-                                          condition: r.condition,
-                                          threshold: r.threshold,
-                                          period: r.period,
-                                        ));
-                                  }
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              flex: 2,
-                              child: DropdownButton<String>(
-                                value: r.condition,
-                                isExpanded: true,
-                                isDense: true,
-                                underline: const SizedBox.shrink(),
-                                items: const [
-                                  DropdownMenuItem(value: 'CrossAbove', child: Text('Cross Above')),
-                                  DropdownMenuItem(value: 'CrossBelow', child: Text('Cross Below')),
-                                  DropdownMenuItem(value: 'LessThan', child: Text('Less Than')),
-                                  DropdownMenuItem(value: 'GreaterThan', child: Text('Greater Than')),
-                                ],
-                                onChanged: (v) {
-                                  if (v != null) {
-                                    setS(() => rules[idx] = StrategyRule(
-                                          indicator: r.indicator,
-                                          condition: v,
-                                          threshold: r.threshold,
-                                          period: r.period,
-                                        ));
-                                  }
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            SizedBox(
-                              width: 58,
-                              child: TextFormField(
-                                initialValue: r.threshold.toString(),
-                                decoration: const InputDecoration(
-                                  labelText: 'Val',
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                ),
-                                keyboardType: TextInputType.number,
-                                onChanged: (v) {
-                                  final parsed = double.tryParse(v);
-                                  if (parsed != null) {
-                                    rules[idx] = StrategyRule(
-                                      indicator: r.indicator,
-                                      condition: r.condition,
-                                      threshold: parsed,
-                                      period: r.period,
-                                    );
-                                  }
-                                },
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline,
-                                  size: 16, color: Colors.redAccent),
-                              onPressed: rules.length <= 1
-                                  ? null
-                                  : () => setS(() => rules.removeAt(idx)),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(ctx).pop(
-                  StrategyDefinition(
-                    id: existing?.id ??
-                        'strat_${DateTime.now().millisecondsSinceEpoch}',
-                    name: nameCtrl.text.trim().isEmpty
-                        ? 'Custom Strategy'
-                        : nameCtrl.text.trim(),
-                    symbol: sym,
-                    timeframe: tf,
-                    isEnabled: existing?.isEnabled ?? true,
-                    riskPercent: risk,
-                    stopLossAtrMult: slMult,
-                    takeProfitAtrMult: tpMult,
-                    description: descCtrl.text.trim(),
-                    entryRules: rules,
-                  ),
-                );
-              },
-              child: const Text('Save Strategy'),
-            ),
-          ],
+  static const List<String> _conditions = [
+    'CrossAbove',
+    'CrossBelow',
+    'LessThan',
+    'GreaterThan',
+  ];
+
+  String? _selectedId;
+  bool _isCreatingNew = false;
+  int _activeTab = 0; // 0 = Visual Builder, 1 = JSON Preview, 2 = Evaluation
+  String _combinator = 'AND';
+  String? _statusBanner;
+
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _descCtrl;
+  String _symbol = 'EURUSD';
+  Timeframe _timeframe = Timeframe.m15;
+  bool _isEnabled = true;
+  double _riskPercent = 1.0;
+  double _slMult = 1.5;
+  double _tpMult = 3.0;
+  List<StrategyRule> _rules = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController();
+    _descCtrl = TextEditingController();
+    if (widget.strategies.isNotEmpty) {
+      _loadStrategy(widget.strategies.first);
+    } else {
+      _startNewStrategy();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant StrategyStudioPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isCreatingNew && _selectedId != null) {
+      final stillExists = widget.strategies.any((s) => s.id == _selectedId);
+      if (!stillExists) {
+        if (widget.strategies.isNotEmpty) {
+          _loadStrategy(widget.strategies.first);
+        } else {
+          _startNewStrategy();
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  void _loadStrategy(StrategyDefinition s) {
+    setState(() {
+      _isCreatingNew = false;
+      _selectedId = s.id;
+      _statusBanner = null;
+      _nameCtrl.text = s.name;
+      _descCtrl.text = s.description;
+      _symbol = SymbolCatalog.allSymbols.any((x) => x.symbol == s.symbol)
+          ? s.symbol
+          : 'EURUSD';
+      _timeframe = s.timeframe;
+      _isEnabled = s.isEnabled;
+      _riskPercent = s.riskPercent.clamp(0.25, 5.0);
+      _slMult = s.stopLossAtrMult.clamp(0.5, 4.0);
+      _tpMult = s.takeProfitAtrMult.clamp(1.0, 8.0);
+      _rules = List<StrategyRule>.from(s.entryRules);
+    });
+  }
+
+  void _startNewStrategy() {
+    setState(() {
+      _isCreatingNew = true;
+      _selectedId = 'strat_${DateTime.now().millisecondsSinceEpoch}';
+      _statusBanner = null;
+      _nameCtrl.text = 'Custom Momentum Strategy';
+      _descCtrl.text = 'Quantitative multi-indicator rule';
+      _symbol = 'EURUSD';
+      _timeframe = Timeframe.m15;
+      _isEnabled = true;
+      _riskPercent = 1.0;
+      _slMult = 1.5;
+      _tpMult = 3.0;
+      _rules = const [
+        StrategyRule(
+          indicator: 'RSI_OS',
+          condition: 'LessThan',
+          threshold: 35,
+          period: 14,
         ),
-      ),
+      ];
+    });
+  }
+
+  StrategyDefinition _buildCurrentDraft() {
+    final id = _selectedId ?? 'strat_${DateTime.now().millisecondsSinceEpoch}';
+    return StrategyDefinition(
+      id: id,
+      name: _nameCtrl.text.trim().isEmpty
+          ? 'Unnamed Strategy'
+          : _nameCtrl.text.trim(),
+      description: _descCtrl.text.trim(),
+      symbol: _symbol,
+      timeframe: _timeframe,
+      isEnabled: _isEnabled,
+      riskPercent: _riskPercent,
+      stopLossAtrMult: _slMult,
+      takeProfitAtrMult: _tpMult,
+      entryRules: List<StrategyRule>.from(_rules),
     );
-    if (saved != null) widget.onSaveStrategy(saved);
+  }
+
+  void _saveCurrent() {
+    final strat = _buildCurrentDraft();
+    widget.onSaveStrategy(strat);
+    setState(() {
+      _isCreatingNew = false;
+      _selectedId = strat.id;
+      _statusBanner = 'Saved "${strat.name}"';
+    });
   }
 
   Future<void> _showAiGeneratorDialog() async {
-    final promptCtrl = TextEditingController(
-      text: 'Momentum breakout on XAUUSD M15 using EMA crossover and RSI filter',
-    );
-    String sym = 'XAUUSD';
-    Timeframe tf = Timeframe.m15;
+    final promptCtrl = TextEditingController();
+    String selectedSym = _symbol;
+    Timeframe selectedTf = _timeframe;
+
+    const presets = [
+      'RSI oversold mean reversion on pullback with 1% risk',
+      'EMA 20/50 trend crossover with MACD momentum confirmation',
+      'Bollinger Band breakout scalp with tight 1.0x ATR stop',
+    ];
 
     final generated = await showDialog<StrategyDefinition>(
       context: context,
@@ -350,14 +182,25 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
             ],
           ),
           content: SizedBox(
-            width: 460,
+            width: 500,
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Describe your trading edge in plain English. The synthesizer builds deterministic rules with ATR risk controls.',
-                  style: TextStyle(fontSize: 12, color: Colors.white70),
+                  'Describe the trading logic you want to build, or pick a template:',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: presets
+                      .map((p) => ActionChip(
+                            label: Text(p, style: const TextStyle(fontSize: 11)),
+                            onPressed: () => promptCtrl.text = p,
+                          ))
+                      .toList(),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -365,15 +208,17 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                   maxLines: 3,
                   decoration: const InputDecoration(
                     labelText: 'Strategy Prompt',
+                    hintText:
+                        'e.g. Buy when RSI < 30 and EMA crosses above on H1...',
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        initialValue: sym,
+                        initialValue: selectedSym,
                         decoration: const InputDecoration(
                           labelText: 'Target Symbol',
                           border: OutlineInputBorder(),
@@ -386,14 +231,14 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                                 ))
                             .toList(),
                         onChanged: (v) {
-                          if (v != null) setS(() => sym = v);
+                          if (v != null) setS(() => selectedSym = v);
                         },
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: DropdownButtonFormField<Timeframe>(
-                        initialValue: tf,
+                        initialValue: selectedTf,
                         decoration: const InputDecoration(
                           labelText: 'Timeframe',
                           border: OutlineInputBorder(),
@@ -406,7 +251,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                                 ))
                             .toList(),
                         onChanged: (v) {
-                          if (v != null) setS(() => tf = v);
+                          if (v != null) setS(() => selectedTf = v);
                         },
                       ),
                     ),
@@ -417,42 +262,26 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
+              onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel'),
             ),
             FilledButton.icon(
               icon: const Icon(Icons.auto_awesome, size: 16),
               label: const Text('Generate Strategy'),
               onPressed: () {
-                final lower = promptCtrl.text.toLowerCase();
+                final text = promptCtrl.text.trim().toLowerCase();
                 final rules = <StrategyRule>[];
-                if (lower.contains('rsi')) {
+                if (text.contains('rsi')) {
                   rules.add(StrategyRule(
-                    indicator: lower.contains('overbought') ? 'RSI_OB' : 'RSI_OS',
-                    condition: lower.contains('overbought')
+                    indicator: text.contains('overbought') ? 'RSI_OB' : 'RSI_OS',
+                    condition: text.contains('overbought')
                         ? 'GreaterThan'
                         : 'LessThan',
-                    threshold: lower.contains('overbought') ? 70 : 32,
+                    threshold: text.contains('overbought') ? 70 : 30,
                     period: 14,
                   ));
                 }
-                if (lower.contains('macd')) {
-                  rules.add(const StrategyRule(
-                    indicator: 'MACD_CROSS',
-                    condition: 'CrossAbove',
-                    threshold: 0,
-                    period: 12,
-                  ));
-                }
-                if (lower.contains('bollinger') || lower.contains('bb')) {
-                  rules.add(const StrategyRule(
-                    indicator: 'BB_BREAK',
-                    condition: 'CrossAbove',
-                    threshold: 2,
-                    period: 20,
-                  ));
-                }
-                if (rules.isEmpty || lower.contains('ema')) {
+                if (text.contains('ema') || text.contains('trend')) {
                   rules.add(const StrategyRule(
                     indicator: 'EMA_CROSS',
                     condition: 'CrossAbove',
@@ -460,17 +289,51 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                     period: 20,
                   ));
                 }
-                Navigator.of(ctx).pop(
+                if (text.contains('macd')) {
+                  rules.add(const StrategyRule(
+                    indicator: 'MACD_CROSS',
+                    condition: 'CrossAbove',
+                    threshold: 0,
+                    period: 12,
+                  ));
+                }
+                if (text.contains('bollinger') || text.contains('bb')) {
+                  rules.add(const StrategyRule(
+                    indicator: 'BB_BREAK',
+                    condition: 'CrossAbove',
+                    threshold: 2.0,
+                    period: 20,
+                  ));
+                }
+                if (rules.isEmpty) {
+                  rules.add(const StrategyRule(
+                    indicator: 'EMA_CROSS',
+                    condition: 'CrossAbove',
+                    threshold: 0,
+                    period: 20,
+                  ));
+                  rules.add(const StrategyRule(
+                    indicator: 'RSI_OS',
+                    condition: 'LessThan',
+                    threshold: 40,
+                    period: 14,
+                  ));
+                }
+
+                Navigator.pop(
+                  ctx,
                   StrategyDefinition(
-                    id: 'ai_${DateTime.now().millisecondsSinceEpoch}',
-                    name: 'AI $sym ${tf.code} Alpha',
-                    symbol: sym,
-                    timeframe: tf,
+                    id: 'strat_ai_${DateTime.now().millisecondsSinceEpoch}',
+                    name: 'AI · $selectedSym ${selectedTf.code} Strategy',
+                    description: promptCtrl.text.trim().isEmpty
+                        ? 'AI-synthesized quantitative rule'
+                        : promptCtrl.text.trim(),
+                    symbol: selectedSym,
+                    timeframe: selectedTf,
                     isEnabled: true,
-                    riskPercent: lower.contains('scalp') ? 0.5 : 1.0,
-                    stopLossAtrMult: 1.5,
+                    riskPercent: text.contains('0.5') ? 0.5 : 1.0,
+                    stopLossAtrMult: text.contains('tight') ? 1.0 : 1.5,
                     takeProfitAtrMult: 3.0,
-                    description: promptCtrl.text.trim(),
                     entryRules: rules,
                   ),
                 );
@@ -480,19 +343,651 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
         ),
       ),
     );
+    promptCtrl.dispose();
 
     if (generated != null) {
       widget.onSaveStrategy(generated);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Generated strategy "${generated.name}"')),
-        );
-      }
+      _loadStrategy(generated);
+      setState(() => _statusBanner = 'Generated & saved "${generated.name}"');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final rr = _slMult > 0 ? (_tpMult / _slMult) : 0.0;
+
+    return Row(
+      children: [
+        // Left Strategy List Sidebar
+        Container(
+          width: 280,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(
+              right: BorderSide(color: Theme.of(context).dividerColor),
+            ),
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 10, 8),
+                child: Row(
+                  children: [
+                    const Text(
+                      'RULE STUDIO',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.9,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'AI Strategy Generator',
+                      icon: const Icon(Icons.auto_awesome,
+                          size: 18, color: Color(0xFFA855F7)),
+                      onPressed: _showAiGeneratorDialog,
+                    ),
+                    FilledButton.icon(
+                      onPressed: _startNewStrategy,
+                      icon: const Icon(Icons.add, size: 15),
+                      label: const Text('New', style: TextStyle(fontSize: 12)),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(8),
+                  itemCount: widget.strategies.length,
+                  itemBuilder: (_, i) {
+                    final s = widget.strategies[i];
+                    final selected = !_isCreatingNew && s.id == _selectedId;
+                    return Card(
+                      elevation: 0,
+                      margin: const EdgeInsets.only(bottom: 6),
+                      color: selected
+                          ? const Color(0xFF0EA5E9).withValues(alpha: 0.14)
+                          : null,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(
+                          color: selected
+                              ? const Color(0xFF38BDF8)
+                              : Theme.of(context).dividerColor,
+                        ),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => _loadStrategy(s),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: s.isEnabled
+                                      ? const Color(0xFF10B981)
+                                      : Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      s.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${s.symbol} · ${s.timeframe.code} · ${s.entryRules.length} rule(s)',
+                                      style: const TextStyle(
+                                          fontSize: 10.5, color: Colors.grey),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Switch(
+                                value: s.isEnabled,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                onChanged: (v) {
+                                  final updated = s.copyWith(isEnabled: v);
+                                  widget.onSaveStrategy(updated);
+                                  if (s.id == _selectedId) {
+                                    setState(() => _isEnabled = v);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Right Split-Pane Inline Editor
+        Expanded(
+          child: Column(
+            children: [
+              // Editor Header Bar
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  border: Border(
+                    bottom: BorderSide(color: Theme.of(context).dividerColor),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _nameCtrl,
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.bold),
+                        decoration: const InputDecoration(
+                          labelText: 'Strategy Name',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      width: 130,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _symbol,
+                        decoration: const InputDecoration(
+                          labelText: 'Symbol',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: SymbolCatalog.allSymbols
+                            .map((s) => DropdownMenuItem(
+                                  value: s.symbol,
+                                  child: Text(s.symbol,
+                                      style: const TextStyle(fontSize: 12)),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _symbol = v);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 100,
+                      child: DropdownButtonFormField<Timeframe>(
+                        initialValue: _timeframe,
+                        decoration: const InputDecoration(
+                          labelText: 'TF',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: Timeframe.values
+                            .map((t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text(t.code,
+                                      style: const TextStyle(fontSize: 12)),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _timeframe = v);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Active', style: TextStyle(fontSize: 12)),
+                        Switch(
+                          value: _isEnabled,
+                          onChanged: (v) => setState(() => _isEnabled = v),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        final draft = _buildCurrentDraft();
+                        widget.onSaveStrategy(draft);
+                        widget.onRunEvaluation(draft);
+                        setState(() {
+                          _isCreatingNew = false;
+                          _activeTab = 2;
+                          _statusBanner = 'Evaluated "${draft.name}"';
+                        });
+                      },
+                      icon: const Icon(Icons.play_arrow, size: 16),
+                      label: const Text('Evaluate'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: _saveCurrent,
+                      icon: const Icon(Icons.save, size: 16),
+                      label: const Text('Save'),
+                    ),
+                    if (!_isCreatingNew && _selectedId != null) ...[
+                      const SizedBox(width: 6),
+                      IconButton(
+                        tooltip: 'Delete Strategy',
+                        icon: const Icon(Icons.delete_outline,
+                            color: Colors.redAccent),
+                        onPressed: () => widget.onDeleteStrategy(_selectedId!),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              if (_statusBanner != null)
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  color: const Color(0xFF10B981).withValues(alpha: 0.14),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_outline,
+                          size: 15, color: Color(0xFF10B981)),
+                      const SizedBox(width: 6),
+                      Text(
+                        _statusBanner!,
+                        style: const TextStyle(
+                            fontSize: 12, color: Color(0xFF10B981)),
+                      ),
+                      const Spacer(),
+                      InkWell(
+                        onTap: () => setState(() => _statusBanner = null),
+                        child: const Icon(Icons.close, size: 15),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Sub-tabs: Visual Builder | JSON Definition | Evaluation
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Theme.of(context).dividerColor),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    _tabChip(0, 'Visual Builder', Icons.tune),
+                    const SizedBox(width: 6),
+                    _tabChip(1, 'JSON Definition', Icons.code),
+                    const SizedBox(width: 6),
+                    _tabChip(2, 'Risk & Evaluation', Icons.analytics_outlined),
+                    const Spacer(),
+                    Text(
+                      'R:R 1:${rr.toStringAsFixed(1)} · Risk ${_riskPercent.toStringAsFixed(1)}%',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontFamily: 'monospace',
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              Expanded(
+                child: switch (_activeTab) {
+                  0 => _buildVisualBuilderTab(context),
+                  1 => _buildJsonPreviewTab(context),
+                  _ => _buildEvaluationTab(context, rr),
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tabChip(int idx, String label, IconData icon) {
+    final active = _activeTab == idx;
+    return ChoiceChip(
+      avatar: Icon(icon, size: 15),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      selected: active,
+      visualDensity: VisualDensity.compact,
+      onSelected: (_) => setState(() => _activeTab = idx),
+    );
+  }
+
+  Widget _buildVisualBuilderTab(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        TextField(
+          controller: _descCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Strategy Description / Notes',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 14),
+        // Risk & Combinator Controls
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'Risk & Rule Combinator',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const Spacer(),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'AND', label: Text('ALL (AND)')),
+                        ButtonSegment(value: 'OR', label: Text('ANY (OR)')),
+                      ],
+                      selected: {_combinator},
+                      onSelectionChanged: (v) =>
+                          setState(() => _combinator = v.first),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Risk %: ${_riskPercent.toStringAsFixed(2)}%',
+                              style: const TextStyle(fontSize: 11.5)),
+                          Slider(
+                            value: _riskPercent,
+                            min: 0.25,
+                            max: 5.0,
+                            divisions: 19,
+                            onChanged: (v) => setState(() => _riskPercent = v),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('SL ATR: ${_slMult.toStringAsFixed(1)}x',
+                              style: const TextStyle(fontSize: 11.5)),
+                          Slider(
+                            value: _slMult,
+                            min: 0.5,
+                            max: 4.0,
+                            divisions: 14,
+                            onChanged: (v) => setState(() => _slMult = v),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('TP ATR: ${_tpMult.toStringAsFixed(1)}x',
+                              style: const TextStyle(fontSize: 11.5)),
+                          Slider(
+                            value: _tpMult,
+                            min: 1.0,
+                            max: 8.0,
+                            divisions: 14,
+                            onChanged: (v) => setState(() => _tpMult = v),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            const Text(
+              'Entry Rules',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(width: 10),
+            ActionChip(
+              label: const Text('+ RSI Oversold', style: TextStyle(fontSize: 11)),
+              onPressed: () => setState(() => _rules.add(const StrategyRule(
+                    indicator: 'RSI_OS',
+                    condition: 'LessThan',
+                    threshold: 30,
+                    period: 14,
+                  ))),
+            ),
+            const SizedBox(width: 6),
+            ActionChip(
+              label: const Text('+ EMA Cross', style: TextStyle(fontSize: 11)),
+              onPressed: () => setState(() => _rules.add(const StrategyRule(
+                    indicator: 'EMA_CROSS',
+                    condition: 'CrossAbove',
+                    threshold: 0,
+                    period: 20,
+                  ))),
+            ),
+            const Spacer(),
+            FilledButton.tonalIcon(
+              onPressed: () => setState(() => _rules.add(const StrategyRule(
+                    indicator: 'MACD_CROSS',
+                    condition: 'CrossAbove',
+                    threshold: 0,
+                    period: 12,
+                  ))),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add Rule'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (_rules.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  'No entry rules configured. Click "+ Add Rule" to add a condition.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ),
+          )
+        else
+          ...List.generate(_rules.length, (i) {
+            final r = _rules[i];
+            final indVal = _indicators.contains(r.indicator)
+                ? r.indicator
+                : _indicators.first;
+            final condVal = _conditions.contains(r.condition)
+                ? r.condition
+                : _conditions.first;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      child: Text('${i + 1}',
+                          style: const TextStyle(fontSize: 11)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: indVal,
+                        decoration: const InputDecoration(
+                          labelText: 'Indicator',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _indicators
+                            .map((ind) => DropdownMenuItem(
+                                  value: ind,
+                                  child: Text(ind,
+                                      style: const TextStyle(fontSize: 12)),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() {
+                              _rules[i] = StrategyRule(
+                                indicator: v,
+                                condition: r.condition,
+                                threshold: r.threshold,
+                                period: r.period,
+                              );
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: condVal,
+                        decoration: const InputDecoration(
+                          labelText: 'Condition',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _conditions
+                            .map((c) => DropdownMenuItem(
+                                  value: c,
+                                  child: Text(c,
+                                      style: const TextStyle(fontSize: 12)),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() {
+                              _rules[i] = StrategyRule(
+                                indicator: r.indicator,
+                                condition: v,
+                                threshold: r.threshold,
+                                period: r.period,
+                              );
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 90,
+                      child: TextFormField(
+                        key: ValueKey('${_selectedId}_thr_$i'),
+                        initialValue: r.threshold.toString(),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Threshold',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) {
+                          final val = double.tryParse(v);
+                          if (val != null) {
+                            _rules[i] = StrategyRule(
+                              indicator: r.indicator,
+                              condition: r.condition,
+                              threshold: val,
+                              period: r.period,
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 80,
+                      child: TextFormField(
+                        key: ValueKey('${_selectedId}_per_$i'),
+                        initialValue: r.period.toString(),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Period',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) {
+                          final val = int.tryParse(v);
+                          if (val != null && val > 0) {
+                            _rules[i] = StrategyRule(
+                              indicator: r.indicator,
+                              condition: r.condition,
+                              threshold: r.threshold,
+                              period: val,
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    IconButton(
+                      tooltip: 'Remove Rule',
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () => setState(() => _rules.removeAt(i)),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildJsonPreviewTab(BuildContext context) {
+    final draft = _buildCurrentDraft();
+    final jsonStr =
+        const JsonEncoder.withIndent('  ').convert(draft.toJson());
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -500,110 +995,93 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_awesome, size: 20, color: Color(0xFFA855F7)),
-              const SizedBox(width: 8),
               const Text(
-                'Strategy Studio & Visual Rule Builder',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                'Compiled Strategy JSON',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               const Spacer(),
               OutlinedButton.icon(
-                onPressed: _showAiGeneratorDialog,
-                icon: const Icon(Icons.psychology, size: 17, color: Color(0xFFA855F7)),
-                label: const Text('AI Generator'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: () => _showStrategyEditorDialog(),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('New Strategy'),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: jsonStr));
+                  setState(() => _statusBanner = 'Copied JSON to clipboard');
+                },
+                icon: const Icon(Icons.copy, size: 15),
+                label: const Text('Copy JSON'),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Expanded(
-            child: ListView.builder(
-              itemCount: widget.strategies.length,
-              itemBuilder: (ctx, i) {
-                final s = widget.strategies[i];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Switch(
-                              value: s.isEnabled,
-                              onChanged: (v) =>
-                                  widget.onSaveStrategy(s.copyWith(isEnabled: v)),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(s.name,
-                                      style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.bold)),
-                                  Text(
-                                    '${s.symbol} · ${s.timeframe.code} · Risk ${s.riskPercent.toStringAsFixed(1)}% · SL ${s.stopLossAtrMult}x ATR / TP ${s.takeProfitAtrMult}x ATR',
-                                    style: const TextStyle(
-                                        fontSize: 12, color: Colors.grey),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Edit Rules',
-                              icon: const Icon(Icons.edit_outlined, size: 18),
-                              onPressed: () =>
-                                  _showStrategyEditorDialog(existing: s),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: () => widget.onRunEvaluation(s),
-                              icon: const Icon(Icons.play_arrow, size: 16),
-                              label: const Text('Evaluate Now'),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline,
-                                  color: Colors.redAccent),
-                              onPressed: () => widget.onDeleteStrategy(s.id),
-                            ),
-                          ],
-                        ),
-                        if (s.description.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(s.description,
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.white70)),
-                        ],
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: s.entryRules
-                              .map((r) => Chip(
-                                    label: Text(
-                                      '${r.indicator} (${r.condition} ${r.threshold})',
-                                      style: const TextStyle(fontSize: 11),
-                                    ),
-                                  ))
-                              .toList(),
-                        ),
-                      ],
-                    ),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Theme.of(context).dividerColor),
+              ),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  jsonStr,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    height: 1.45,
                   ),
-                );
-              },
+                ),
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildEvaluationTab(BuildContext context, double rr) {
+    final draft = _buildCurrentDraft();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Evaluation Summary · ${draft.name}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(label: Text('Symbol: ${draft.symbol}')),
+                    Chip(label: Text('Timeframe: ${draft.timeframe.code}')),
+                    Chip(label: Text('Combinator: $_combinator')),
+                    Chip(label: Text('Rules: ${draft.entryRules.length}')),
+                    Chip(label: Text('R:R 1:${rr.toStringAsFixed(1)}')),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () {
+                    widget.onSaveStrategy(draft);
+                    widget.onRunEvaluation(draft);
+                    setState(() =>
+                        _statusBanner = 'Evaluation triggered for ${draft.symbol}');
+                  },
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Run Live Evaluation & Log to Audit Radar'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
