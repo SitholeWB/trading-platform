@@ -71,13 +71,25 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
       _controller = controller;
       controller.setWebviewListener(
         WebviewEventsListener(
-          onLoadEnd: (_, _) {
+          onLoadStart: (_, url) {
+            stderr.writeln('[DukascopyLive] onLoadStart: $url');
+          },
+          onUrlChanged: (url) {
+            stderr.writeln('[DukascopyLive] onUrlChanged: $url');
+          },
+          onConsoleMessage: (level, message, source, line) {
+            stderr.writeln('[DukascopyLive] console($level): $message ($source:$line)');
+          },
+          onLoadEnd: (_, url) {
+            stderr.writeln('[DukascopyLive] onLoadEnd: $url');
             if (mounted) setState(() => _loading = false);
           },
         ),
       );
 
+      stderr.writeln('[DukascopyLive] initializing: ${_widgetUrl()}');
       await controller.initialize(_widgetUrl());
+      stderr.writeln('[DukascopyLive] initialized ok');
       Future<void>.delayed(const Duration(seconds: 6), () {
         if (mounted && _loading) setState(() => _loading = false);
       });
@@ -92,10 +104,7 @@ class _DukascopyLiveWidgetState extends State<DukascopyLiveWidget> {
   }
 
   String _widgetUrl() {
-    final instrument = _mapSymbolToDukascopy(widget.symbol);
-    final period = _mapTimeframe(widget.timeframe);
-    final theme = widget.isDark ? 'dark' : 'light';
-    return 'https://chart.dukascopy.com/?instrument=$instrument&period=$period&theme=$theme';
+    return 'https://chart.dukascopy.com/';
   }
 
   void _reloadWidget() {
