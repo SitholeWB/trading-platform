@@ -223,21 +223,147 @@ LIVE PLATFORM CONTEXT:
 $context
 ''';
 
+  HttpClient _buildHttpClient() {
+    return HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15)
+      ..connectionFactory = (targetUri, proxyHost, proxyPort) async {
+        final host = proxyHost ?? targetUri.host;
+        final port = proxyPort ?? targetUri.port;
+        List<InternetAddress> v4 = const [];
+        try {
+          v4 = await InternetAddress.lookup(
+            host,
+            type: InternetAddressType.IPv4,
+          ).timeout(const Duration(seconds: 5));
+        } catch (_) {}
+        if (v4.isNotEmpty) {
+          return Socket.startConnect(v4.first, port);
+        }
+        return Socket.startConnect(host, port);
+      };
+  }
+
+  Future<http.Response> _getJson(
+    Uri uri, {
+    required Map<String, String> headers,
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    final client = IOClient(_buildHttpClient());
+    try {
+      return await client.get(uri, headers: headers).timeout(timeout);
+    } finally {
+      client.close();
+    }
+  }
+
   Future<http.Response> _postJson(
     Uri uri, {
     required Map<String, String> headers,
     required Object body,
     Duration timeout = const Duration(seconds: 45),
   }) async {
-    final io = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 15);
-    final client = IOClient(io);
+    final client = IOClient(_buildHttpClient());
     try {
       return await client
           .post(uri, headers: headers, body: jsonEncode(body))
           .timeout(timeout);
     } finally {
       client.close();
+    }
+  }
+
+  /// Dynamically fetches available model IDs from the selected provider's API.
+  Future<List<String>> fetchAvailableModels({
+    required String provider,
+    required String apiKey,
+    required String endpoint,
+  }) async {
+    if (provider == 'BuiltIn') return const [];
+    final spec = specFor(provider);
+    final key = apiKey.trim();
+    if (spec.requiresKey && key.isEmpty) {
+      throw Exception('Enter your ${spec.label} API key first.');
+    }
+
+    switch (provider) {
+      case 'Gemini':
+        final resp = await _getJson(
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models'),
+          headers: {'x-goog-api-key': key},
+        );
+        if (resp.statusCode < 200 || resp.statusCode >= 300) {
+          throw Exception(_extractHttpError(resp));
+        }
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final models = (data['models'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .where((m) {
+              final methods =
+                  (m['supportedGenerationMethods'] as List<dynamic>? ?? const [])
+                      .cast<String>();
+              return methods.contains('generateContent');
+            })
+            .map((m) => (m['name'] as String? ?? '').replaceFirst('models/', ''))
+            .where((n) => n.isNotEmpty)
+            .toList();
+        return models;
+
+      case 'Anthropic':
+        final resp = await _getJson(
+          Uri.parse('https://api.anthropic.com/v1/models'),
+          headers: {
+            'x-api-key': key,
+            'anthropic-version': '2023-06-01',
+          },
+        );
+        if (resp.statusCode < 200 || resp.statusCode >= 300) {
+          throw Exception(_extractHttpError(resp));
+        }
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        return (data['data'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map((m) => m['id'] as String? ?? '')
+            .where((id) => id.isNotEmpty)
+            .toList();
+
+      case 'Ollama':
+        final base = (endpoint.trim().isNotEmpty
+                ? endpoint.trim()
+                : spec.defaultEndpoint)
+            .replaceAll(RegExp(r'/+$'), '');
+        final resp = await _getJson(Uri.parse('$base/api/tags'), headers: {});
+        if (resp.statusCode < 200 || resp.statusCode >= 300) {
+          throw Exception(_extractHttpError(resp));
+        }
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        return (data['models'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map((m) => m['name'] as String? ?? '')
+            .where((n) => n.isNotEmpty)
+            .toList();
+
+      default:
+        final base = (provider == 'Custom' && endpoint.trim().isNotEmpty
+                ? endpoint.trim()
+                : spec.defaultEndpoint)
+            .replaceAll(RegExp(r'/+$'), '');
+        final resp = await _getJson(
+          Uri.parse('$base/models'),
+          headers: {
+            if (key.isNotEmpty) 'Authorization': 'Bearer $key',
+          },
+        );
+        if (resp.statusCode < 200 || resp.statusCode >= 300) {
+          throw Exception(_extractHttpError(resp));
+        }
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final list = (data['data'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map((m) => m['id'] as String? ?? '')
+            .where((id) => id.isNotEmpty)
+            .toList()
+          ..sort();
+        return list;
     }
   }
 

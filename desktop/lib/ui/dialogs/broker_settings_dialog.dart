@@ -29,6 +29,8 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
   late final TextEditingController _aiKey;
   late final TextEditingController _aiEndpoint;
   bool _testingAi = false;
+  bool _fetchingModels = false;
+  List<String> _fetchedModels = [];
   String? _aiTestStatus;
   bool _aiTestOk = false;
 
@@ -158,7 +160,7 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                   items: AiCopilotService.providers
                       .map((p) => DropdownMenuItem(
                             value: p.id,
-                            child: Text('${p.label} (${p.defaultModel})',
+                            child: Text(p.label,
                                 style: const TextStyle(fontSize: 13)),
                           ))
                       .toList(),
@@ -167,7 +169,11 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                     final spec = AiCopilotService.specFor(v);
                     setState(() {
                       _aiProvider = v;
-                      _aiModel.text = spec.defaultModel;
+                      _fetchedModels = [];
+                      _aiTestStatus = null;
+                      if (_aiModel.text.trim().isEmpty) {
+                        _aiModel.text = spec.defaultModel;
+                      }
                       if (spec.defaultEndpoint.isNotEmpty) {
                         _aiEndpoint.text = spec.defaultEndpoint;
                       }
@@ -176,16 +182,92 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                 ),
                 if (_aiProvider != 'BuiltIn') ...[
                   const SizedBox(height: 10),
-                  TextField(
-                    controller: _aiModel,
-                    decoration: InputDecoration(
-                      labelText: 'Model Name',
-                      hintText:
-                          AiCopilotService.specFor(_aiProvider).defaultModel,
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _aiModel,
+                          decoration: InputDecoration(
+                            labelText: 'Model Name (any model ID)',
+                            hintText:
+                                'e.g. ${AiCopilotService.specFor(_aiProvider).defaultModel}',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: _fetchingModels
+                            ? null
+                            : () async {
+                                setState(() {
+                                  _fetchingModels = true;
+                                  _aiTestStatus = null;
+                                });
+                                try {
+                                  final list = await AiCopilotService(
+                                          widget.storage)
+                                      .fetchAvailableModels(
+                                    provider: _aiProvider,
+                                    apiKey: _aiKey.text,
+                                    endpoint: _aiEndpoint.text,
+                                  );
+                                  if (!mounted) return;
+                                  setState(() {
+                                    _fetchingModels = false;
+                                    _fetchedModels = list;
+                                    _aiTestOk = true;
+                                    _aiTestStatus =
+                                        'Loaded ${list.length} live models from ${AiCopilotService.specFor(_aiProvider).label}.';
+                                  });
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  setState(() {
+                                    _fetchingModels = false;
+                                    _aiTestOk = false;
+                                    _aiTestStatus = e.toString();
+                                  });
+                                }
+                              },
+                        icon: _fetchingModels
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh, size: 16),
+                        label: const Text('Fetch Models'),
+                      ),
+                    ],
                   ),
+                  if (_fetchedModels.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue:
+                          _fetchedModels.contains(_aiModel.text.trim())
+                              ? _aiModel.text.trim()
+                              : null,
+                      hint: const Text('Pick from fetched models...'),
+                      decoration: const InputDecoration(
+                        labelText: 'Available Models',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: _fetchedModels
+                          .map((m) => DropdownMenuItem(
+                                value: m,
+                                child: Text(m,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 12.5)),
+                              ))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _aiModel.text = v);
+                      },
+                    ),
+                  ],
                 ],
                 if (AiCopilotService.specFor(_aiProvider).requiresKey ||
                     _aiProvider == 'Custom') ...[
