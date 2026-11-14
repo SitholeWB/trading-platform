@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
 import '../../services/symbol_catalog.dart';
+import '../widgets/markdown_message_view.dart';
 
 class JournalPage extends StatefulWidget {
   final List<JournalEntry> entries;
@@ -554,10 +555,10 @@ class _JournalPageState extends State<JournalPage> {
                       fontWeight: FontWeight.bold, fontSize: 14),
                 ),
                 if (e.content.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  SelectableText(
-                    e.content,
-                    style: const TextStyle(fontSize: 12.5, height: 1.45),
+                  const SizedBox(height: 8),
+                  MarkdownMessageView(
+                    data: e.content,
+                    baseFontSize: 12.5,
                   ),
                 ],
               ],

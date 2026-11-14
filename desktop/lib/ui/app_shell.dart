@@ -117,6 +117,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    _ensureCopilotSession(save: false);
     _loadInitialData();
     _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
@@ -605,6 +606,301 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  void _ensureCopilotSession({bool save = true}) {
+    final sessions = widget.storage.copilotSessions;
+    if (sessions.isEmpty) {
+      final now = DateTime.now().toUtc();
+      final initial = CopilotSession(
+        id: 'copilot_${now.millisecondsSinceEpoch}',
+        title: '${widget.storage.selectedSymbol} Session',
+        symbol: widget.storage.selectedSymbol,
+        timeframe: widget.storage.selectedTimeframe,
+        messages: const [],
+        createdAt: now,
+        updatedAt: now,
+      );
+      widget.storage.copilotSessions = [initial];
+      widget.storage.activeCopilotSessionId = initial.id;
+      if (save) widget.storage.save();
+    } else if (!sessions
+        .any((s) => s.id == widget.storage.activeCopilotSessionId)) {
+      widget.storage.activeCopilotSessionId = sessions.first.id;
+      if (save) widget.storage.save();
+    }
+  }
+
+  void _createCopilotSession() {
+    final now = DateTime.now().toUtc();
+    final session = CopilotSession(
+      id: 'copilot_${now.millisecondsSinceEpoch}',
+      title: '${widget.storage.selectedSymbol} Session',
+      symbol: widget.storage.selectedSymbol,
+      timeframe: widget.storage.selectedTimeframe,
+      messages: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+    setState(() {
+      widget.storage.copilotSessions = [
+        session,
+        ...widget.storage.copilotSessions,
+      ];
+      widget.storage.activeCopilotSessionId = session.id;
+    });
+    widget.storage.save();
+  }
+
+  void _selectCopilotSession(String id) {
+    if (widget.storage.activeCopilotSessionId == id) return;
+    setState(() {
+      widget.storage.activeCopilotSessionId = id;
+    });
+    widget.storage.save();
+  }
+
+  void _deleteCopilotSession(String id) {
+    setState(() {
+      widget.storage.copilotSessions = widget.storage.copilotSessions
+          .where((s) => s.id != id)
+          .toList();
+      _ensureCopilotSession(save: false);
+    });
+    widget.storage.save();
+  }
+
+  void _updateCopilotSession(
+    String sessionId,
+    List<ChatMessage> messages, {
+    String? newTitle,
+  }) {
+    final idx =
+        widget.storage.copilotSessions.indexWhere((s) => s.id == sessionId);
+    if (idx < 0) return;
+    final current = widget.storage.copilotSessions[idx];
+    final updated = current.copyWith(
+      title: newTitle ?? current.title,
+      symbol: widget.storage.selectedSymbol,
+      timeframe: widget.storage.selectedTimeframe,
+      messages: messages,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    setState(() {
+      final rest = List<CopilotSession>.from(widget.storage.copilotSessions)
+        ..removeAt(idx);
+      widget.storage.copilotSessions = [updated, ...rest];
+      widget.storage.activeCopilotSessionId = updated.id;
+    });
+    widget.storage.save();
+  }
+
+  Future<void> _saveToJournalWithDialog(
+    String defaultTitle,
+    String content,
+  ) async {
+    final existing = widget.storage.journalEntries;
+    bool appendMode = false;
+    String? selectedNoteId = existing.isNotEmpty ? existing.first.id : null;
+    final titleCtrl = TextEditingController(text: defaultTitle);
+    String selectedTag = 'AI Copilot';
+    String selectedMood = 'Focused';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: const Text('Save to Trading Journal'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SegmentedButton<bool>(
+                  segments: [
+                    const ButtonSegment(
+                      value: false,
+                      icon: Icon(Icons.note_add_outlined, size: 16),
+                      label: Text('Create New Note'),
+                    ),
+                    ButtonSegment(
+                      value: true,
+                      enabled: existing.isNotEmpty,
+                      icon: const Icon(Icons.playlist_add, size: 16),
+                      label: const Text('Append to Existing'),
+                    ),
+                  ],
+                  selected: {appendMode},
+                  onSelectionChanged: (sel) =>
+                      setDlgState(() => appendMode = sel.first),
+                ),
+                const SizedBox(height: 14),
+                if (!appendMode) ...[
+                  TextField(
+                    controller: titleCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Note Title',
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedTag,
+                          decoration: const InputDecoration(
+                            labelText: 'Tag',
+                            isDense: true,
+                          ),
+                          items: JournalPage.tags
+                              .map((t) =>
+                                  DropdownMenuItem(value: t, child: Text(t)))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setDlgState(() => selectedTag = v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedMood,
+                          decoration: const InputDecoration(
+                            labelText: 'Mood',
+                            isDense: true,
+                          ),
+                          items: JournalPage.moods
+                              .map((m) =>
+                                  DropdownMenuItem(value: m, child: Text(m)))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setDlgState(() => selectedMood = v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  DropdownButtonFormField<String>(
+                    value: selectedNoteId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Target Journal Note',
+                      isDense: true,
+                    ),
+                    items: existing
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e.id,
+                            child: Text(
+                              '${e.title}${e.symbol.isNotEmpty ? ' (${e.symbol})' : ''}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setDlgState(() => selectedNoteId = v),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Appends this content with a divider and timestamp to the bottom of the selected note.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(ctx).hintColor,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(appendMode ? 'Append' : 'Save Note'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) {
+      titleCtrl.dispose();
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    if (appendMode && selectedNoteId != null) {
+      final idx = existing.indexWhere((e) => e.id == selectedNoteId);
+      if (idx >= 0) {
+        final target = existing[idx];
+        final stamp =
+            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
+            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} UTC';
+        final merged = target.content.trim().isEmpty
+            ? content
+            : '${target.content.trimRight()}\n\n---\n_Appended from AI Copilot ($stamp)_\n\n$content';
+        await _saveJournalEntry(target.copyWith(
+          content: merged,
+          updatedAt: now,
+        ));
+      }
+    } else {
+      final title =
+          titleCtrl.text.trim().isEmpty ? defaultTitle : titleCtrl.text.trim();
+      await _saveJournalEntry(JournalEntry(
+        id: 'note_${now.millisecondsSinceEpoch}',
+        title: title,
+        content: content,
+        symbol: widget.storage.selectedSymbol,
+        timeframe: widget.storage.selectedTimeframe,
+        tag: selectedTag,
+        mood: selectedMood,
+        priceAtNote: _candles.isNotEmpty ? _candles.last.close : null,
+        createdAt: now,
+        updatedAt: now,
+      ));
+    }
+    titleCtrl.dispose();
+  }
+
+  Widget _buildCopilotDrawer() {
+    return AiCopilotDrawer(
+      copilot: widget.copilot,
+      symbol: widget.storage.selectedSymbol,
+      timeframe: widget.storage.selectedTimeframe,
+      candles: _candles,
+      sessions: widget.storage.copilotSessions,
+      activeSessionId: widget.storage.activeCopilotSessionId,
+      onSelectSession: _selectCopilotSession,
+      onNewSession: _createCopilotSession,
+      onDeleteSession: _deleteCopilotSession,
+      onUpdateSession: _updateCopilotSession,
+      isExpanded: _isCopilotExpanded,
+      onToggleExpand: () =>
+          setState(() => _isCopilotExpanded = !_isCopilotExpanded),
+      onClose: () => setState(() {
+        _isCopilotOpen = false;
+        _isCopilotExpanded = false;
+      }),
+      onOpenSettings: () => showDialog(
+        context: context,
+        builder: (_) => BrokerSettingsDialog(
+          storage: widget.storage,
+          onSaved: () {
+            widget.onThemeChanged();
+            setState(() {});
+          },
+        ),
+      ),
+      onExecuteAction: _executeCopilotAction,
+      onSaveToJournal: _saveToJournalWithDialog,
+    );
+  }
+
   Future<void> _updatePositionNote(
     int ticket,
     String note,
@@ -670,88 +966,9 @@ class _AppShellState extends State<AppShell> {
                             Expanded(child: _buildActivePage(currentPrice)),
                           if (_isCopilotOpen)
                             if (_isCopilotExpanded)
-                              Expanded(
-                                child: AiCopilotDrawer(
-                                  copilot: widget.copilot,
-                                  symbol: widget.storage.selectedSymbol,
-                                  timeframe: widget.storage.selectedTimeframe,
-                                  candles: _candles,
-                                  isExpanded: true,
-                                  onToggleExpand: () => setState(
-                                      () => _isCopilotExpanded = false),
-                                  onClose: () => setState(() {
-                                    _isCopilotOpen = false;
-                                    _isCopilotExpanded = false;
-                                  }),
-                                  onOpenSettings: () => showDialog(
-                                    context: context,
-                                    builder: (_) => BrokerSettingsDialog(
-                                      storage: widget.storage,
-                                      onSaved: () {
-                                        widget.onThemeChanged();
-                                        setState(() {});
-                                      },
-                                    ),
-                                  ),
-                                  onExecuteAction: _executeCopilotAction,
-                                  onSaveToJournal: (title, content) async {
-                                    final now = DateTime.now().toUtc();
-                                    await _saveJournalEntry(JournalEntry(
-                                      id: 'note_${now.millisecondsSinceEpoch}',
-                                      title: title,
-                                      content: content,
-                                      symbol: widget.storage.selectedSymbol,
-                                      timeframe:
-                                          widget.storage.selectedTimeframe,
-                                      tag: 'AI Copilot',
-                                      priceAtNote: _candles.isNotEmpty
-                                          ? _candles.last.close
-                                          : null,
-                                      createdAt: now,
-                                      updatedAt: now,
-                                    ));
-                                  },
-                                ),
-                              )
+                              Expanded(child: _buildCopilotDrawer())
                             else
-                              AiCopilotDrawer(
-                                copilot: widget.copilot,
-                                symbol: widget.storage.selectedSymbol,
-                                timeframe: widget.storage.selectedTimeframe,
-                                candles: _candles,
-                                isExpanded: false,
-                                onToggleExpand: () =>
-                                    setState(() => _isCopilotExpanded = true),
-                                onClose: () =>
-                                    setState(() => _isCopilotOpen = false),
-                                onOpenSettings: () => showDialog(
-                                  context: context,
-                                  builder: (_) => BrokerSettingsDialog(
-                                    storage: widget.storage,
-                                    onSaved: () {
-                                      widget.onThemeChanged();
-                                      setState(() {});
-                                    },
-                                  ),
-                                ),
-                                onExecuteAction: _executeCopilotAction,
-                                onSaveToJournal: (title, content) async {
-                                  final now = DateTime.now().toUtc();
-                                  await _saveJournalEntry(JournalEntry(
-                                    id: 'note_${now.millisecondsSinceEpoch}',
-                                    title: title,
-                                    content: content,
-                                    symbol: widget.storage.selectedSymbol,
-                                    timeframe: widget.storage.selectedTimeframe,
-                                    tag: 'AI Copilot',
-                                    priceAtNote: _candles.isNotEmpty
-                                        ? _candles.last.close
-                                        : null,
-                                    createdAt: now,
-                                    updatedAt: now,
-                                  ));
-                                },
-                              ),
+                              _buildCopilotDrawer(),
                         ],
                       ),
                     ),

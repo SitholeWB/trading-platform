@@ -9,6 +9,16 @@ class AiCopilotDrawer extends StatefulWidget {
   final String symbol;
   final Timeframe timeframe;
   final List<Candle> candles;
+  final List<CopilotSession> sessions;
+  final String activeSessionId;
+  final ValueChanged<String> onSelectSession;
+  final VoidCallback onNewSession;
+  final ValueChanged<String> onDeleteSession;
+  final void Function(
+    String sessionId,
+    List<ChatMessage> messages, {
+    String? newTitle,
+  }) onUpdateSession;
   final VoidCallback onClose;
   final VoidCallback? onOpenSettings;
   final bool isExpanded;
@@ -22,6 +32,12 @@ class AiCopilotDrawer extends StatefulWidget {
     required this.symbol,
     required this.timeframe,
     required this.candles,
+    required this.sessions,
+    required this.activeSessionId,
+    required this.onSelectSession,
+    required this.onNewSession,
+    required this.onDeleteSession,
+    required this.onUpdateSession,
     required this.onClose,
     this.onOpenSettings,
     this.isExpanded = false,
@@ -37,22 +53,18 @@ class AiCopilotDrawer extends StatefulWidget {
 class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
   final _ctrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  final List<ChatMessage> _messages = [];
   bool _loading = false;
   double _width = 440;
 
-  @override
-  void initState() {
-    super.initState();
-    _messages.add(ChatMessage(
-      role: 'assistant',
-      providerUsed:
-          AiCopilotService.specFor(widget.copilot.storage.aiProvider).label,
-      content:
-          'Ready to assist on **${widget.symbol}** (`${widget.timeframe.code}`). Ask for chart diagnostics, position sizing, portfolio risk checks, or 1-click trade & strategy setups.',
-      timestamp: DateTime.now(),
-    ));
+  CopilotSession? get _activeSession {
+    if (widget.sessions.isEmpty) return null;
+    return widget.sessions.firstWhere(
+      (s) => s.id == widget.activeSessionId,
+      orElse: () => widget.sessions.first,
+    );
   }
+
+  List<ChatMessage> get _messages => _activeSession?.messages ?? const [];
 
   @override
   void dispose() {
@@ -62,19 +74,28 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
   }
 
   Future<void> _send([String? preset]) async {
+    final session = _activeSession;
+    if (session == null) return;
     final text = (preset ?? _ctrl.text).trim();
     if (text.isEmpty || _loading) return;
     if (preset == null) _ctrl.clear();
 
-    final historySnapshot = List<ChatMessage>.from(_messages);
-    setState(() {
-      _messages.add(ChatMessage(
+    final historySnapshot = List<ChatMessage>.from(session.messages);
+    final hasUserMsgBefore = historySnapshot.any((m) => m.role == 'user');
+    final autoTitle = !hasUserMsgBefore
+        ? (text.length > 42 ? '${text.substring(0, 42)}...' : text)
+        : null;
+
+    final withUser = [
+      ...session.messages,
+      ChatMessage(
         role: 'user',
         content: text,
-        timestamp: DateTime.now(),
-      ));
-      _loading = true;
-    });
+        timestamp: DateTime.now().toUtc(),
+      ),
+    ];
+    widget.onUpdateSession(session.id, withUser, newTitle: autoTitle);
+    setState(() => _loading = true);
     _scrollToBottom();
 
     final reply = await widget.copilot.ask(
@@ -86,16 +107,19 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
     );
 
     if (!mounted) return;
-    setState(() {
-      _messages.add(ChatMessage(
+    final currentMessages = _activeSession?.messages ?? withUser;
+    final withAssistant = [
+      ...currentMessages,
+      ChatMessage(
         role: 'assistant',
         content: reply.content,
         providerUsed: reply.providerUsed,
         actions: reply.actions,
-        timestamp: DateTime.now(),
-      ));
-      _loading = false;
-    });
+        timestamp: DateTime.now().toUtc(),
+      ),
+    ];
+    widget.onUpdateSession(session.id, withAssistant);
+    setState(() => _loading = false);
     _scrollToBottom();
   }
 
@@ -109,6 +133,28 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
         );
       }
     });
+  }
+
+  Future<void> _saveEntireSession() async {
+    final session = _activeSession;
+    if (session == null || widget.onSaveToJournal == null) return;
+    final buf = StringBuffer();
+    buf.writeln('## AI Copilot Session: ${session.title}');
+    buf.writeln(
+        '**Context:** `${widget.symbol}` · `${widget.timeframe.code}`\n');
+    for (final m in session.messages) {
+      if (m.role == 'user') {
+        buf.writeln('### Trader\n${m.content}\n');
+      } else {
+        final who =
+            (m.providerUsed ?? '').isNotEmpty ? ' (${m.providerUsed})' : '';
+        buf.writeln('### Copilot$who\n${m.content}\n');
+      }
+    }
+    await widget.onSaveToJournal!(
+      'Session: ${session.title}',
+      buf.toString().trim(),
+    );
   }
 
   IconData _iconForAction(String type) => switch (type) {
@@ -128,6 +174,7 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
         ? widget.copilot.storage.aiModel.trim()
         : activeSpec.defaultModel;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final session = _activeSession;
 
     return Row(
       mainAxisSize: widget.isExpanded ? MainAxisSize.max : MainAxisSize.min,
@@ -173,7 +220,7 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
               children: [
                 Container(
                   height: 52,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
                     border: Border(
                       bottom: BorderSide(color: Theme.of(context).dividerColor),
@@ -203,6 +250,60 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
                           ],
                         ),
                       ),
+                      PopupMenuButton<String>(
+                        tooltip: 'Copilot Session History',
+                        icon: const Icon(Icons.history, size: 18),
+                        onSelected: (id) {
+                          widget.onSelectSession(id);
+                          _scrollToBottom();
+                        },
+                        itemBuilder: (_) => widget.sessions
+                            .map((s) => PopupMenuItem<String>(
+                                  value: s.id,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        s.id == session?.id
+                                            ? Icons.radio_button_checked
+                                            : Icons.chat_bubble_outline,
+                                        size: 14,
+                                        color: s.id == session?.id
+                                            ? const Color(0xFF06B6D4)
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          s.title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '${s.messages.length}',
+                                        style: const TextStyle(
+                                            fontSize: 10.5, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ))
+                            .toList(),
+                      ),
+                      IconButton(
+                        tooltip: 'New Copilot Session',
+                        icon: const Icon(Icons.add_comment_outlined, size: 17),
+                        onPressed: widget.onNewSession,
+                      ),
+                      if (widget.onSaveToJournal != null &&
+                          _messages.length > 1)
+                        IconButton(
+                          tooltip: 'Save Entire Session to Journal',
+                          icon:
+                              const Icon(Icons.library_add_outlined, size: 17),
+                          onPressed: _saveEntireSession,
+                        ),
                       if (widget.onToggleExpand != null)
                         IconButton(
                           tooltip: widget.isExpanded
@@ -222,15 +323,12 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
                           icon: const Icon(Icons.tune, size: 17),
                           onPressed: widget.onOpenSettings,
                         ),
-                      IconButton(
-                        tooltip: 'Clear Chat',
-                        icon: const Icon(Icons.delete_sweep_outlined, size: 17),
-                        onPressed: () {
-                          setState(() {
-                            _messages.removeRange(1, _messages.length);
-                          });
-                        },
-                      ),
+                      if (session != null)
+                        IconButton(
+                          tooltip: 'Delete Current Session',
+                          icon: const Icon(Icons.delete_outline, size: 17),
+                          onPressed: () => widget.onDeleteSession(session.id),
+                        ),
                       IconButton(
                         tooltip: 'Close Copilot',
                         icon: const Icon(Icons.close, size: 18),
@@ -239,6 +337,36 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
                     ],
                   ),
                 ),
+                if (session != null)
+                  Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    color: isDark
+                        ? const Color(0xFF0F172A).withValues(alpha: 0.6)
+                        : const Color(0xFFF1F5F9),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.forum_outlined,
+                            size: 12, color: Color(0xFF38BDF8)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            session.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 11, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        Text(
+                          '${widget.sessions.length} saved',
+                          style: const TextStyle(
+                              fontSize: 10.5, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
                 SizedBox(
                   height: 40,
                   child: ListView(

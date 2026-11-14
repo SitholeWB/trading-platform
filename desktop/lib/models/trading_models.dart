@@ -805,7 +805,7 @@ class JournalEntry {
 }
 
 class CopilotAction {
-  final String type; // 'order' | 'strategy' | 'alert' | 'close_position'
+  final String type; // 'order' | 'strategy' | 'alert' | 'close_position' | 'journal'
   final String label;
   final Map<String, dynamic> payload;
 
@@ -814,6 +814,18 @@ class CopilotAction {
     required this.label,
     required this.payload,
   });
+
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'label': label,
+        'payload': payload,
+      };
+
+  factory CopilotAction.fromJson(Map<String, dynamic> json) => CopilotAction(
+        type: json['type'] as String? ?? '',
+        label: json['label'] as String? ?? 'Execute',
+        payload: (json['payload'] as Map<String, dynamic>?) ?? const {},
+      );
 }
 
 class ChatMessage {
@@ -830,6 +842,91 @@ class ChatMessage {
     this.providerUsed,
     this.actions = const [],
   });
+
+  Map<String, dynamic> toJson() => {
+        'role': role,
+        'content': content,
+        'timestamp': timestamp.toUtc().toIso8601String(),
+        'providerUsed': providerUsed,
+        'actions': actions.map((a) => a.toJson()).toList(),
+      };
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+        role: json['role'] as String? ?? 'assistant',
+        content: json['content'] as String? ?? '',
+        timestamp: json['timestamp'] != null
+            ? DateTime.parse(json['timestamp'] as String).toUtc()
+            : DateTime.now().toUtc(),
+        providerUsed: json['providerUsed'] as String?,
+        actions: (json['actions'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(CopilotAction.fromJson)
+            .toList(),
+      );
+}
+
+class CopilotSession {
+  final String id;
+  final String title;
+  final String symbol;
+  final Timeframe timeframe;
+  final List<ChatMessage> messages;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const CopilotSession({
+    required this.id,
+    required this.title,
+    required this.symbol,
+    required this.timeframe,
+    required this.messages,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  CopilotSession copyWith({
+    String? title,
+    String? symbol,
+    Timeframe? timeframe,
+    List<ChatMessage>? messages,
+    DateTime? updatedAt,
+  }) =>
+      CopilotSession(
+        id: id,
+        title: title ?? this.title,
+        symbol: symbol ?? this.symbol,
+        timeframe: timeframe ?? this.timeframe,
+        messages: messages ?? this.messages,
+        createdAt: createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'symbol': symbol,
+        'timeframe': timeframe.code,
+        'messages': messages.map((m) => m.toJson()).toList(),
+        'createdAt': createdAt.toUtc().toIso8601String(),
+        'updatedAt': updatedAt.toUtc().toIso8601String(),
+      };
+
+  factory CopilotSession.fromJson(Map<String, dynamic> json) => CopilotSession(
+        id: json['id'] as String,
+        title: json['title'] as String? ?? 'Copilot Session',
+        symbol: json['symbol'] as String? ?? 'EURUSD',
+        timeframe: Timeframe.fromCode(json['timeframe'] as String? ?? 'M15'),
+        messages: (json['messages'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(ChatMessage.fromJson)
+            .toList(),
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String).toUtc()
+            : DateTime.now().toUtc(),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'] as String).toUtc()
+            : DateTime.now().toUtc(),
+      );
 }
 
 class ScannerHit {

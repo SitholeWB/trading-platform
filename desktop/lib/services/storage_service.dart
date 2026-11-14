@@ -48,6 +48,8 @@ class StorageService {
   List<SignalAuditLog> auditLogs = [];
   List<PriceAlert> alerts = [];
   List<JournalEntry> journalEntries = [];
+  List<CopilotSession> copilotSessions = [];
+  String activeCopilotSessionId = '';
   Map<String, List<DrawingItem>> drawingsBySymbol = {};
 
   Future<void> init() async {
@@ -133,6 +135,13 @@ class StorageService {
               .map((e) => JournalEntry.fromJson(e as Map<String, dynamic>))
               .toList();
         }
+        if (data['copilotSessions'] is List) {
+          copilotSessions = (data['copilotSessions'] as List)
+              .map((e) => CopilotSession.fromJson(e as Map<String, dynamic>))
+              .toList();
+        }
+        activeCopilotSessionId =
+            data['activeCopilotSessionId'] as String? ?? '';
         if (data['drawingsBySymbol'] is Map) {
           drawingsBySymbol =
               (data['drawingsBySymbol'] as Map<String, dynamic>).map(
@@ -247,6 +256,9 @@ class StorageService {
         'auditLogs': auditLogs.take(150).map((e) => e.toJson()).toList(),
         'alerts': alerts.map((e) => e.toJson()).toList(),
         'journalEntries': journalEntries.map((e) => e.toJson()).toList(),
+        'copilotSessions':
+            copilotSessions.take(30).map((e) => e.toJson()).toList(),
+        'activeCopilotSessionId': activeCopilotSessionId,
         'drawingsBySymbol': drawingsBySymbol.map(
           (k, v) => MapEntry(k, v.map((d) => d.toJson()).toList()),
         ),
