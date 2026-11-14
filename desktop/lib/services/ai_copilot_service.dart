@@ -236,10 +236,17 @@ $context
             type: InternetAddressType.IPv4,
           ).timeout(const Duration(seconds: 5));
         } catch (_) {}
-        if (v4.isNotEmpty) {
-          return Socket.startConnect(v4.first, port);
+        final target = v4.isNotEmpty ? v4.first : host;
+        final task = await Socket.startConnect(target, port);
+        if (targetUri.scheme == 'https' && proxyHost == null) {
+          return ConnectionTask.fromSocket(
+            task.socket.then(
+              (s) => SecureSocket.secure(s, host: targetUri.host),
+            ),
+            task.cancel,
+          );
         }
-        return Socket.startConnect(host, port);
+        return task;
       };
   }
 
