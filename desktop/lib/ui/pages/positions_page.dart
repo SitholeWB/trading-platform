@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
+import 'journal_page.dart';
 
 class PositionsPage extends StatelessWidget {
   final List<Position> positions;
@@ -9,6 +10,8 @@ class PositionsPage extends StatelessWidget {
   final ValueChanged<int> onClosePosition;
   final VoidCallback? onCloseAllPositions;
   final void Function(int ticket, double? sl, double? tp)? onUpdateSlTp;
+  final void Function(int ticket, String note, String setupTag, int? rating)?
+      onUpdatePositionNote;
   final ValueChanged<RiskProfile>? onUpdateRisk;
   final ValueChanged<double>? onResetDemoAccount;
   final VoidCallback onToggleKillSwitch;
@@ -21,10 +24,97 @@ class PositionsPage extends StatelessWidget {
     required this.onClosePosition,
     this.onCloseAllPositions,
     this.onUpdateSlTp,
+    this.onUpdatePositionNote,
     this.onUpdateRisk,
     this.onResetDemoAccount,
     required this.onToggleKillSwitch,
   });
+
+  Future<void> _showPositionNoteDialog(BuildContext context, Position p) async {
+    if (onUpdatePositionNote == null) return;
+    final noteCtrl = TextEditingController(text: p.note);
+    String setupTag = JournalPage.tags.contains(p.setupTag)
+        ? p.setupTag
+        : 'Trend Continuation';
+    int? rating = p.rating ?? 4;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Trade Note · ${p.symbol} (#${p.ticket})'),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: setupTag,
+                  decoration: const InputDecoration(
+                    labelText: 'Setup Tag',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: JournalPage.tags
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => setupTag = v);
+                  },
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Text('Execution Rating:',
+                        style: TextStyle(fontSize: 12.5)),
+                    const SizedBox(width: 8),
+                    for (int star = 1; star <= 5; star++)
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 28),
+                        icon: Icon(
+                          (rating ?? 0) >= star
+                              ? Icons.star
+                              : Icons.star_border,
+                          color: const Color(0xFFF59E0B),
+                          size: 20,
+                        ),
+                        onPressed: () => setDialogState(() => rating = star),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: noteCtrl,
+                  minLines: 4,
+                  maxLines: 7,
+                  decoration: const InputDecoration(
+                    labelText: 'Trade Note / Post-Trade Review',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Save Note'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (ok == true) {
+      onUpdatePositionNote!(p.ticket, noteCtrl.text.trim(), setupTag, rating);
+    }
+  }
 
   Future<void> _showResetDemoDialog(BuildContext context) async {
     double selectedBalance = 100000.0;
@@ -656,7 +746,8 @@ class PositionsPage extends StatelessWidget {
         ),
       ),
       title: Text(
-        '${p.symbol} · ${p.lots.toStringAsFixed(2)} lots (${p.strategyName})',
+        '${p.symbol} · ${p.lots.toStringAsFixed(2)} lots (${p.strategyName})'
+        '${p.setupTag.isNotEmpty ? ' · [${p.setupTag}]' : ''}',
         style:
             const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace'),
       ),
@@ -664,7 +755,8 @@ class PositionsPage extends StatelessWidget {
         'Entry: ${IndicatorEngine.formatPrice(p.entryPrice, p.symbol)} | '
         'Now: ${IndicatorEngine.formatPrice(p.currentPrice, p.symbol)} | '
         'SL: ${p.stopLossPrice != null ? IndicatorEngine.formatPrice(p.stopLossPrice!, p.symbol) : 'None'} | '
-        'TP: ${p.takeProfitPrice != null ? IndicatorEngine.formatPrice(p.takeProfitPrice!, p.symbol) : 'None'}',
+        'TP: ${p.takeProfitPrice != null ? IndicatorEngine.formatPrice(p.takeProfitPrice!, p.symbol) : 'None'}'
+        '${p.note.isNotEmpty ? '\nNote: ${p.note}' : ''}',
         style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
       ),
       trailing: Row(
@@ -678,6 +770,20 @@ class PositionsPage extends StatelessWidget {
               color: pnlColor,
             ),
           ),
+          if (onUpdatePositionNote != null) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: p.note.isEmpty ? 'Add Trade Note' : 'Edit Trade Note',
+              icon: Icon(
+                p.note.isEmpty
+                    ? Icons.note_add_outlined
+                    : Icons.sticky_note_2,
+                size: 16,
+                color: p.note.isNotEmpty ? const Color(0xFF38BDF8) : null,
+              ),
+              onPressed: () => _showPositionNoteDialog(context, p),
+            ),
+          ],
           if (isOpen) ...[
             if (onUpdateSlTp != null) ...[
               const SizedBox(width: 6),

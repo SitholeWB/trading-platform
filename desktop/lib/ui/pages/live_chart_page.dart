@@ -19,6 +19,7 @@ class LiveChartPage extends StatefulWidget {
   final ValueChanged<ChartType> onChartTypeChanged;
   final VoidCallback onOpenSymbolSearch;
   final VoidCallback onOpenAlerts;
+  final VoidCallback? onQuickNote;
   final Map<String, MarketQuote> watchlistQuotes;
   final bool isWatchlistCollapsed;
   final VoidCallback onToggleWatchlist;
@@ -55,6 +56,7 @@ class LiveChartPage extends StatefulWidget {
     required this.onChartTypeChanged,
     required this.onOpenSymbolSearch,
     required this.onOpenAlerts,
+    this.onQuickNote,
     required this.watchlistQuotes,
     required this.isWatchlistCollapsed,
     required this.onToggleWatchlist,
@@ -594,6 +596,16 @@ class _LiveChartPageState extends State<LiveChartPage> {
                     label: const Text('Alerts',
                         style: TextStyle(fontSize: 11.5)),
                   ),
+                  if (widget.onQuickNote != null) ...[
+                    const SizedBox(width: 6),
+                    OutlinedButton.icon(
+                      onPressed: widget.onQuickNote,
+                      icon: const Icon(Icons.note_add_outlined,
+                          size: 14, color: Color(0xFF38BDF8)),
+                      label: const Text('Note',
+                          style: TextStyle(fontSize: 11.5)),
+                    ),
+                  ],
                 ],
               ),
             ),

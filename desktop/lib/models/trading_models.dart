@@ -265,6 +265,9 @@ class Position {
   final DateTime openedAt;
   final DateTime? closedAt;
   final String strategyName;
+  final String note;
+  final String setupTag;
+  final int? rating;
 
   const Position({
     required this.ticket,
@@ -281,6 +284,9 @@ class Position {
     required this.openedAt,
     this.closedAt,
     this.strategyName = 'Manual',
+    this.note = '',
+    this.setupTag = '',
+    this.rating,
   });
 
   bool get isBuy => orderType.toLowerCase() == 'buy';
@@ -294,6 +300,9 @@ class Position {
     double? realizedPnl,
     String? status,
     DateTime? closedAt,
+    String? note,
+    String? setupTag,
+    int? rating,
   }) =>
       Position(
         ticket: ticket,
@@ -310,6 +319,9 @@ class Position {
         openedAt: openedAt,
         closedAt: closedAt ?? this.closedAt,
         strategyName: strategyName,
+        note: note ?? this.note,
+        setupTag: setupTag ?? this.setupTag,
+        rating: rating ?? this.rating,
       );
 
   Map<String, dynamic> toJson() => {
@@ -327,6 +339,9 @@ class Position {
         'openedAt': openedAt.toUtc().toIso8601String(),
         'closedAt': closedAt?.toUtc().toIso8601String(),
         'strategyName': strategyName,
+        'note': note,
+        'setupTag': setupTag,
+        'rating': rating,
       };
 
   factory Position.fromJson(Map<String, dynamic> json) => Position(
@@ -346,6 +361,9 @@ class Position {
             ? DateTime.parse(json['closedAt'] as String).toUtc()
             : null,
         strategyName: json['strategyName'] as String? ?? 'Manual',
+        note: json['note'] as String? ?? '',
+        setupTag: json['setupTag'] as String? ?? '',
+        rating: json['rating'] as int?,
       );
 }
 
@@ -702,6 +720,87 @@ class IndicatorSettings {
         macdSignal: macdSignal ?? this.macdSignal,
         bbPeriod: bbPeriod ?? this.bbPeriod,
         bbStdDev: bbStdDev ?? this.bbStdDev,
+      );
+}
+
+class JournalEntry {
+  final String id;
+  final String title;
+  final String content;
+  final String symbol;
+  final Timeframe timeframe;
+  final String tag; // e.g. 'Pre-Market', 'Trade Review', 'Breakout', 'AI Copilot', 'Lesson'
+  final String mood; // 'Disciplined', 'Focused', 'Uncertain', 'FOMO'
+  final int? linkedTicket;
+  final double? priceAtNote;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const JournalEntry({
+    required this.id,
+    required this.title,
+    required this.content,
+    this.symbol = '',
+    this.timeframe = Timeframe.m15,
+    this.tag = 'General',
+    this.mood = 'Disciplined',
+    this.linkedTicket,
+    this.priceAtNote,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  JournalEntry copyWith({
+    String? title,
+    String? content,
+    String? symbol,
+    Timeframe? timeframe,
+    String? tag,
+    String? mood,
+    int? linkedTicket,
+    double? priceAtNote,
+    DateTime? updatedAt,
+  }) =>
+      JournalEntry(
+        id: id,
+        title: title ?? this.title,
+        content: content ?? this.content,
+        symbol: symbol ?? this.symbol,
+        timeframe: timeframe ?? this.timeframe,
+        tag: tag ?? this.tag,
+        mood: mood ?? this.mood,
+        linkedTicket: linkedTicket ?? this.linkedTicket,
+        priceAtNote: priceAtNote ?? this.priceAtNote,
+        createdAt: createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'content': content,
+        'symbol': symbol,
+        'timeframe': timeframe.code,
+        'tag': tag,
+        'mood': mood,
+        'linkedTicket': linkedTicket,
+        'priceAtNote': priceAtNote,
+        'createdAt': createdAt.toUtc().toIso8601String(),
+        'updatedAt': updatedAt.toUtc().toIso8601String(),
+      };
+
+  factory JournalEntry.fromJson(Map<String, dynamic> json) => JournalEntry(
+        id: json['id'] as String,
+        title: json['title'] as String? ?? 'Untitled Note',
+        content: json['content'] as String? ?? '',
+        symbol: json['symbol'] as String? ?? '',
+        timeframe: Timeframe.fromCode(json['timeframe'] as String? ?? 'M15'),
+        tag: json['tag'] as String? ?? 'General',
+        mood: json['mood'] as String? ?? 'Disciplined',
+        linkedTicket: json['linkedTicket'] as int?,
+        priceAtNote: (json['priceAtNote'] as num?)?.toDouble(),
+        createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
+        updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
       );
 }
 

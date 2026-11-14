@@ -47,6 +47,7 @@ class StorageService {
   List<Position> positions = [];
   List<SignalAuditLog> auditLogs = [];
   List<PriceAlert> alerts = [];
+  List<JournalEntry> journalEntries = [];
   Map<String, List<DrawingItem>> drawingsBySymbol = {};
 
   Future<void> init() async {
@@ -125,6 +126,11 @@ class StorageService {
         if (data['alerts'] is List) {
           alerts = (data['alerts'] as List)
               .map((e) => PriceAlert.fromJson(e as Map<String, dynamic>))
+              .toList();
+        }
+        if (data['journalEntries'] is List) {
+          journalEntries = (data['journalEntries'] as List)
+              .map((e) => JournalEntry.fromJson(e as Map<String, dynamic>))
               .toList();
         }
         if (data['drawingsBySymbol'] is Map) {
@@ -240,6 +246,7 @@ class StorageService {
         'positions': positions.map((e) => e.toJson()).toList(),
         'auditLogs': auditLogs.take(150).map((e) => e.toJson()).toList(),
         'alerts': alerts.map((e) => e.toJson()).toList(),
+        'journalEntries': journalEntries.map((e) => e.toJson()).toList(),
         'drawingsBySymbol': drawingsBySymbol.map(
           (k, v) => MapEntry(k, v.map((d) => d.toJson()).toList()),
         ),

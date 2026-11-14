@@ -1,0 +1,734 @@
+import 'package:flutter/material.dart';
+import '../../models/trading_models.dart';
+import '../../services/indicator_engine.dart';
+import '../../services/symbol_catalog.dart';
+
+class JournalPage extends StatefulWidget {
+  final List<JournalEntry> entries;
+  final List<Position> positions;
+  final String activeSymbol;
+  final Timeframe activeTimeframe;
+  final double currentPrice;
+  final ValueChanged<JournalEntry> onSaveEntry;
+  final ValueChanged<String> onDeleteEntry;
+  final void Function(String symbol, Timeframe tf) onOpenChart;
+  final void Function(int ticket, String note, String setupTag, int? rating)?
+      onUpdatePositionNote;
+
+  const JournalPage({
+    super.key,
+    required this.entries,
+    required this.positions,
+    required this.activeSymbol,
+    required this.activeTimeframe,
+    required this.currentPrice,
+    required this.onSaveEntry,
+    required this.onDeleteEntry,
+    required this.onOpenChart,
+    this.onUpdatePositionNote,
+  });
+
+  static const List<String> tags = [
+    'General',
+    'Pre-Market',
+    'Trade Review',
+    'Breakout',
+    'Mean Reversion',
+    'Trend Continuation',
+    'AI Copilot',
+    'Mistake / Lesson',
+  ];
+
+  static const List<String> moods = [
+    'Disciplined',
+    'Focused',
+    'Neutral',
+    'Uncertain',
+    'FOMO',
+  ];
+
+  static Future<JournalEntry?> showEntryEditorDialog(
+    BuildContext context, {
+    JournalEntry? existing,
+    required String defaultSymbol,
+    required Timeframe defaultTimeframe,
+    double? defaultPrice,
+  }) async {
+    final titleCtrl = TextEditingController(text: existing?.title ?? '');
+    final contentCtrl = TextEditingController(text: existing?.content ?? '');
+    String sym = existing?.symbol.isNotEmpty == true
+        ? existing!.symbol
+        : defaultSymbol;
+    Timeframe tf = existing?.timeframe ?? defaultTimeframe;
+    String tag = tags.contains(existing?.tag) ? existing!.tag : 'General';
+    String mood = moods.contains(existing?.mood) ? existing!.mood : 'Disciplined';
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.edit_note, color: Color(0xFF38BDF8)),
+              const SizedBox(width: 8),
+              Text(existing == null ? 'New Journal Note' : 'Edit Journal Note'),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Title',
+                      hintText: 'e.g. London session breakout plan',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: SymbolCatalog.allSymbols
+                                  .any((s) => s.symbol == sym)
+                              ? sym
+                              : 'EURUSD',
+                          decoration: const InputDecoration(
+                            labelText: 'Symbol',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: SymbolCatalog.allSymbols
+                              .map((s) => DropdownMenuItem(
+                                    value: s.symbol,
+                                    child: Text(s.symbol,
+                                        style: const TextStyle(fontSize: 12.5)),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setDialogState(() => sym = v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 110,
+                        child: DropdownButtonFormField<Timeframe>(
+                          initialValue: tf,
+                          decoration: const InputDecoration(
+                            labelText: 'Timeframe',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: Timeframe.values
+                              .map((t) => DropdownMenuItem(
+                                    value: t,
+                                    child: Text(t.code,
+                                        style: const TextStyle(fontSize: 12.5)),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setDialogState(() => tf = v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: tag,
+                          decoration: const InputDecoration(
+                            labelText: 'Category / Tag',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: tags
+                              .map((t) => DropdownMenuItem(
+                                    value: t,
+                                    child: Text(t,
+                                        style: const TextStyle(fontSize: 12.5)),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setDialogState(() => tag = v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: mood,
+                          decoration: const InputDecoration(
+                            labelText: 'Mindset / Discipline',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: moods
+                              .map((m) => DropdownMenuItem(
+                                    value: m,
+                                    child: Text(m,
+                                        style: const TextStyle(fontSize: 12.5)),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setDialogState(() => mood = v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: contentCtrl,
+                    minLines: 5,
+                    maxLines: 10,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes, Thesis & Observations',
+                      alignLabelWithHint: true,
+                      hintText:
+                          'Record entry rationale, key levels, invalidation, or post-trade lessons...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              icon: const Icon(Icons.save, size: 16),
+              label: const Text('Save Note'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (ok != true) return null;
+    final now = DateTime.now().toUtc();
+    final title = titleCtrl.text.trim().isEmpty
+        ? '$sym ${tf.code} · $tag'
+        : titleCtrl.text.trim();
+    if (existing != null) {
+      return existing.copyWith(
+        title: title,
+        content: contentCtrl.text.trim(),
+        symbol: sym,
+        timeframe: tf,
+        tag: tag,
+        mood: mood,
+        updatedAt: now,
+      );
+    }
+    return JournalEntry(
+      id: 'note_${now.millisecondsSinceEpoch}',
+      title: title,
+      content: contentCtrl.text.trim(),
+      symbol: sym,
+      timeframe: tf,
+      tag: tag,
+      mood: mood,
+      priceAtNote: defaultPrice,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  @override
+  State<JournalPage> createState() => _JournalPageState();
+}
+
+class _JournalPageState extends State<JournalPage> {
+  String _search = '';
+  String _filterTag = 'All';
+  int _tabIndex = 0; // 0 = Journal Notes, 1 = Trade Reviews & Tag Stats
+
+  Future<void> _openEditor([JournalEntry? existing]) async {
+    final res = await JournalPage.showEntryEditorDialog(
+      context,
+      existing: existing,
+      defaultSymbol: widget.activeSymbol,
+      defaultTimeframe: widget.activeTimeframe,
+      defaultPrice: widget.currentPrice > 0 ? widget.currentPrice : null,
+    );
+    if (res != null) {
+      widget.onSaveEntry(res);
+    }
+  }
+
+  Future<void> _editPositionNote(Position p) async {
+    if (widget.onUpdatePositionNote == null) return;
+    final noteCtrl = TextEditingController(text: p.note);
+    String setupTag =
+        p.setupTag.isNotEmpty ? p.setupTag : 'Trend Continuation';
+    int? rating = p.rating ?? 4;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Trade Note · ${p.symbol} (#${p.ticket})'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: JournalPage.tags.contains(setupTag)
+                      ? setupTag
+                      : 'General',
+                  decoration: const InputDecoration(
+                    labelText: 'Setup Tag',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: JournalPage.tags
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => setupTag = v);
+                  },
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Text('Execution Rating:',
+                        style: TextStyle(fontSize: 12.5)),
+                    const SizedBox(width: 8),
+                    for (int star = 1; star <= 5; star++)
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 28),
+                        icon: Icon(
+                          (rating ?? 0) >= star
+                              ? Icons.star
+                              : Icons.star_border,
+                          color: const Color(0xFFF59E0B),
+                          size: 20,
+                        ),
+                        onPressed: () => setDialogState(() => rating = star),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: noteCtrl,
+                  minLines: 4,
+                  maxLines: 7,
+                  decoration: const InputDecoration(
+                    labelText: 'Trade Review / Lesson Learned',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (ok == true) {
+      widget.onUpdatePositionNote!(
+        p.ticket,
+        noteCtrl.text.trim(),
+        setupTag,
+        rating,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredEntries = widget.entries.where((e) {
+      if (_filterTag != 'All' && e.tag != _filterTag) return false;
+      if (_search.isNotEmpty) {
+        final q = _search.toLowerCase();
+        return e.title.toLowerCase().contains(q) ||
+            e.content.toLowerCase().contains(q) ||
+            e.symbol.toLowerCase().contains(q) ||
+            e.tag.toLowerCase().contains(q);
+      }
+      return true;
+    }).toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(
+                    value: 0,
+                    icon: Icon(Icons.notes, size: 16),
+                    label: Text('Journal Notes'),
+                  ),
+                  ButtonSegment(
+                    value: 1,
+                    icon: Icon(Icons.rate_review_outlined, size: 16),
+                    label: Text('Trade Reviews & Tag Stats'),
+                  ),
+                ],
+                selected: {_tabIndex},
+                onSelectionChanged: (s) => setState(() => _tabIndex = s.first),
+              ),
+              const SizedBox(width: 12),
+              if (_tabIndex == 0) ...[
+                Expanded(
+                  child: TextField(
+                    onChanged: (v) => setState(() => _search = v.trim()),
+                    decoration: const InputDecoration(
+                      hintText: 'Search notes by symbol, title, or keyword...',
+                      prefixIcon: Icon(Icons.search, size: 18),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                DropdownButton<String>(
+                  value: _filterTag,
+                  items: ['All', ...JournalPage.tags]
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _filterTag = v);
+                  },
+                ),
+              ] else
+                const Spacer(),
+              const SizedBox(width: 10),
+              FilledButton.icon(
+                onPressed: () => _openEditor(),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('New Note'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _tabIndex == 0
+                ? _buildNotesList(context, filteredEntries)
+                : _buildTradeReviewsBody(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotesList(BuildContext context, List<JournalEntry> list) {
+    if (list.isEmpty) {
+      return Card(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.edit_note, size: 42, color: Color(0xFF38BDF8)),
+              const SizedBox(height: 10),
+              const Text(
+                'No journal notes yet',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Capture pre-market plans, chart setups, or lessons learned—or save AI Copilot analyses in 1 click.',
+                style: TextStyle(color: Colors.grey, fontSize: 12.5),
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: () => _openEditor(),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Write First Note'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: list.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemBuilder: (ctx, i) {
+        final e = list[i];
+        return Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (e.symbol.isNotEmpty) ...[
+                      ActionChip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text(
+                          '${e.symbol} ${e.timeframe.code}',
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () =>
+                            widget.onOpenChart(e.symbol, e.timeframe),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Chip(
+                      visualDensity: VisualDensity.compact,
+                      label: Text(e.tag, style: const TextStyle(fontSize: 11)),
+                    ),
+                    const SizedBox(width: 6),
+                    Chip(
+                      visualDensity: VisualDensity.compact,
+                      label: Text(e.mood,
+                          style: const TextStyle(
+                              fontSize: 11, color: Color(0xFF94A3B8))),
+                    ),
+                    const Spacer(),
+                    if (e.priceAtNote != null && e.symbol.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: Text(
+                          '@ ${IndicatorEngine.formatPrice(e.priceAtNote!, e.symbol)}',
+                          style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11.5,
+                              color: Colors.grey),
+                        ),
+                      ),
+                    Text(
+                      e.updatedAt
+                          .toLocal()
+                          .toIso8601String()
+                          .substring(0, 16)
+                          .replaceFirst('T', ' '),
+                      style:
+                          const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                    IconButton(
+                      tooltip: 'Edit Note',
+                      icon: const Icon(Icons.edit_outlined, size: 17),
+                      onPressed: () => _openEditor(e),
+                    ),
+                    IconButton(
+                      tooltip: 'Delete Note',
+                      icon: const Icon(Icons.delete_outline,
+                          size: 17, color: Colors.redAccent),
+                      onPressed: () => widget.onDeleteEntry(e.id),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  e.title,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                if (e.content.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  SelectableText(
+                    e.content,
+                    style: const TextStyle(fontSize: 12.5, height: 1.45),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTradeReviewsBody(BuildContext context) {
+    final tagged = widget.positions
+        .where((p) => p.setupTag.isNotEmpty)
+        .toList();
+    final byTag = <String, List<Position>>{};
+    for (final p in tagged) {
+      byTag.putIfAbsent(p.setupTag, () => []).add(p);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (byTag.isNotEmpty) ...[
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Setup Tag Performance',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: byTag.entries.map((e) {
+                      final closed =
+                          e.value.where((p) => !p.isOpen).toList();
+                      final wins =
+                          closed.where((p) => p.realizedPnl >= 0).length;
+                      final wr = closed.isEmpty
+                          ? 0.0
+                          : (wins / closed.length) * 100;
+                      final net = e.value.fold<double>(
+                        0.0,
+                        (s, p) =>
+                            s + (p.isOpen ? p.unrealizedPnl : p.realizedPnl),
+                      );
+                      final c = net >= 0
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFFEF4444);
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: Theme.of(context).dividerColor),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(e.key,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12)),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${e.value.length} trades · Win ${wr.toStringAsFixed(0)}% · ${net >= 0 ? "+" : "-"}\$${net.abs().toStringAsFixed(2)}',
+                              style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 11.5,
+                                  color: c),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        Expanded(
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: widget.positions.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No demo trades recorded yet. Annotate any open or closed trade here.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.all(10),
+                    itemCount: widget.positions.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (ctx, i) {
+                      final p = widget.positions[i];
+                      final pnl = p.isOpen ? p.unrealizedPnl : p.realizedPnl;
+                      final c = pnl >= 0
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFFEF4444);
+                      return ListTile(
+                        dense: true,
+                        title: Row(
+                          children: [
+                            Text(
+                              '${p.orderType.toUpperCase()} ${p.symbol} · ${p.lots.toStringAsFixed(2)} lots (${p.status})',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'monospace',
+                                  fontSize: 12.5),
+                            ),
+                            if (p.setupTag.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              Chip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text(p.setupTag,
+                                    style: const TextStyle(fontSize: 10)),
+                              ),
+                            ],
+                            if (p.rating != null) ...[
+                              const SizedBox(width: 6),
+                              Text('★' * p.rating!,
+                                  style: const TextStyle(
+                                      color: Color(0xFFF59E0B), fontSize: 11)),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text(
+                          p.note.isNotEmpty
+                              ? p.note
+                              : 'No trade note yet — click Edit to add review & setup tag.',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: p.note.isNotEmpty ? null : Colors.grey,
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${pnl >= 0 ? "+" : "-"}\$${pnl.abs().toStringAsFixed(2)}',
+                              style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.bold,
+                                  color: c),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: () => _editPositionNote(p),
+                              icon: const Icon(Icons.edit_note, size: 16),
+                              label: Text(p.note.isEmpty ? 'Add Note' : 'Edit'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+}

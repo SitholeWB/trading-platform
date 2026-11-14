@@ -21,6 +21,7 @@ import 'dialogs/timezone_dialog.dart';
 import 'pages/audit_radar_page.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/documentation_page.dart';
+import 'pages/journal_page.dart';
 import 'pages/live_chart_page.dart';
 import 'pages/market_scanner_page.dart';
 import 'pages/positions_page.dart';
@@ -33,6 +34,7 @@ enum AppPage {
   strategies('Strategies', Icons.bolt),
   radar('Audit Radar', Icons.track_changes),
   positions('Positions', Icons.work_outline),
+  journal('Journal', Icons.edit_note),
   sandbox('Simulator', Icons.science_outlined),
   chart('Live Chart', Icons.candlestick_chart),
   docs('Documentation', Icons.menu_book_outlined);
@@ -563,7 +565,61 @@ class _AppShellState extends State<AppShell> {
           }
         }
         break;
+
+      case 'journal':
+        final now = DateTime.now().toUtc();
+        final sym = p['symbol'] as String? ?? widget.storage.selectedSymbol;
+        final tf = Timeframe.fromCode(
+          p['timeframe'] as String? ?? widget.storage.selectedTimeframe.code,
+        );
+        final entry = JournalEntry(
+          id: 'note_${now.millisecondsSinceEpoch}',
+          title: p['title'] as String? ?? '$sym ${tf.code} · Copilot Note',
+          content: p['content'] as String? ?? '',
+          symbol: sym,
+          timeframe: tf,
+          tag: p['tag'] as String? ?? 'AI Copilot',
+          priceAtNote: _candles.isNotEmpty ? _candles.last.close : null,
+          createdAt: now,
+          updatedAt: now,
+        );
+        await _saveJournalEntry(entry);
+        break;
     }
+  }
+
+  Future<void> _saveJournalEntry(JournalEntry entry) async {
+    final idx =
+        widget.storage.journalEntries.indexWhere((e) => e.id == entry.id);
+    if (idx >= 0) {
+      widget.storage.journalEntries[idx] = entry;
+    } else {
+      widget.storage.journalEntries = [entry, ...widget.storage.journalEntries];
+    }
+    await widget.storage.save();
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Saved journal note "${entry.title}"')),
+    );
+  }
+
+  Future<void> _updatePositionNote(
+    int ticket,
+    String note,
+    String setupTag,
+    int? rating,
+  ) async {
+    final idx =
+        widget.storage.positions.indexWhere((p) => p.ticket == ticket);
+    if (idx < 0) return;
+    widget.storage.positions[idx] = widget.storage.positions[idx].copyWith(
+      note: note,
+      setupTag: setupTag,
+      rating: rating,
+    );
+    await widget.storage.save();
+    if (mounted) setState(() {});
   }
 
   Future<void> _openSymbolSearch() async {
@@ -629,6 +685,22 @@ class _AppShellState extends State<AppShell> {
                                 ),
                               ),
                               onExecuteAction: _executeCopilotAction,
+                              onSaveToJournal: (title, content) async {
+                                final now = DateTime.now().toUtc();
+                                await _saveJournalEntry(JournalEntry(
+                                  id: 'note_${now.millisecondsSinceEpoch}',
+                                  title: title,
+                                  content: content,
+                                  symbol: widget.storage.selectedSymbol,
+                                  timeframe: widget.storage.selectedTimeframe,
+                                  tag: 'AI Copilot',
+                                  priceAtNote: _candles.isNotEmpty
+                                      ? _candles.last.close
+                                      : null,
+                                  createdAt: now,
+                                  updatedAt: now,
+                                ));
+                              },
                             ),
                         ],
                       ),
@@ -1158,6 +1230,7 @@ class _AppShellState extends State<AppShell> {
               setState(() {});
             }
           },
+          onUpdatePositionNote: _updatePositionNote,
           onUpdateRisk: (updated) async {
             widget.storage.risk = updated;
             await widget.storage.save();
@@ -1182,6 +1255,27 @@ class _AppShellState extends State<AppShell> {
             await widget.storage.save();
             setState(() {});
           },
+        ),
+      AppPage.journal => JournalPage(
+          entries: widget.storage.journalEntries,
+          positions: widget.storage.positions,
+          activeSymbol: widget.storage.selectedSymbol,
+          activeTimeframe: widget.storage.selectedTimeframe,
+          currentPrice: currentPrice,
+          onSaveEntry: _saveJournalEntry,
+          onDeleteEntry: (id) async {
+            widget.storage.journalEntries.removeWhere((e) => e.id == id);
+            await widget.storage.save();
+            setState(() {});
+          },
+          onOpenChart: (sym, tf) {
+            widget.storage.selectedSymbol = sym;
+            widget.storage.selectedTimeframe = tf;
+            widget.storage.save();
+            setState(() => _activePage = AppPage.chart);
+            _refreshMarketData(force: false);
+          },
+          onUpdatePositionNote: _updatePositionNote,
         ),
       AppPage.sandbox => SimulatorPage(
           selectedSymbol: widget.storage.selectedSymbol,
@@ -1232,6 +1326,17 @@ class _AppShellState extends State<AppShell> {
               },
             ),
           ),
+          onQuickNote: () async {
+            final entry = await JournalPage.showEntryEditorDialog(
+              context,
+              defaultSymbol: widget.storage.selectedSymbol,
+              defaultTimeframe: widget.storage.selectedTimeframe,
+              defaultPrice: currentPrice > 0 ? currentPrice : null,
+            );
+            if (entry != null) {
+              await _saveJournalEntry(entry);
+            }
+          },
           watchlistQuotes: _watchlistQuotes,
           isWatchlistCollapsed: widget.storage.isWatchlistCollapsed,
           onToggleWatchlist: () {

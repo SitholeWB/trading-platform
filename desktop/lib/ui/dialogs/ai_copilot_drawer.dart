@@ -10,6 +10,7 @@ class AiCopilotDrawer extends StatefulWidget {
   final VoidCallback onClose;
   final VoidCallback? onOpenSettings;
   final Future<void> Function(CopilotAction action)? onExecuteAction;
+  final Future<void> Function(String title, String content)? onSaveToJournal;
 
   const AiCopilotDrawer({
     super.key,
@@ -20,6 +21,7 @@ class AiCopilotDrawer extends StatefulWidget {
     required this.onClose,
     this.onOpenSettings,
     this.onExecuteAction,
+    this.onSaveToJournal,
   });
 
   @override
@@ -106,6 +108,7 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
         'strategy' => Icons.auto_fix_high,
         'alert' => Icons.notifications_active_outlined,
         'close_position' => Icons.close_fullscreen,
+        'journal' => Icons.bookmark_add_outlined,
         _ => Icons.play_arrow,
       };
 
@@ -211,6 +214,12 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
                   onPressed: () => _send(
                       'Design an automated rule-based bot strategy for ${widget.symbol} on ${widget.timeframe.code}.'),
                 ),
+                ActionChip(
+                  label: const Text('Review Journal',
+                      style: TextStyle(fontSize: 11)),
+                  onPressed: () => _send(
+                      'Review my recent journal notes and annotated trades to spot recurring mistakes or strengths.'),
+                ),
               ],
             ),
           ),
@@ -282,6 +291,28 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
                                 ),
                               );
                             }).toList(),
+                          ),
+                        ],
+                        if (!isUser && widget.onSaveToJournal != null && i > 0) ...[
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              onPressed: () => widget.onSaveToJournal!(
+                                '${widget.symbol} ${widget.timeframe.code} · Copilot Note',
+                                m.content,
+                              ),
+                              icon: const Icon(Icons.bookmark_add_outlined,
+                                  size: 13),
+                              label: const Text('Save to Journal',
+                                  style: TextStyle(fontSize: 10.5)),
+                            ),
                           ),
                         ],
                       ],

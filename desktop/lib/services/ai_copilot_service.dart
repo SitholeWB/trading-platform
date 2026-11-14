@@ -212,6 +212,7 @@ If you recommend a concrete trade setup, strategy draft, price alert, or closing
 [[ACTION:{"type":"alert","label":"Alert EURUSD >= 1.0900","symbol":"EURUSD","condition":"Above","price":1.0900}]]
 [[ACTION:{"type":"strategy","label":"Create RSI + EMA Strategy","name":"AI Momentum","symbol":"EURUSD","timeframe":"M15","combinator":"AND","riskPercent":1.0,"slMult":1.5,"tpMult":3.0,"rules":[{"indicator":"EMA_CROSS","condition":"CrossAbove","period":20,"threshold":0},{"indicator":"RSI_OS","condition":"LessThan","period":14,"threshold":35}]}]]
 [[ACTION:{"type":"close_position","label":"Close #12345","ticket":12345}]]
+[[ACTION:{"type":"journal","label":"Save Note to Journal","title":"EURUSD Plan","symbol":"EURUSD","timeframe":"M15","tag":"AI Copilot","content":"Key observation..."}]]
 
 Valid rule indicators: EMA_CROSS, SMA_CROSS, RSI_OS, RSI_OB, MACD_CROSS, BB_BREAK, SUPERTREND, VWAP_CROSS, ICHIMOKU_BULL.
 Valid rule conditions: CrossAbove, CrossBelow, LessThan, GreaterThan.
@@ -443,6 +444,21 @@ $context
                 '${s.name} [${s.symbol} ${s.timeframe.code}] enabled=${s.isEnabled} autoTrade=${s.autoTrade} logic=${s.combinator} rules=${s.entryRules.length}')
             .join('\n  - ');
 
+    final notesSummary = storage.journalEntries.isEmpty
+        ? 'None'
+        : storage.journalEntries
+            .take(6)
+            .map((n) =>
+                '[${n.symbol.isEmpty ? "General" : n.symbol} · ${n.tag} · ${n.mood}] ${n.title}: ${n.content.replaceAll('\n', ' ')}')
+            .join('\n  - ');
+
+    final annotatedTrades = storage.positions
+        .where((p) => p.note.isNotEmpty || p.setupTag.isNotEmpty)
+        .take(6)
+        .map((p) =>
+            '#${p.ticket} ${p.symbol} (${p.setupTag.isEmpty ? "untagged" : p.setupTag}, ${p.status}, PnL=${(p.isOpen ? p.unrealizedPnl : p.realizedPnl).toStringAsFixed(2)}): ${p.note}')
+        .join('\n  - ');
+
     return '''
 Active Chart: $symbol (${spec.name}) | Timeframe: ${tf.code} | Provider: ${storage.activeProvider}
 Price: $priceStr (${hit.changePct >= 0 ? '+' : ''}${hit.changePct.toStringAsFixed(2)}%)
@@ -453,7 +469,11 @@ Risk Guard: MaxDD=${storage.risk.maxDailyDrawdownPercent}% | MaxRisk/Trade=${sto
 Open Positions (${openPos.length}):
   - $posSummary
 Configured Strategies (${storage.strategies.length}):
-  - $stratSummary''';
+  - $stratSummary
+Recent Journal Notes (${storage.journalEntries.length}):
+  - $notesSummary
+Annotated Trades:
+  - ${annotatedTrades.isEmpty ? "None" : annotatedTrades}''';
   }
 
   ({String cleanedText, List<CopilotAction> actions}) _extractCopilotActions(
