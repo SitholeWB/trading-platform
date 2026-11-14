@@ -1,7 +1,7 @@
 name: trading_platform
 description: "Institutional Algorithmic Trading Platform, Live Charts & AI Copilot."
 publish_to: 'none'
-version: 3.0.0+1
+version: 3.0.1+1
 
 environment:
   sdk: ^3.14.0

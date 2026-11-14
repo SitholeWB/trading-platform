@@ -16,7 +16,7 @@ class _AboutPlatformDialogState extends State<AboutPlatformDialog> {
 
   @override
   Widget build(BuildContext context) {
-    const version = '3.0.0';
+    const version = '3.0.1';
     return Dialog(
       child: SizedBox(
         width: 460,

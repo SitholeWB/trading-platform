@@ -8,7 +8,7 @@ ICON_SRC="$DESKTOP_DIR/assets/icon.png"
 
 APP_ID="com.tradingplatform.desktop"
 PKG_NAME="trading-platform"
-VERSION="${1:-3.0.0}"
+VERSION="${1:-3.0.1}"
 ARCH="amd64"
 STAGE_DIR="$DESKTOP_DIR/build/deb-stage"
 OUT_DEB="$DESKTOP_DIR/build/${PKG_NAME}_${VERSION}_${ARCH}.deb"
