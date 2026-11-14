@@ -35,6 +35,17 @@ class StorageService {
   String feedbackContact = '';
   int feedbackLastSentMs = 0;
 
+  String syncFolderPath = '';
+  bool autoSyncFolderEnabled = false;
+  bool includeSecretsInBackup = false;
+  String webDavUrl = '';
+  String webDavUsername = '';
+  String webDavPassword = '';
+  bool autoSyncWebDavEnabled = false;
+  int lastBackupAtMs = 0;
+  String lastBackupTarget = '';
+  void Function()? onSaved;
+
   AccountSummary account = const AccountSummary(
     balance: 100000.0,
     equity: 100000.0,
@@ -101,58 +112,20 @@ class StorageService {
         feedbackAuthor = data['feedbackAuthor'] as String? ?? '';
         feedbackContact = data['feedbackContact'] as String? ?? '';
         feedbackLastSentMs = data['feedbackLastSentMs'] as int? ?? 0;
+        syncFolderPath = data['syncFolderPath'] as String? ?? '';
+        autoSyncFolderEnabled =
+            data['autoSyncFolderEnabled'] as bool? ?? false;
+        includeSecretsInBackup =
+            data['includeSecretsInBackup'] as bool? ?? false;
+        webDavUrl = data['webDavUrl'] as String? ?? '';
+        webDavUsername = data['webDavUsername'] as String? ?? '';
+        webDavPassword = data['webDavPassword'] as String? ?? '';
+        autoSyncWebDavEnabled =
+            data['autoSyncWebDavEnabled'] as bool? ?? false;
+        lastBackupAtMs = data['lastBackupAtMs'] as int? ?? 0;
+        lastBackupTarget = data['lastBackupTarget'] as String? ?? '';
 
-        if (data['account'] is Map<String, dynamic>) {
-          account = AccountSummary.fromJson(
-              data['account'] as Map<String, dynamic>);
-        }
-        if (data['risk'] is Map<String, dynamic>) {
-          risk = RiskProfile.fromJson(data['risk'] as Map<String, dynamic>);
-        }
-        if (data['strategies'] is List) {
-          strategies = (data['strategies'] as List)
-              .map((e) =>
-                  StrategyDefinition.fromJson(e as Map<String, dynamic>))
-              .toList();
-        }
-        if (data['positions'] is List) {
-          positions = (data['positions'] as List)
-              .map((e) => Position.fromJson(e as Map<String, dynamic>))
-              .toList();
-        }
-        if (data['auditLogs'] is List) {
-          auditLogs = (data['auditLogs'] as List)
-              .map((e) => SignalAuditLog.fromJson(e as Map<String, dynamic>))
-              .toList();
-        }
-        if (data['alerts'] is List) {
-          alerts = (data['alerts'] as List)
-              .map((e) => PriceAlert.fromJson(e as Map<String, dynamic>))
-              .toList();
-        }
-        if (data['journalEntries'] is List) {
-          journalEntries = (data['journalEntries'] as List)
-              .map((e) => JournalEntry.fromJson(e as Map<String, dynamic>))
-              .toList();
-        }
-        if (data['copilotSessions'] is List) {
-          copilotSessions = (data['copilotSessions'] as List)
-              .map((e) => CopilotSession.fromJson(e as Map<String, dynamic>))
-              .toList();
-        }
-        activeCopilotSessionId =
-            data['activeCopilotSessionId'] as String? ?? '';
-        if (data['drawingsBySymbol'] is Map) {
-          drawingsBySymbol =
-              (data['drawingsBySymbol'] as Map<String, dynamic>).map(
-            (k, v) => MapEntry(
-              k,
-              (v as List)
-                  .map((d) => DrawingItem.fromJson(d as Map<String, dynamic>))
-                  .toList(),
-            ),
-          );
-        }
+        _applyCoreData(data);
       } catch (_) {
         _seedDefaults();
       }
@@ -249,6 +222,15 @@ class StorageService {
         'feedbackAuthor': feedbackAuthor,
         'feedbackContact': feedbackContact,
         'feedbackLastSentMs': feedbackLastSentMs,
+        'syncFolderPath': syncFolderPath,
+        'autoSyncFolderEnabled': autoSyncFolderEnabled,
+        'includeSecretsInBackup': includeSecretsInBackup,
+        'webDavUrl': webDavUrl,
+        'webDavUsername': webDavUsername,
+        'webDavPassword': webDavPassword,
+        'autoSyncWebDavEnabled': autoSyncWebDavEnabled,
+        'lastBackupAtMs': lastBackupAtMs,
+        'lastBackupTarget': lastBackupTarget,
         'account': account.toJson(),
         'risk': risk.toJson(),
         'strategies': strategies.map((e) => e.toJson()).toList(),
@@ -264,9 +246,178 @@ class StorageService {
         ),
       };
       await _stateFile.writeAsString(jsonEncode(payload));
+      onSaved?.call();
     } catch (_) {
       // ignore write errors
     }
+  }
+
+  void _applyCoreData(Map<String, dynamic> data) {
+    if (data['account'] is Map<String, dynamic>) {
+      account =
+          AccountSummary.fromJson(data['account'] as Map<String, dynamic>);
+    }
+    if (data['risk'] is Map<String, dynamic>) {
+      risk = RiskProfile.fromJson(data['risk'] as Map<String, dynamic>);
+    }
+    if (data['strategies'] is List) {
+      strategies = (data['strategies'] as List)
+          .map((e) => StrategyDefinition.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    if (data['positions'] is List) {
+      positions = (data['positions'] as List)
+          .map((e) => Position.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    if (data['auditLogs'] is List) {
+      auditLogs = (data['auditLogs'] as List)
+          .map((e) => SignalAuditLog.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    if (data['alerts'] is List) {
+      alerts = (data['alerts'] as List)
+          .map((e) => PriceAlert.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    if (data['journalEntries'] is List) {
+      journalEntries = (data['journalEntries'] as List)
+          .map((e) => JournalEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    if (data['copilotSessions'] is List) {
+      copilotSessions = (data['copilotSessions'] as List)
+          .map((e) => CopilotSession.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    if (data['activeCopilotSessionId'] is String) {
+      activeCopilotSessionId = data['activeCopilotSessionId'] as String;
+    }
+    if (data['drawingsBySymbol'] is Map) {
+      drawingsBySymbol =
+          (data['drawingsBySymbol'] as Map<String, dynamic>).map(
+        (k, v) => MapEntry(
+          k,
+          (v as List)
+              .map((d) => DrawingItem.fromJson(d as Map<String, dynamic>))
+              .toList(),
+        ),
+      );
+    }
+  }
+
+  /// Exports user notes, strategies, alerts, drawings, and preferences for
+  /// cloud/folder backup. API keys are omitted unless [includeSecrets] is true.
+  Map<String, dynamic> toBackupJson({bool? includeSecrets}) {
+    final withSecrets = includeSecrets ?? includeSecretsInBackup;
+    return {
+      'format': 'trading-platform-backup',
+      'schemaVersion': 1,
+      'appVersion': '3.0.1',
+      'exportedAtMs': DateTime.now().millisecondsSinceEpoch,
+      'exportedAtUtc': DateTime.now().toUtc().toIso8601String(),
+      'includesSecrets': withSecrets,
+      'activeProvider': activeProvider,
+      if (withSecrets) ...{
+        'oandaApiKey': oandaApiKey,
+        'oandaAccountId': oandaAccountId,
+        'oandaIsPractice': oandaIsPractice,
+        'twelveDataApiKey': twelveDataApiKey,
+        'aiApiKey': aiApiKey,
+      },
+      'aiProvider': aiProvider,
+      'aiModel': aiModel,
+      'aiEndpoint': aiEndpoint,
+      'selectedSymbol': selectedSymbol,
+      'selectedTimeframe': selectedTimeframe.code,
+      'chartEngine': chartEngine.name,
+      'chartType': chartType.name,
+      'themeMode': themeMode.name,
+      'timezoneOffsetHours': timezoneOffsetHours,
+      'timezoneLabel': timezoneLabel,
+      'languageCode': languageCode,
+      'desktopNotificationsEnabled': desktopNotificationsEnabled,
+      'audioChimesEnabled': audioChimesEnabled,
+      'account': account.toJson(),
+      'risk': risk.toJson(),
+      'strategies': strategies.map((e) => e.toJson()).toList(),
+      'positions': positions.map((e) => e.toJson()).toList(),
+      'auditLogs': auditLogs.take(150).map((e) => e.toJson()).toList(),
+      'alerts': alerts.map((e) => e.toJson()).toList(),
+      'journalEntries': journalEntries.map((e) => e.toJson()).toList(),
+      'copilotSessions':
+          copilotSessions.take(30).map((e) => e.toJson()).toList(),
+      'activeCopilotSessionId': activeCopilotSessionId,
+      'drawingsBySymbol': drawingsBySymbol.map(
+        (k, v) => MapEntry(k, v.map((d) => d.toJson()).toList()),
+      ),
+    };
+  }
+
+  /// Applies a previously exported backup payload and persists locally.
+  Future<void> applyBackupJson(
+    Map<String, dynamic> data, {
+    bool restoreSecrets = true,
+  }) async {
+    activeProvider = data['activeProvider'] as String? ?? activeProvider;
+    if (restoreSecrets && (data['includesSecrets'] == true)) {
+      if (data['oandaApiKey'] is String) {
+        oandaApiKey = data['oandaApiKey'] as String;
+      }
+      if (data['oandaAccountId'] is String) {
+        oandaAccountId = data['oandaAccountId'] as String;
+      }
+      if (data['oandaIsPractice'] is bool) {
+        oandaIsPractice = data['oandaIsPractice'] as bool;
+      }
+      if (data['twelveDataApiKey'] is String) {
+        twelveDataApiKey = data['twelveDataApiKey'] as String;
+      }
+      if (data['aiApiKey'] is String) {
+        aiApiKey = data['aiApiKey'] as String;
+      }
+    }
+    aiProvider = data['aiProvider'] as String? ?? aiProvider;
+    aiModel = data['aiModel'] as String? ?? aiModel;
+    aiEndpoint = data['aiEndpoint'] as String? ?? aiEndpoint;
+    selectedSymbol = data['selectedSymbol'] as String? ?? selectedSymbol;
+    if (data['selectedTimeframe'] is String) {
+      selectedTimeframe =
+          Timeframe.fromCode(data['selectedTimeframe'] as String);
+    }
+    if (data['chartEngine'] is String) {
+      final ceName = data['chartEngine'] as String;
+      chartEngine = ChartEngineMode.values.firstWhere(
+        (e) => e.name == ceName,
+        orElse: () => chartEngine,
+      );
+    }
+    if (data['chartType'] is String) {
+      final ctName = data['chartType'] as String;
+      chartType = ChartType.values.firstWhere(
+        (e) => e.name == ctName,
+        orElse: () => chartType,
+      );
+    }
+    if (data['themeMode'] is String) {
+      final tm = data['themeMode'] as String;
+      themeMode = tm == 'light'
+          ? ThemeMode.light
+          : tm == 'system'
+              ? ThemeMode.system
+              : ThemeMode.dark;
+    }
+    timezoneOffsetHours =
+        data['timezoneOffsetHours'] as int? ?? timezoneOffsetHours;
+    timezoneLabel = data['timezoneLabel'] as String? ?? timezoneLabel;
+    languageCode = data['languageCode'] as String? ?? languageCode;
+    desktopNotificationsEnabled = data['desktopNotificationsEnabled'] as bool? ??
+        desktopNotificationsEnabled;
+    audioChimesEnabled =
+        data['audioChimesEnabled'] as bool? ?? audioChimesEnabled;
+
+    _applyCoreData(data);
+    await save();
   }
 
   /// Resets the paper/demo trading account to a fresh starting balance,

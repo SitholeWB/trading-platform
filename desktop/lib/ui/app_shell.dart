@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/trading_models.dart';
 import '../services/ai_copilot_service.dart';
+import '../services/backup_sync_service.dart';
 import '../services/indicator_engine.dart';
 import '../services/localization_service.dart';
 import '../services/market_data_service.dart';
@@ -21,6 +22,7 @@ import 'dialogs/shortcuts_dialog.dart';
 import 'dialogs/symbol_search_dialog.dart';
 import 'dialogs/timezone_dialog.dart';
 import 'pages/audit_radar_page.dart';
+import 'pages/backup_sync_page.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/documentation_page.dart';
 import 'pages/journal_page.dart';
@@ -39,6 +41,7 @@ enum AppPage {
   journal('Journal', Icons.edit_note),
   sandbox('Simulator', Icons.science_outlined),
   chart('Live Chart', Icons.candlestick_chart),
+  backup('Backup & Sync', Icons.cloud_sync_outlined),
   docs('Documentation', Icons.menu_book_outlined);
 
   final String title;
@@ -77,6 +80,7 @@ class _AppShellState extends State<AppShell> {
   String _timezoneIana = 'Etc/UTC';
   String _languageCode = 'en';
   Timer? _tickTimer;
+  late final BackupSyncService _backupSyncService;
   String? _pendingHelpPrompt;
   String? _pendingHelpContext;
   int _pendingHelpSeq = 0;
@@ -128,6 +132,7 @@ class _AppShellState extends State<AppShell> {
       AppPage.positions => 'nav.positions',
       AppPage.sandbox => 'nav.simulator',
       AppPage.chart => 'nav.chart',
+      AppPage.backup => 'nav.backup',
       AppPage.docs => 'nav.docs',
       AppPage.journal => 'nav.journal',
     };
@@ -176,6 +181,7 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     _languageCode = widget.storage.languageCode;
     AppL10n.activeLanguage = _languageCode;
+    _backupSyncService = BackupSyncService(widget.storage)..attachAutoSync();
     widget.notifications.addListener(_onNotificationsChanged);
     _ensureCopilotSession(save: false);
     _loadInitialData();
@@ -193,6 +199,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     widget.notifications.removeListener(_onNotificationsChanged);
+    _backupSyncService.dispose();
     _tickTimer?.cancel();
     super.dispose();
   }
@@ -1094,7 +1101,9 @@ class _AppShellState extends State<AppShell> {
 
   Widget _buildNavigationSidebar(BuildContext context, int openCount) {
     final collapsed = widget.storage.isNavCollapsed;
-    final navPages = AppPage.values.where((p) => p != AppPage.docs).toList();
+    final navPages = AppPage.values
+        .where((p) => p != AppPage.docs && p != AppPage.backup)
+        .toList();
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
@@ -1187,6 +1196,17 @@ class _AppShellState extends State<AppShell> {
             padding: const EdgeInsets.all(8),
             child: Column(
               children: [
+                ListTile(
+                  dense: true,
+                  selected: _activePage == AppPage.backup,
+                  leading: const Icon(Icons.cloud_sync_outlined, size: 18),
+                  title: collapsed
+                      ? null
+                      : Text(
+                          AppL10n.t(_languageCode, 'nav.backup', 'Backup & Sync'),
+                          style: const TextStyle(fontSize: 12.5)),
+                  onTap: () => setState(() => _activePage = AppPage.backup),
+                ),
                 ListTile(
                   dense: true,
                   selected: _activePage == AppPage.docs,
@@ -1830,6 +1850,18 @@ class _AppShellState extends State<AppShell> {
           isSyncing: _isSyncing,
           onManualSync: () => _refreshMarketData(force: true),
           onLoadOlderHistory: () => _refreshMarketData(force: true),
+        ),
+      AppPage.backup => BackupSyncPage(
+          storage: widget.storage,
+          syncService: _backupSyncService,
+          onStateRestored: () {
+            setState(() {
+              _languageCode = widget.storage.languageCode;
+              AppL10n.activeLanguage = _languageCode;
+            });
+            widget.onThemeChanged();
+            _refreshMarketData(force: true);
+          },
         ),
       AppPage.docs => DocumentationPage(
           languageCode: _languageCode,
