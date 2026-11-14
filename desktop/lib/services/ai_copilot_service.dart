@@ -221,6 +221,38 @@ LIVE PLATFORM CONTEXT:
 $context
 ''';
 
+  List<ChatMessage> _recentHistory(List<ChatMessage> history) {
+    final filtered = history
+        .where((m) => m.role == 'user' || m.role == 'assistant')
+        .toList();
+    // Drop leading assistant welcome message so conversations always start with user
+    while (filtered.isNotEmpty && filtered.first.role != 'user') {
+      filtered.removeAt(0);
+    }
+    if (filtered.length <= 8) return filtered;
+    return filtered.sublist(filtered.length - 8);
+  }
+
+  String _extractHttpError(http.Response resp) {
+    try {
+      final body = jsonDecode(resp.body);
+      if (body is Map<String, dynamic>) {
+        final err = body['error'];
+        if (err is Map<String, dynamic> && err['message'] != null) {
+          return 'HTTP ${resp.statusCode}: ${err['message']}';
+        }
+        if (body['message'] != null) {
+          return 'HTTP ${resp.statusCode}: ${body['message']}';
+        }
+      }
+    } catch (_) {}
+    final snippet = resp.body.trim();
+    if (snippet.isNotEmpty) {
+      return 'HTTP ${resp.statusCode}: ${snippet.substring(0, math.min(140, snippet.length))}';
+    }
+    return 'HTTP ${resp.statusCode}';
+  }
+
   Future<String?> _callOpenAiCompatible({
     required String prompt,
     required String context,
@@ -235,9 +267,10 @@ $context
           ? cleanBase
           : '$cleanBase/chat/completions',
     );
+    final recent = _recentHistory(history);
     final messages = <Map<String, String>>[
       {'role': 'system', 'content': _systemInstruction(context)},
-      ...history.take(8).map((m) => {'role': m.role, 'content': m.content}),
+      ...recent.map((m) => {'role': m.role, 'content': m.content}),
       {'role': 'user', 'content': prompt},
     ];
     final headers = <String, String>{
@@ -251,14 +284,14 @@ $context
           body: jsonEncode({
             'model': model,
             'messages': messages,
-            'max_tokens': 900,
+            'max_tokens': 2048,
             'temperature': 0.3,
           }),
         )
-        .timeout(const Duration(seconds: 25));
+        .timeout(const Duration(seconds: 60));
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('HTTP ${resp.statusCode}');
+      throw Exception(_extractHttpError(resp));
     }
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final choices = data['choices'] as List<dynamic>?;
@@ -274,11 +307,9 @@ $context
     required String apiKey,
     required List<ChatMessage> history,
   }) async {
+    final recent = _recentHistory(history);
     final messages = <Map<String, String>>[
-      ...history
-          .where((m) => m.role == 'user' || m.role == 'assistant')
-          .take(8)
-          .map((m) => {'role': m.role, 'content': m.content}),
+      ...recent.map((m) => {'role': m.role, 'content': m.content}),
       {'role': 'user', 'content': prompt},
     ];
     final resp = await http
@@ -291,15 +322,15 @@ $context
           },
           body: jsonEncode({
             'model': model,
-            'max_tokens': 900,
+            'max_tokens': 2048,
             'system': _systemInstruction(context),
             'messages': messages,
           }),
         )
-        .timeout(const Duration(seconds: 25));
+        .timeout(const Duration(seconds: 60));
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('HTTP ${resp.statusCode}');
+      throw Exception(_extractHttpError(resp));
     }
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final content = data['content'] as List<dynamic>?;
@@ -315,10 +346,11 @@ $context
     required List<ChatMessage> history,
   }) async {
     final uri = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
+      'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
     );
+    final recent = _recentHistory(history);
     final contents = <Map<String, dynamic>>[
-      ...history.take(8).map((m) => {
+      ...recent.map((m) => {
             'role': m.role == 'assistant' ? 'model' : 'user',
             'parts': [
               {'text': m.content}
@@ -331,10 +363,18 @@ $context
         ],
       },
     ];
+    final genConfig = <String, dynamic>{
+      'maxOutputTokens': 2048,
+      'temperature': 0.3,
+      if (model.contains('2.5')) 'thinkingConfig': {'thinkingBudget': 0},
+    };
     final resp = await http
         .post(
           uri,
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
           body: jsonEncode({
             'systemInstruction': {
               'parts': [
@@ -342,23 +382,27 @@ $context
               ],
             },
             'contents': contents,
-            'generationConfig': {
-              'maxOutputTokens': 900,
-              'temperature': 0.3,
-            },
+            'generationConfig': genConfig,
           }),
         )
-        .timeout(const Duration(seconds: 25));
+        .timeout(const Duration(seconds: 60));
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('HTTP ${resp.statusCode}');
+      throw Exception(_extractHttpError(resp));
     }
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final candidates = data['candidates'] as List<dynamic>?;
     if (candidates == null || candidates.isEmpty) return null;
     final parts = candidates.first['content']?['parts'] as List<dynamic>?;
     if (parts == null || parts.isEmpty) return null;
-    return parts.first['text'] as String?;
+    final textParts = parts
+        .whereType<Map<String, dynamic>>()
+        .where((p) => p['thought'] != true && p['text'] is String)
+        .map((p) => p['text'] as String)
+        .toList();
+    return textParts.isNotEmpty
+        ? textParts.join('\n').trim()
+        : parts.first['text'] as String?;
   }
 
   Future<String?> _callOllama({
@@ -369,9 +413,10 @@ $context
     required List<ChatMessage> history,
   }) async {
     final cleanBase = endpoint.replaceAll(RegExp(r'/+$'), '');
+    final recent = _recentHistory(history);
     final messages = <Map<String, String>>[
       {'role': 'system', 'content': _systemInstruction(context)},
-      ...history.take(8).map((m) => {'role': m.role, 'content': m.content}),
+      ...recent.map((m) => {'role': m.role, 'content': m.content}),
       {'role': 'user', 'content': prompt},
     ];
     final resp = await http
@@ -384,10 +429,10 @@ $context
             'stream': false,
           }),
         )
-        .timeout(const Duration(seconds: 30));
+        .timeout(const Duration(seconds: 60));
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('HTTP ${resp.statusCode}');
+      throw Exception(_extractHttpError(resp));
     }
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final msg = data['message'] as Map<String, dynamic>?;
