@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import '../models/trading_models.dart';
 import 'indicator_engine.dart';
 import 'storage_service.dart';
@@ -221,6 +223,84 @@ LIVE PLATFORM CONTEXT:
 $context
 ''';
 
+  Future<http.Response> _postJson(
+    Uri uri, {
+    required Map<String, String> headers,
+    required Object body,
+    Duration timeout = const Duration(seconds: 45),
+  }) async {
+    final io = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15);
+    final client = IOClient(io);
+    try {
+      return await client
+          .post(uri, headers: headers, body: jsonEncode(body))
+          .timeout(timeout);
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<String> testProvider({
+    required String provider,
+    required String model,
+    required String apiKey,
+    required String endpoint,
+  }) async {
+    if (provider == 'BuiltIn') {
+      return 'Built-in Quant Engine is always ready (local, 0ms).';
+    }
+    final spec = specFor(provider);
+    final effModel = model.trim().isNotEmpty ? model.trim() : spec.defaultModel;
+    final key = apiKey.trim();
+    if (spec.requiresKey && key.isEmpty) {
+      throw Exception('API key is required for ${spec.label}.');
+    }
+
+    final sw = Stopwatch()..start();
+    final reply = switch (provider) {
+      'Anthropic' => await _callAnthropic(
+          prompt: 'Reply with: OK',
+          context: 'Connection test.',
+          model: effModel,
+          apiKey: key,
+          history: const [],
+        ),
+      'Gemini' => await _callGemini(
+          prompt: 'Reply with: OK',
+          context: 'Connection test.',
+          model: effModel,
+          apiKey: key,
+          history: const [],
+        ),
+      'Ollama' => await _callOllama(
+          prompt: 'Reply with: OK',
+          context: 'Connection test.',
+          model: effModel,
+          endpoint: endpoint.trim().isNotEmpty
+              ? endpoint.trim()
+              : spec.defaultEndpoint,
+          history: const [],
+        ),
+      _ => await _callOpenAiCompatible(
+          prompt: 'Reply with: OK',
+          context: 'Connection test.',
+          model: effModel,
+          apiKey: key,
+          baseUrl: provider == 'Custom'
+              ? (endpoint.trim().isNotEmpty
+                  ? endpoint.trim()
+                  : spec.defaultEndpoint)
+              : spec.defaultEndpoint,
+          history: const [],
+        ),
+    };
+    sw.stop();
+    final text = (reply ?? '').trim();
+    return '${spec.label} ($effModel) connected in ${sw.elapsedMilliseconds}ms'
+        '${text.isNotEmpty ? ' — "${text.split('\n').first}"' : ''}';
+  }
+
   List<ChatMessage> _recentHistory(List<ChatMessage> history) {
     final filtered = history
         .where((m) => m.role == 'user' || m.role == 'assistant')
@@ -277,18 +357,16 @@ $context
       'Content-Type': 'application/json',
       if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
     };
-    final resp = await http
-        .post(
-          uri,
-          headers: headers,
-          body: jsonEncode({
-            'model': model,
-            'messages': messages,
-            'max_tokens': 2048,
-            'temperature': 0.3,
-          }),
-        )
-        .timeout(const Duration(seconds: 60));
+    final resp = await _postJson(
+      uri,
+      headers: headers,
+      body: {
+        'model': model,
+        'messages': messages,
+        'max_tokens': 2048,
+        'temperature': 0.3,
+      },
+    );
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception(_extractHttpError(resp));
@@ -312,22 +390,20 @@ $context
       ...recent.map((m) => {'role': m.role, 'content': m.content}),
       {'role': 'user', 'content': prompt},
     ];
-    final resp = await http
-        .post(
-          Uri.parse('https://api.anthropic.com/v1/messages'),
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: jsonEncode({
-            'model': model,
-            'max_tokens': 2048,
-            'system': _systemInstruction(context),
-            'messages': messages,
-          }),
-        )
-        .timeout(const Duration(seconds: 60));
+    final resp = await _postJson(
+      Uri.parse('https://api.anthropic.com/v1/messages'),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: {
+        'model': model,
+        'max_tokens': 2048,
+        'system': _systemInstruction(context),
+        'messages': messages,
+      },
+    );
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception(_extractHttpError(resp));
@@ -366,26 +442,24 @@ $context
     final genConfig = <String, dynamic>{
       'maxOutputTokens': 2048,
       'temperature': 0.3,
-      if (model.contains('2.5')) 'thinkingConfig': {'thinkingBudget': 0},
+      if (model.contains('2.5-flash')) 'thinkingConfig': {'thinkingBudget': 0},
     };
-    final resp = await http
-        .post(
-          uri,
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey,
-          },
-          body: jsonEncode({
-            'systemInstruction': {
-              'parts': [
-                {'text': _systemInstruction(context)}
-              ],
-            },
-            'contents': contents,
-            'generationConfig': genConfig,
-          }),
-        )
-        .timeout(const Duration(seconds: 60));
+    final resp = await _postJson(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: {
+        'systemInstruction': {
+          'parts': [
+            {'text': _systemInstruction(context)}
+          ],
+        },
+        'contents': contents,
+        'generationConfig': genConfig,
+      },
+    );
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception(_extractHttpError(resp));
@@ -419,17 +493,15 @@ $context
       ...recent.map((m) => {'role': m.role, 'content': m.content}),
       {'role': 'user', 'content': prompt},
     ];
-    final resp = await http
-        .post(
-          Uri.parse('$cleanBase/api/chat'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'model': model,
-            'messages': messages,
-            'stream': false,
-          }),
-        )
-        .timeout(const Duration(seconds: 60));
+    final resp = await _postJson(
+      Uri.parse('$cleanBase/api/chat'),
+      headers: {'Content-Type': 'application/json'},
+      body: {
+        'model': model,
+        'messages': messages,
+        'stream': false,
+      },
+    );
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception(_extractHttpError(resp));

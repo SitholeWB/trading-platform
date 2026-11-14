@@ -28,6 +28,9 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
   late final TextEditingController _aiModel;
   late final TextEditingController _aiKey;
   late final TextEditingController _aiEndpoint;
+  bool _testingAi = false;
+  String? _aiTestStatus;
+  bool _aiTestOk = false;
 
   @override
   void initState() {
@@ -214,6 +217,69 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _testingAi
+                          ? null
+                          : () async {
+                              setState(() {
+                                _testingAi = true;
+                                _aiTestStatus = 'Testing...';
+                                _aiTestOk = false;
+                              });
+                              try {
+                                final msg = await AiCopilotService(
+                                        widget.storage)
+                                    .testProvider(
+                                  provider: _aiProvider,
+                                  model: _aiModel.text,
+                                  apiKey: _aiKey.text,
+                                  endpoint: _aiEndpoint.text,
+                                );
+                                if (!mounted) return;
+                                setState(() {
+                                  _testingAi = false;
+                                  _aiTestOk = true;
+                                  _aiTestStatus = msg;
+                                });
+                              } catch (e) {
+                                if (!mounted) return;
+                                setState(() {
+                                  _testingAi = false;
+                                  _aiTestOk = false;
+                                  _aiTestStatus = e.toString();
+                                });
+                              }
+                            },
+                      icon: _testingAi
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.network_check, size: 16),
+                      label: const Text('Test AI Connection'),
+                    ),
+                    if (_aiTestStatus != null) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _aiTestStatus!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: _aiTestOk
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFFEF4444),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 16),
                 const Text('Appearance & Desktop Alerts',
                     style: TextStyle(fontWeight: FontWeight.bold)),
