@@ -346,7 +346,7 @@ class StorageService {
     return {
       'format': 'trading-platform-backup',
       'schemaVersion': 1,
-      'appVersion': '3.1.0',
+      'appVersion': '3.1.1',
       'exportedAtMs': DateTime.now().millisecondsSinceEpoch,
       'exportedAtUtc': DateTime.now().toUtc().toIso8601String(),
       'includesSecrets': withSecrets,

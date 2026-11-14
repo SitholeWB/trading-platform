@@ -184,6 +184,7 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
   }
 
   Offset _dataToOffset(DrawingPoint pt, Size size) {
+    if (widget.candles.isEmpty) return Offset.zero;
     final chartW = math.max(10.0, size.width - TradingChartPainter.rightAxisWidth);
     final chartH =
         math.max(10.0, size.height - TradingChartPainter.bottomAxisHeight);
@@ -360,6 +361,7 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                           ? SystemMouseCursors.precise
                           : SystemMouseCursors.click,
                   onHover: (e) {
+                    if (widget.candles.isEmpty) return;
                     final chartW = math.max(
                         10.0, size.width - TradingChartPainter.rightAxisWidth);
                     final onAxis = e.localPosition.dx >= chartW;
