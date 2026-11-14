@@ -408,6 +408,8 @@ class StrategyDefinition {
   final double takeProfitAtrMult;
   final List<StrategyRule> entryRules;
   final String description;
+  final String scanUniverse; // SINGLE, MAJORS, FOREX, CRYPTO, METALS, INDICES, STOCKS, CUSTOM
+  final List<String> scanSymbols;
 
   const StrategyDefinition({
     required this.id,
@@ -422,6 +424,8 @@ class StrategyDefinition {
     this.takeProfitAtrMult = 3.0,
     this.entryRules = const [],
     this.description = '',
+    this.scanUniverse = 'SINGLE',
+    this.scanSymbols = const [],
   });
 
   StrategyDefinition copyWith({
@@ -436,6 +440,8 @@ class StrategyDefinition {
     double? takeProfitAtrMult,
     List<StrategyRule>? entryRules,
     String? description,
+    String? scanUniverse,
+    List<String>? scanSymbols,
   }) =>
       StrategyDefinition(
         id: id,
@@ -450,6 +456,8 @@ class StrategyDefinition {
         takeProfitAtrMult: takeProfitAtrMult ?? this.takeProfitAtrMult,
         entryRules: entryRules ?? this.entryRules,
         description: description ?? this.description,
+        scanUniverse: scanUniverse ?? this.scanUniverse,
+        scanSymbols: scanSymbols ?? this.scanSymbols,
       );
 
   Map<String, dynamic> toJson() => {
@@ -465,6 +473,8 @@ class StrategyDefinition {
         'takeProfitAtrMult': takeProfitAtrMult,
         'entryRules': entryRules.map((e) => e.toJson()).toList(),
         'description': description,
+        'scanUniverse': scanUniverse,
+        'scanSymbols': scanSymbols,
       };
 
   factory StrategyDefinition.fromJson(Map<String, dynamic> json) =>
@@ -484,6 +494,10 @@ class StrategyDefinition {
             .map((e) => StrategyRule.fromJson(e as Map<String, dynamic>))
             .toList(),
         description: json['description'] as String? ?? '',
+        scanUniverse: json['scanUniverse'] as String? ?? 'SINGLE',
+        scanSymbols: (json['scanSymbols'] as List<dynamic>? ?? [])
+            .map((e) => e.toString())
+            .toList(),
       );
 }
 

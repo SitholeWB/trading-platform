@@ -1404,6 +1404,7 @@ class _AppShellState extends State<AppShell> {
       AppPage.strategies => StrategyStudioPage(
           strategies: widget.storage.strategies,
           marketData: widget.marketData,
+          copilot: widget.copilot,
           onSaveStrategy: (s) async {
             final idx =
                 widget.storage.strategies.indexWhere((e) => e.id == s.id);

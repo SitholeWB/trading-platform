@@ -27,6 +27,18 @@ class AiProviderSpec {
   });
 }
 
+class StrategyCompileResult {
+  final StrategyDefinition strategy;
+  final String providerUsed;
+  final String? note;
+
+  const StrategyCompileResult({
+    required this.strategy,
+    required this.providerUsed,
+    this.note,
+  });
+}
+
 class CopilotReply {
   final String content;
   final String providerUsed;
@@ -142,43 +154,11 @@ class AiCopilotService {
             'No API key configured for ${spec.label}. Showing built-in Quant analysis instead.';
       } else {
         try {
-          rawText = switch (provider) {
-            'Anthropic' => await _callAnthropic(
-                prompt: prompt,
-                context: diag,
-                model: model,
-                apiKey: key,
-                history: history,
-              ),
-            'Gemini' => await _callGemini(
-                prompt: prompt,
-                context: diag,
-                model: model,
-                apiKey: key,
-                history: history,
-              ),
-            'Ollama' => await _callOllama(
-                prompt: prompt,
-                context: diag,
-                model: model,
-                endpoint: storage.aiEndpoint.trim().isNotEmpty
-                    ? storage.aiEndpoint.trim()
-                    : spec.defaultEndpoint,
-                history: history,
-              ),
-            _ => await _callOpenAiCompatible(
-                prompt: prompt,
-                context: diag,
-                model: model,
-                apiKey: key,
-                baseUrl: provider == 'Custom'
-                    ? (storage.aiEndpoint.trim().isNotEmpty
-                        ? storage.aiEndpoint.trim()
-                        : spec.defaultEndpoint)
-                    : spec.defaultEndpoint,
-                history: history,
-              ),
-          };
+          rawText = await _callActiveProvider(
+            prompt: prompt,
+            context: diag,
+            history: history,
+          );
         } catch (e) {
           errorNote =
               '${spec.label} request failed ($e). Falling back to Built-in Quant Engine.';
@@ -204,6 +184,435 @@ class AiCopilotService {
     );
   }
 
+  Future<String?> _callActiveProvider({
+    required String prompt,
+    required String context,
+    List<ChatMessage> history = const [],
+  }) async {
+    final provider = storage.aiProvider;
+    final spec = specFor(provider);
+    final model = storage.aiModel.trim().isNotEmpty
+        ? storage.aiModel.trim()
+        : spec.defaultModel;
+    final key = storage.aiApiKey.trim();
+    return switch (provider) {
+      'Anthropic' => _callAnthropic(
+          prompt: prompt,
+          context: context,
+          model: model,
+          apiKey: key,
+          history: history,
+        ),
+      'Gemini' => _callGemini(
+          prompt: prompt,
+          context: context,
+          model: model,
+          apiKey: key,
+          history: history,
+        ),
+      'Ollama' => _callOllama(
+          prompt: prompt,
+          context: context,
+          model: model,
+          endpoint: storage.aiEndpoint.trim().isNotEmpty
+              ? storage.aiEndpoint.trim()
+              : spec.defaultEndpoint,
+          history: history,
+        ),
+      _ => _callOpenAiCompatible(
+          prompt: prompt,
+          context: context,
+          model: model,
+          apiKey: key,
+          baseUrl: provider == 'Custom'
+              ? (storage.aiEndpoint.trim().isNotEmpty
+                  ? storage.aiEndpoint.trim()
+                  : spec.defaultEndpoint)
+              : spec.defaultEndpoint,
+          history: history,
+        ),
+    };
+  }
+
+  static const Set<String> _validIndicators = {
+    'EMA_CROSS',
+    'SMA_CROSS',
+    'EMA_TREND',
+    'RSI_OS',
+    'RSI_OB',
+    'MACD_CROSS',
+    'BB_BREAK',
+    'SUPERTREND',
+    'VWAP_CROSS',
+    'ICHIMOKU_BULL',
+    'ADX_TREND',
+    'SESSION_UTC',
+  };
+
+  static const Set<String> _validConditions = {
+    'CrossAbove',
+    'CrossBelow',
+    'LessThan',
+    'GreaterThan',
+  };
+
+  Future<StrategyCompileResult> compileStrategyFromText(
+    String plainText, {
+    String defaultSymbol = 'EURUSD',
+    Timeframe defaultTimeframe = Timeframe.h1,
+  }) async {
+    final provider = storage.aiProvider;
+    final spec = specFor(provider);
+    final model = storage.aiModel.trim().isNotEmpty
+        ? storage.aiModel.trim()
+        : spec.defaultModel;
+    final key = storage.aiApiKey.trim();
+
+    const schemaContext = '''
+You are a quantitative strategy compiler. Convert the trader's plain-English strategy description into ONE strict JSON object (no markdown prose, no explanation outside JSON).
+Schema:
+{
+  "name": "Short strategy name",
+  "description": "1-sentence summary",
+  "timeframe": "M1|M5|M15|M30|H1|H4|D1",
+  "scanUniverse": "SINGLE|MAJORS|FOREX|METALS|CRYPTO|INDICES|STOCKS|CUSTOM",
+  "scanSymbols": ["EURUSD"],
+  "combinator": "AND|OR",
+  "riskPercent": 1.0,
+  "stopLossAtrMult": 1.5,
+  "takeProfitAtrMult": 3.0,
+  "rules": [
+    {"indicator": "EMA_TREND", "condition": "GreaterThan", "period": 200, "threshold": 0}
+  ]
+}
+Supported indicators & meanings:
+- EMA_CROSS (fast EMA(period) vs slow EMA(2*period); CrossAbove/CrossBelow/GreaterThan/LessThan)
+- SMA_CROSS (fast SMA(period) vs slow SMA(2*period))
+- EMA_TREND (Price vs EMA(period), e.g. period=200, GreaterThan=bullish trend, LessThan=bearish trend)
+- RSI_OS (RSI(period) < threshold, default threshold=30; CrossAbove for bounce out of oversold)
+- RSI_OB (RSI(period) > threshold, default threshold=70; CrossBelow for drop out of overbought)
+- MACD_CROSS (MACD 12/26/9 vs signal; CrossAbove/CrossBelow/GreaterThan/LessThan)
+- BB_BREAK (Bollinger Bands(period, threshold=stdDev e.g. 2.0); GreaterThan=upper break, LessThan=lower break)
+- SUPERTREND (Supertrend(period=10, threshold=3.0); CrossAbove/GreaterThan=bull, CrossBelow/LessThan=bear)
+- VWAP_CROSS (Price vs VWAP; CrossAbove/GreaterThan=above, CrossBelow/LessThan=below)
+- ICHIMOKU_BULL (Ichimoku cloud; GreaterThan=bullish above cloud, LessThan=bearish below cloud)
+- ADX_TREND (ADX(period=14) >= threshold e.g. 20 or 25; trend strength filter)
+- SESSION_UTC (UTC hour window: threshold=startHour 0..23, period=endHour 0..23, e.g. London 7..16, NY 13..21)
+Return ONLY valid JSON.''';
+
+    String? errorNote;
+    if (provider != 'BuiltIn' && (!spec.requiresKey || key.isNotEmpty)) {
+      try {
+        final raw = await _callActiveProvider(
+          prompt: 'Compile this trading strategy into JSON:\n$plainText',
+          context: schemaContext,
+        );
+        if (raw != null && raw.trim().isNotEmpty) {
+          final parsed = _parseCompiledStrategyJson(
+            raw,
+            plainText: plainText,
+            defaultSymbol: defaultSymbol,
+            defaultTimeframe: defaultTimeframe,
+          );
+          if (parsed != null) {
+            return StrategyCompileResult(
+              strategy: parsed,
+              providerUsed: '${spec.label} ($model)',
+            );
+          }
+          errorNote = 'AI returned unparseable JSON; used local rule compiler.';
+        }
+      } catch (e) {
+        errorNote = '${spec.label} failed ($e); used local rule compiler.';
+      }
+    }
+
+    return StrategyCompileResult(
+      strategy: _compileStrategyLocally(
+        plainText,
+        defaultSymbol: defaultSymbol,
+        defaultTimeframe: defaultTimeframe,
+      ),
+      providerUsed: 'Built-in Compiler',
+      note: errorNote,
+    );
+  }
+
+  StrategyDefinition? _parseCompiledStrategyJson(
+    String raw, {
+    required String plainText,
+    required String defaultSymbol,
+    required Timeframe defaultTimeframe,
+  }) {
+    var cleaned = raw.trim();
+    final fence = RegExp(r'```(?:json)?\s*([\s\S]*?)```', caseSensitive: false)
+        .firstMatch(cleaned);
+    if (fence != null) {
+      cleaned = fence.group(1)!.trim();
+    } else {
+      final start = cleaned.indexOf('{');
+      final end = cleaned.lastIndexOf('}');
+      if (start >= 0 && end > start) {
+        cleaned = cleaned.substring(start, end + 1);
+      }
+    }
+    try {
+      final map = jsonDecode(cleaned) as Map<String, dynamic>;
+      final rawRules = map['rules'] as List<dynamic>? ?? const [];
+      final rules = <StrategyRule>[];
+      for (final item in rawRules) {
+        if (item is! Map) continue;
+        final m = Map<String, dynamic>.from(item);
+        final ind = (m['indicator'] as String? ?? '').toUpperCase().trim();
+        if (!_validIndicators.contains(ind)) continue;
+        final cond = (m['condition'] as String? ?? 'GreaterThan').trim();
+        final safeCond = _validConditions.contains(cond) ? cond : 'GreaterThan';
+        final period = ((m['period'] as num?)?.toInt() ?? 14).clamp(1, 200);
+        final threshold = (m['threshold'] as num?)?.toDouble() ?? 0.0;
+        rules.add(StrategyRule(
+          indicator: ind,
+          condition: safeCond,
+          period: period,
+          threshold: threshold,
+        ));
+      }
+      if (rules.isEmpty) return null;
+      final universe =
+          (map['scanUniverse'] as String? ?? 'SINGLE').toUpperCase().trim();
+      final symbols = (map['scanSymbols'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString().trim().toUpperCase())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      final resolvedList = SymbolCatalog.resolveUniverse(
+        universe,
+        fallbackSymbol: symbols.isNotEmpty ? symbols.first : defaultSymbol,
+        customSymbols: symbols,
+      );
+      final tfCode =
+          (map['timeframe'] as String? ?? defaultTimeframe.code).toUpperCase();
+      return StrategyDefinition(
+        id: 'strat_${DateTime.now().millisecondsSinceEpoch}',
+        name: (map['name'] as String?)?.trim().isNotEmpty == true
+            ? (map['name'] as String).trim()
+            : 'AI Compiled Strategy',
+        symbol: resolvedList.first,
+        timeframe: Timeframe.fromCode(tfCode),
+        isEnabled: true,
+        autoTrade: false,
+        combinator: (map['combinator'] as String? ?? 'AND').toUpperCase() == 'OR'
+            ? 'OR'
+            : 'AND',
+        riskPercent: ((map['riskPercent'] as num?)?.toDouble() ?? 1.0)
+            .clamp(0.25, 5.0),
+        stopLossAtrMult:
+            ((map['stopLossAtrMult'] as num?)?.toDouble() ?? 1.5)
+                .clamp(0.5, 4.0),
+        takeProfitAtrMult:
+            ((map['takeProfitAtrMult'] as num?)?.toDouble() ?? 3.0)
+                .clamp(1.0, 8.0),
+        entryRules: rules,
+        description: (map['description'] as String?)?.trim().isNotEmpty == true
+            ? (map['description'] as String).trim()
+            : plainText.trim(),
+        scanUniverse: universe,
+        scanSymbols: symbols,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  StrategyDefinition _compileStrategyLocally(
+    String plainText, {
+    required String defaultSymbol,
+    required Timeframe defaultTimeframe,
+  }) {
+    final lower = plainText.toLowerCase();
+    String universe = 'SINGLE';
+    if (lower.contains('major')) {
+      universe = 'MAJORS';
+    } else if (lower.contains('forex') || lower.contains('fx')) {
+      universe = 'FOREX';
+    } else if (lower.contains('crypto') || lower.contains('btc')) {
+      universe = 'CRYPTO';
+    } else if (lower.contains('gold') ||
+        lower.contains('metal') ||
+        lower.contains('oil')) {
+      universe = 'METALS';
+    } else if (lower.contains('index') || lower.contains('indices')) {
+      universe = 'INDICES';
+    } else if (lower.contains('stock') || lower.contains('equit')) {
+      universe = 'STOCKS';
+    }
+
+    Timeframe tf = defaultTimeframe;
+    for (final candidate in Timeframe.values) {
+      if (RegExp('\\b${candidate.code.toLowerCase()}\\b').hasMatch(lower)) {
+        tf = candidate;
+        break;
+      }
+    }
+
+    final rules = <StrategyRule>[];
+    if (lower.contains('200 ema') ||
+        lower.contains('ema 200') ||
+        lower.contains('ema(200)')) {
+      rules.add(StrategyRule(
+        indicator: 'EMA_TREND',
+        condition: lower.contains('below') ||
+                lower.contains('short') ||
+                lower.contains('sell')
+            ? 'LessThan'
+            : 'GreaterThan',
+        period: 200,
+      ));
+    }
+    if (lower.contains('ema cross') || lower.contains('ema')) {
+      if (!rules.any((r) => r.indicator == 'EMA_TREND')) {
+        rules.add(StrategyRule(
+          indicator: 'EMA_CROSS',
+          condition: lower.contains('short') || lower.contains('sell')
+              ? 'CrossBelow'
+              : 'CrossAbove',
+          period: 20,
+        ));
+      }
+    }
+    if (lower.contains('rsi')) {
+      if (lower.contains('overbought') ||
+          lower.contains('70') ||
+          lower.contains('sell')) {
+        rules.add(const StrategyRule(
+          indicator: 'RSI_OB',
+          condition: 'GreaterThan',
+          period: 14,
+          threshold: 70,
+        ));
+      } else {
+        rules.add(const StrategyRule(
+          indicator: 'RSI_OS',
+          condition: 'LessThan',
+          period: 14,
+          threshold: 35,
+        ));
+      }
+    }
+    if (lower.contains('macd')) {
+      rules.add(StrategyRule(
+        indicator: 'MACD_CROSS',
+        condition: lower.contains('bear') || lower.contains('sell')
+            ? 'CrossBelow'
+            : 'CrossAbove',
+        period: 12,
+      ));
+    }
+    if (lower.contains('supertrend')) {
+      rules.add(StrategyRule(
+        indicator: 'SUPERTREND',
+        condition: lower.contains('sell') ? 'LessThan' : 'GreaterThan',
+        period: 10,
+        threshold: 3.0,
+      ));
+    }
+    if (lower.contains('adx')) {
+      rules.add(const StrategyRule(
+        indicator: 'ADX_TREND',
+        condition: 'GreaterThan',
+        period: 14,
+        threshold: 22,
+      ));
+    }
+    if (lower.contains('london')) {
+      rules.add(const StrategyRule(
+        indicator: 'SESSION_UTC',
+        condition: 'GreaterThan',
+        period: 16,
+        threshold: 7,
+      ));
+    } else if (lower.contains('new york') || lower.contains('ny session')) {
+      rules.add(const StrategyRule(
+        indicator: 'SESSION_UTC',
+        condition: 'GreaterThan',
+        period: 21,
+        threshold: 13,
+      ));
+    }
+    if (rules.isEmpty) {
+      rules.addAll(const [
+        StrategyRule(indicator: 'EMA_CROSS', condition: 'CrossAbove', period: 20),
+        StrategyRule(indicator: 'RSI_OS', condition: 'LessThan', period: 14, threshold: 40),
+      ]);
+    }
+    final resolved =
+        SymbolCatalog.resolveUniverse(universe, fallbackSymbol: defaultSymbol);
+    return StrategyDefinition(
+      id: 'strat_${DateTime.now().millisecondsSinceEpoch}',
+      name: 'Plain-Text Strategy (${tf.code})',
+      symbol: resolved.first,
+      timeframe: tf,
+      isEnabled: true,
+      autoTrade: false,
+      combinator: lower.contains(' or ') ? 'OR' : 'AND',
+      entryRules: rules,
+      description: plainText.trim(),
+      scanUniverse: universe,
+    );
+  }
+
+  Future<String> validateScanHit({
+    required StrategyDefinition strategy,
+    required StrategyScanHit hit,
+    required List<Candle> candles,
+  }) async {
+    final provider = storage.aiProvider;
+    final spec = specFor(provider);
+    final key = storage.aiApiKey.trim();
+
+    final recent = candles.length > 25
+        ? candles.sublist(candles.length - 25)
+        : candles;
+    final atrPts = IndicatorEngine.calculateATR(candles, 14, hit.spec.symbol);
+    final atr = atrPts.isNotEmpty ? atrPts.last.value : 0.0;
+    final digits =
+        IndicatorEngine.getSymbolDigits(hit.spec.symbol, samplePrice: hit.price);
+    final barsCompact = recent
+        .map((c) =>
+            '${c.timestamp.toUtc().toIso8601String().substring(11, 16)}:${c.close.toStringAsFixed(digits)}')
+        .join(', ');
+
+    final context = '''
+Strategy: ${strategy.name} (${strategy.combinator}, TF ${strategy.timeframe.code})
+Description: ${strategy.description}
+Triggered Symbol: ${hit.spec.symbol} | Signal: ${hit.signal} | Score: ${hit.matchScore.toStringAsFixed(0)}%
+Current Price: ${hit.price.toStringAsFixed(digits)} | ATR(14): ${atr.toStringAsFixed(digits)}
+Rule Breakdown: ${hit.ruleBreakdown.join(' | ')}
+Recent ${recent.length} closes (UTC): $barsCompact
+''';
+
+    if (provider != 'BuiltIn' && (!spec.requiresKey || key.isNotEmpty)) {
+      try {
+        final raw = await _callActiveProvider(
+          prompt:
+              'Give a concise 2nd-opinion validation of this triggered scanner hit: setup quality (1-10), key invalidation level, and suggested SL/TP using ATR.',
+          context: context,
+        );
+        if (raw != null && raw.trim().isNotEmpty) {
+          return raw.trim();
+        }
+      } catch (_) {}
+    }
+
+    final slDist = atr * strategy.stopLossAtrMult;
+    final tpDist = atr * strategy.takeProfitAtrMult;
+    final isBuy = hit.signal == 'Buy';
+    final sl = isBuy ? hit.price - slDist : hit.price + slDist;
+    final tp = isBuy ? hit.price + tpDist : hit.price - tpDist;
+    return '**Built-in Quant Second Opinion — ${hit.spec.symbol} (${hit.signal})**\n'
+        '- **Score:** ${hit.matchScore.toStringAsFixed(0)}% (`${hit.ruleBreakdown.join(' · ')}`)\n'
+        '- **Suggested SL (${strategy.stopLossAtrMult}x ATR):** `${sl.toStringAsFixed(digits)}`\n'
+        '- **Suggested TP (${strategy.takeProfitAtrMult}x ATR):** `${tp.toStringAsFixed(digits)}`';
+  }
+
   String _systemInstruction(String context) => '''
 You are an institutional quantitative trading copilot embedded inside a 100% Demo / Paper Trading Desktop Platform.
 You can inspect the trader's live chart context, open positions, risk profile, and active strategies below.
@@ -216,7 +625,7 @@ If you recommend a concrete trade setup, strategy draft, price alert, or closing
 [[ACTION:{"type":"close_position","label":"Close #12345","ticket":12345}]]
 [[ACTION:{"type":"journal","label":"Save Note to Journal","title":"EURUSD Plan","symbol":"EURUSD","timeframe":"M15","tag":"AI Copilot","content":"Key observation..."}]]
 
-Valid rule indicators: EMA_CROSS, SMA_CROSS, RSI_OS, RSI_OB, MACD_CROSS, BB_BREAK, SUPERTREND, VWAP_CROSS, ICHIMOKU_BULL.
+Valid rule indicators: EMA_CROSS, SMA_CROSS, EMA_TREND, RSI_OS, RSI_OB, MACD_CROSS, BB_BREAK, SUPERTREND, VWAP_CROSS, ICHIMOKU_BULL, ADX_TREND, SESSION_UTC.
 Valid rule conditions: CrossAbove, CrossBelow, LessThan, GreaterThan.
 
 LIVE PLATFORM CONTEXT:

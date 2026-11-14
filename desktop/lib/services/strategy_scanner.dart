@@ -66,6 +66,7 @@ class StrategyScanHit {
   final double matchScore;
   final String signal; // 'Buy', 'Sell', 'Neutral'
   final List<String> ruleBreakdown;
+  final bool triggered;
 
   const StrategyScanHit({
     required this.strategy,
@@ -75,6 +76,37 @@ class StrategyScanHit {
     required this.matchScore,
     required this.signal,
     required this.ruleBreakdown,
+    this.triggered = false,
+  });
+}
+
+class SymbolBacktestSummary {
+  final String symbol;
+  final StrategyBacktestResult result;
+
+  const SymbolBacktestSummary({
+    required this.symbol,
+    required this.result,
+  });
+}
+
+class MultiSymbolBacktestResult {
+  final List<SymbolBacktestSummary> perSymbol;
+  final int totalTrades;
+  final int totalWins;
+  final double avgWinRate;
+  final double avgNetReturnPct;
+  final double avgProfitFactor;
+  final double maxDrawdownPct;
+
+  const MultiSymbolBacktestResult({
+    required this.perSymbol,
+    required this.totalTrades,
+    required this.totalWins,
+    required this.avgWinRate,
+    required this.avgNetReturnPct,
+    required this.avgProfitFactor,
+    required this.maxDrawdownPct,
   });
 }
 
@@ -93,6 +125,7 @@ class _IndicatorBundle {
   final Map<int, Map<int, double>> emaCache = {};
   final Map<int, Map<int, double>> smaCache = {};
   final Map<int, Map<int, double>> rsiCache = {};
+  final Map<int, Map<int, double>> adxCache = {};
   final Map<String, Map<int, BollingerPoint>> bbCache = {};
   final Map<String, Map<int, SupertrendPoint>> stCache = {};
   Map<int, MacdPoint>? macdCache;
@@ -124,6 +157,61 @@ class _IndicatorBundle {
     return rsiCache.putIfAbsent(period, () {
       final pts = IndicatorEngine.calculateRSI(candles, period);
       return {for (final p in pts) p.timeSeconds: p.value};
+    });
+  }
+
+  Map<int, double> adx(int period) {
+    return adxCache.putIfAbsent(period, () {
+      final map = <int, double>{};
+      if (candles.length < period + 2) return map;
+      double smoothedTr = 0, smoothedPlusDm = 0, smoothedMinusDm = 0;
+      final dxList = <double>[];
+      for (int i = 1; i < candles.length; i++) {
+        final cur = candles[i];
+        final prev = candles[i - 1];
+        final tr = math.max(
+          cur.high - cur.low,
+          math.max(
+            (cur.high - prev.close).abs(),
+            (cur.low - prev.close).abs(),
+          ),
+        );
+        final upMove = cur.high - prev.high;
+        final downMove = prev.low - cur.low;
+        final plusDm = (upMove > downMove && upMove > 0) ? upMove : 0.0;
+        final minusDm = (downMove > upMove && downMove > 0) ? downMove : 0.0;
+
+        if (i <= period) {
+          smoothedTr += tr;
+          smoothedPlusDm += plusDm;
+          smoothedMinusDm += minusDm;
+          if (i == period && smoothedTr > 0) {
+            final pDi = 100.0 * smoothedPlusDm / smoothedTr;
+            final mDi = 100.0 * smoothedMinusDm / smoothedTr;
+            final sum = pDi + mDi;
+            dxList.add(sum > 0 ? 100.0 * (pDi - mDi).abs() / sum : 0.0);
+          }
+        } else {
+          smoothedTr = smoothedTr - (smoothedTr / period) + tr;
+          smoothedPlusDm =
+              smoothedPlusDm - (smoothedPlusDm / period) + plusDm;
+          smoothedMinusDm =
+              smoothedMinusDm - (smoothedMinusDm / period) + minusDm;
+          final pDi = smoothedTr > 0 ? 100.0 * smoothedPlusDm / smoothedTr : 0.0;
+          final mDi =
+              smoothedTr > 0 ? 100.0 * smoothedMinusDm / smoothedTr : 0.0;
+          final sum = pDi + mDi;
+          final dx = sum > 0 ? 100.0 * (pDi - mDi).abs() / sum : 0.0;
+          dxList.add(dx);
+          if (dxList.length >= period) {
+            final recent = dxList.sublist(dxList.length - period);
+            final adxVal =
+                recent.reduce((a, b) => a + b) / recent.length;
+            map[cur.timeSeconds] = adxVal;
+          }
+        }
+      }
+      return map;
     });
   }
 
@@ -350,6 +438,49 @@ class StrategyScanner {
           'Ichimoku(${isSellCond ? 'Bear' : 'Bull'}) ${ok ? '✓' : '·'}',
         );
 
+      case 'EMA_TREND':
+        final eMap = bundle.ema(p);
+        final eNow = eMap[t] ?? c.close;
+        final ePrev = eMap[prevT] ?? prev.close;
+        final isSellCond =
+            rule.condition == 'CrossBelow' || rule.condition == 'LessThan';
+        final ok = rule.condition == 'CrossAbove'
+            ? (prev.close <= ePrev && c.close > eNow)
+            : rule.condition == 'CrossBelow'
+                ? (prev.close >= ePrev && c.close < eNow)
+                : isSellCond
+                    ? c.close < eNow
+                    : c.close > eNow;
+        return _RuleBarEval(
+          ok,
+          isSellCond ? 'Sell' : 'Buy',
+          'Price ${isSellCond ? '<' : '>'} EMA($p) ${ok ? '✓' : '·'}',
+        );
+
+      case 'ADX_TREND':
+        final aMap = bundle.adx(p);
+        final aNow = aMap[t] ?? 0.0;
+        final thr = rule.threshold > 0 ? rule.threshold : 20.0;
+        final ok = rule.condition == 'LessThan' ? aNow < thr : aNow >= thr;
+        return _RuleBarEval(
+          ok,
+          'Neutral',
+          'ADX($p)=${aNow.toStringAsFixed(1)} ${rule.condition == 'LessThan' ? '<' : '≥'} ${thr.toStringAsFixed(0)} ${ok ? '✓' : '·'}',
+        );
+
+      case 'SESSION_UTC':
+        final startHr = rule.threshold.toInt().clamp(0, 23);
+        final endHr = rule.period.clamp(0, 23);
+        final hr = c.timestamp.toUtc().hour;
+        final ok = startHr <= endHr
+            ? (hr >= startHr && hr <= endHr)
+            : (hr >= startHr || hr <= endHr);
+        return _RuleBarEval(
+          ok,
+          'Neutral',
+          'UTC ${startHr.toString().padLeft(2, '0')}-${endHr.toString().padLeft(2, '0')}h ${ok ? '✓' : '·'}',
+        );
+
       case 'BB_BREAK':
       default:
         final std = rule.threshold > 0 ? rule.threshold : 2.0;
@@ -429,7 +560,12 @@ class StrategyScanner {
           ? 'Buy'
           : sellVotes > buyVotes
               ? 'Sell'
-              : (evals.first.direction);
+              : evals
+                  .firstWhere(
+                    (e) => e.direction != 'Neutral',
+                    orElse: () => evals.first,
+                  )
+                  .direction;
 
       latestBreakdown = evals.map((e) => e.label).toList();
       latestScore = score;
@@ -671,6 +807,106 @@ class StrategyScanner {
       hits.add(analyzeCandles(spec, tf, res.candles));
     }));
     hits.sort((a, b) => (b.score - 50).abs().compareTo((a.score - 50).abs()));
+    return hits;
+  }
+
+  static Future<MultiSymbolBacktestResult> backtestUniverse(
+    StrategyDefinition strat,
+    MarketDataService marketData, {
+    int lookbackBars = 500,
+  }) async {
+    final symbols = SymbolCatalog.resolveUniverse(
+      strat.scanUniverse,
+      fallbackSymbol: strat.symbol,
+      customSymbols: strat.scanSymbols,
+    );
+    final summaries = <SymbolBacktestSummary>[];
+    final requireAll = strat.combinator != 'OR';
+    await Future.wait(symbols.map((sym) async {
+      final res = await marketData.fetchCandles(
+        sym,
+        strat.timeframe,
+        count: lookbackBars + 60,
+      );
+      final bt = backtestStrategy(
+        strat.copyWith(symbol: sym),
+        res.candles,
+        lookbackBars: lookbackBars,
+        requireAllRules: requireAll,
+      );
+      summaries.add(SymbolBacktestSummary(symbol: sym, result: bt));
+    }));
+    summaries.sort(
+      (a, b) => b.result.netReturnPct.compareTo(a.result.netReturnPct),
+    );
+    final totalTrades =
+        summaries.fold<int>(0, (sum, s) => sum + s.result.totalTrades);
+    final totalWins = summaries.fold<int>(0, (sum, s) => sum + s.result.wins);
+    final avgWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100.0 : 0.0;
+    final avgReturn = summaries.isEmpty
+        ? 0.0
+        : summaries.fold<double>(0.0, (s, x) => s + x.result.netReturnPct) /
+            summaries.length;
+    final validPfs =
+        summaries.where((s) => s.result.totalTrades > 0).toList();
+    final avgPf = validPfs.isEmpty
+        ? 0.0
+        : validPfs.fold<double>(0.0, (s, x) => s + x.result.profitFactor) /
+            validPfs.length;
+    final maxDd = summaries.isEmpty
+        ? 0.0
+        : summaries
+            .map((s) => s.result.maxDrawdownPct)
+            .reduce((a, b) => math.max(a, b));
+    return MultiSymbolBacktestResult(
+      perSymbol: summaries,
+      totalTrades: totalTrades,
+      totalWins: totalWins,
+      avgWinRate: avgWinRate,
+      avgNetReturnPct: avgReturn,
+      avgProfitFactor: avgPf,
+      maxDrawdownPct: maxDd,
+    );
+  }
+
+  static Future<List<StrategyScanHit>> scanUniverse(
+    StrategyDefinition strat,
+    MarketDataService marketData,
+  ) async {
+    final symbols = SymbolCatalog.resolveUniverse(
+      strat.scanUniverse,
+      fallbackSymbol: strat.symbol,
+      customSymbols: strat.scanSymbols,
+    );
+    final requireAll = strat.combinator != 'OR';
+    final hits = <StrategyScanHit>[];
+    await Future.wait(symbols.map((sym) async {
+      final spec = SymbolCatalog.find(sym);
+      final res = await marketData.fetchCandles(sym, strat.timeframe, count: 250);
+      final bt = backtestStrategy(
+        strat.copyWith(symbol: sym),
+        res.candles,
+        lookbackBars: 30,
+        requireAllRules: requireAll,
+      );
+      final isTriggered =
+          (requireAll ? bt.latestScore >= 100 : bt.latestScore > 0) &&
+              bt.latestDirection != 'Neutral';
+      hits.add(StrategyScanHit(
+        strategy: strat,
+        spec: spec,
+        timeframe: strat.timeframe,
+        price: res.candles.isNotEmpty ? res.candles.last.close : 0.0,
+        matchScore: bt.latestScore,
+        signal: bt.latestDirection,
+        ruleBreakdown: bt.latestRuleBreakdown,
+        triggered: isTriggered,
+      ));
+    }));
+    hits.sort((a, b) {
+      if (a.triggered != b.triggered) return a.triggered ? -1 : 1;
+      return b.matchScore.compareTo(a.matchScore);
+    });
     return hits;
   }
 

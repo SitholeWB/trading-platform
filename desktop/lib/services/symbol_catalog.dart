@@ -59,6 +59,62 @@ class SymbolCatalog {
     SymbolSpec(symbol: 'QQQ', name: 'Invesco QQQ ETF', category: AssetCategory.stocks, yahooTicker: 'QQQ', tradingViewTicker: 'NASDAQ:QQQ', defaultBaseline: 496.20),
   ];
 
+  static const List<String> majorForexPairs = [
+    'EURUSD',
+    'GBPUSD',
+    'USDJPY',
+    'USDCHF',
+    'AUDUSD',
+    'USDCAD',
+    'NZDUSD',
+  ];
+
+  static List<String> resolveUniverse(
+    String universe, {
+    String fallbackSymbol = 'EURUSD',
+    List<String> customSymbols = const [],
+  }) {
+    switch (universe.toUpperCase()) {
+      case 'MAJORS':
+        return List<String>.from(majorForexPairs);
+      case 'FOREX':
+        return allSymbols
+            .where((s) => s.category == AssetCategory.forex)
+            .map((s) => s.symbol)
+            .toList();
+      case 'METALS':
+        return allSymbols
+            .where((s) => s.category == AssetCategory.commodities)
+            .map((s) => s.symbol)
+            .toList();
+      case 'CRYPTO':
+        return allSymbols
+            .where((s) => s.category == AssetCategory.crypto)
+            .map((s) => s.symbol)
+            .toList();
+      case 'INDICES':
+        return allSymbols
+            .where((s) => s.category == AssetCategory.indices)
+            .map((s) => s.symbol)
+            .toList();
+      case 'STOCKS':
+        return allSymbols
+            .where((s) => s.category == AssetCategory.stocks)
+            .map((s) => s.symbol)
+            .toList();
+      case 'CUSTOM':
+        final cleaned = customSymbols
+            .map((s) => s.trim().toUpperCase())
+            .where((s) => s.isNotEmpty)
+            .toSet()
+            .toList();
+        return cleaned.isNotEmpty ? cleaned : [fallbackSymbol];
+      case 'SINGLE':
+      default:
+        return [fallbackSymbol];
+    }
+  }
+
   static SymbolSpec find(String symbol) {
     final upper = symbol.trim().toUpperCase();
     return allSymbols.firstWhere(

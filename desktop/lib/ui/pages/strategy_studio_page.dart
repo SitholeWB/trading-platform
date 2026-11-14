@@ -3,14 +3,17 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/trading_models.dart';
+import '../../services/ai_copilot_service.dart';
 import '../../services/indicator_engine.dart';
 import '../../services/market_data_service.dart';
 import '../../services/strategy_scanner.dart';
 import '../../services/symbol_catalog.dart';
+import '../widgets/markdown_message_view.dart';
 
 class StrategyStudioPage extends StatefulWidget {
   final List<StrategyDefinition> strategies;
   final MarketDataService marketData;
+  final AiCopilotService? copilot;
   final ValueChanged<StrategyDefinition> onSaveStrategy;
   final ValueChanged<String> onDeleteStrategy;
   final ValueChanged<StrategyDefinition> onRunEvaluation;
@@ -19,6 +22,7 @@ class StrategyStudioPage extends StatefulWidget {
     super.key,
     required this.strategies,
     required this.marketData,
+    this.copilot,
     required this.onSaveStrategy,
     required this.onDeleteStrategy,
     required this.onRunEvaluation,
@@ -32,6 +36,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
   static const List<String> _indicators = [
     'EMA_CROSS',
     'SMA_CROSS',
+    'EMA_TREND',
     'RSI_OS',
     'RSI_OB',
     'MACD_CROSS',
@@ -39,7 +44,20 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
     'SUPERTREND',
     'VWAP_CROSS',
     'ICHIMOKU_BULL',
+    'ADX_TREND',
+    'SESSION_UTC',
   ];
+
+  static const Map<String, String> _universes = {
+    'SINGLE': 'Single Symbol',
+    'MAJORS': 'Major Forex (7)',
+    'FOREX': 'All Forex',
+    'METALS': 'Metals & Energy',
+    'CRYPTO': 'Crypto',
+    'INDICES': 'Indices',
+    'STOCKS': 'Stocks',
+    'CUSTOM': 'Custom List',
+  };
 
   static const List<String> _conditions = [
     'CrossAbove',
@@ -55,11 +73,18 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
   String? _statusBanner;
   int _testLookbackBars = 500;
   bool _testing = false;
+  bool _scanning = false;
+  String? _validatingSymbol;
   StrategyBacktestResult? _testResult;
+  MultiSymbolBacktestResult? _multiBtResult;
+  List<StrategyScanHit> _scanHits = [];
+  final Map<String, String> _hitOpinions = {};
 
   late final TextEditingController _nameCtrl;
   late final TextEditingController _descCtrl;
   String _symbol = 'EURUSD';
+  String _scanUniverse = 'SINGLE';
+  List<String> _scanSymbols = [];
   Timeframe _timeframe = Timeframe.m15;
   bool _isEnabled = true;
   bool _autoTrade = true;
@@ -112,6 +137,10 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       _symbol = SymbolCatalog.allSymbols.any((x) => x.symbol == s.symbol)
           ? s.symbol
           : 'EURUSD';
+      _scanUniverse = _universes.containsKey(s.scanUniverse.toUpperCase())
+          ? s.scanUniverse.toUpperCase()
+          : 'SINGLE';
+      _scanSymbols = List<String>.from(s.scanSymbols);
       _timeframe = s.timeframe;
       _isEnabled = s.isEnabled;
       _autoTrade = s.autoTrade;
@@ -121,7 +150,11 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       _tpMult = s.takeProfitAtrMult.clamp(1.0, 8.0);
       _rules = List<StrategyRule>.from(s.entryRules);
       _testResult = null;
+      _multiBtResult = null;
+      _scanHits = [];
+      _hitOpinions.clear();
       _testing = false;
+      _scanning = false;
     });
   }
 
@@ -131,10 +164,16 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       _selectedId = 'strat_${DateTime.now().millisecondsSinceEpoch}';
       _statusBanner = null;
       _testResult = null;
+      _multiBtResult = null;
+      _scanHits = [];
+      _hitOpinions.clear();
       _testing = false;
+      _scanning = false;
       _nameCtrl.text = 'Custom Momentum Strategy';
       _descCtrl.text = 'Quantitative multi-indicator rule';
       _symbol = 'EURUSD';
+      _scanUniverse = 'SINGLE';
+      _scanSymbols = [];
       _timeframe = Timeframe.m15;
       _isEnabled = true;
       _autoTrade = true;
@@ -170,6 +209,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       stopLossAtrMult: _slMult,
       takeProfitAtrMult: _tpMult,
       entryRules: List<StrategyRule>.from(_rules),
+      scanUniverse: _scanUniverse,
+      scanSymbols: List<String>.from(_scanSymbols),
     );
   }
 
@@ -187,32 +228,35 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
     final promptCtrl = TextEditingController();
     String selectedSym = _symbol;
     Timeframe selectedTf = _timeframe;
+    bool compiling = false;
+    String? compileError;
 
     const presets = [
-      'RSI oversold mean reversion on pullback with 1% risk',
-      'EMA 20/50 trend crossover with MACD momentum confirmation',
-      'Bollinger Band breakout scalp with tight 1.0x ATR stop',
+      'Scan only major forex pairs on H1: price above 200 EMA, RSI < 35, ADX >= 20, London session',
+      'Crypto H4 momentum: Supertrend bullish with MACD bullish cross and 1.5x ATR stop',
+      'Metals & Energy M15 pullback: price above VWAP and RSI oversold bounce',
     ];
 
-    final generated = await showDialog<StrategyDefinition>(
+    final compileRes = await showDialog<StrategyCompileResult>(
       context: context,
+      barrierDismissible: !compiling,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
           title: const Row(
             children: [
               Icon(Icons.auto_awesome, color: Color(0xFFA855F7), size: 20),
               SizedBox(width: 8),
-              Text('AI Strategy Generator'),
+              Text('Plain-Text AI Strategy Compiler'),
             ],
           ),
           content: SizedBox(
-            width: 500,
+            width: 540,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Describe the trading logic you want to build, or pick a template:',
+                  'Describe your strategy & target market in plain English. AI compiles it once (~500 tokens) into local Dart rules so scanning & backtesting use 0 tokens.',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(height: 10),
@@ -222,7 +266,9 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                   children: presets
                       .map((p) => ActionChip(
                             label: Text(p, style: const TextStyle(fontSize: 11)),
-                            onPressed: () => promptCtrl.text = p,
+                            onPressed: compiling
+                                ? null
+                                : () => promptCtrl.text = p,
                           ))
                       .toList(),
                 ),
@@ -230,10 +276,11 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                 TextField(
                   controller: promptCtrl,
                   maxLines: 3,
+                  enabled: !compiling,
                   decoration: const InputDecoration(
-                    labelText: 'Strategy Prompt',
+                    labelText: 'Plain-Text Strategy & Universe',
                     hintText:
-                        'e.g. Buy when RSI < 30 and EMA crosses above on H1...',
+                        'e.g. Scan only major pairs on H1 when price > 200 EMA and RSI < 35...',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -244,7 +291,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       child: DropdownButtonFormField<String>(
                         initialValue: selectedSym,
                         decoration: const InputDecoration(
-                          labelText: 'Target Symbol',
+                          labelText: 'Fallback Symbol',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -254,9 +301,11 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                                   child: Text(s.symbol),
                                 ))
                             .toList(),
-                        onChanged: (v) {
-                          if (v != null) setS(() => selectedSym = v);
-                        },
+                        onChanged: compiling
+                            ? null
+                            : (v) {
+                                if (v != null) setS(() => selectedSym = v);
+                              },
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -264,7 +313,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       child: DropdownButtonFormField<Timeframe>(
                         initialValue: selectedTf,
                         decoration: const InputDecoration(
-                          labelText: 'Timeframe',
+                          labelText: 'Default Timeframe',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -274,94 +323,98 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                                   child: Text(t.code),
                                 ))
                             .toList(),
-                        onChanged: (v) {
-                          if (v != null) setS(() => selectedTf = v);
-                        },
+                        onChanged: compiling
+                            ? null
+                            : (v) {
+                                if (v != null) setS(() => selectedTf = v);
+                              },
                       ),
                     ),
                   ],
                 ),
+                if (compileError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    compileError!,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFFF59E0B),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: compiling ? null : () => Navigator.pop(ctx),
               child: const Text('Cancel'),
             ),
             FilledButton.icon(
-              icon: const Icon(Icons.auto_awesome, size: 16),
-              label: const Text('Generate Strategy'),
-              onPressed: () {
-                final text = promptCtrl.text.trim().toLowerCase();
-                final rules = <StrategyRule>[];
-                if (text.contains('rsi')) {
-                  rules.add(StrategyRule(
-                    indicator: text.contains('overbought') ? 'RSI_OB' : 'RSI_OS',
-                    condition: text.contains('overbought')
-                        ? 'GreaterThan'
-                        : 'LessThan',
-                    threshold: text.contains('overbought') ? 70 : 30,
-                    period: 14,
-                  ));
-                }
-                if (text.contains('ema') || text.contains('trend')) {
-                  rules.add(const StrategyRule(
-                    indicator: 'EMA_CROSS',
-                    condition: 'CrossAbove',
-                    threshold: 0,
-                    period: 20,
-                  ));
-                }
-                if (text.contains('macd')) {
-                  rules.add(const StrategyRule(
-                    indicator: 'MACD_CROSS',
-                    condition: 'CrossAbove',
-                    threshold: 0,
-                    period: 12,
-                  ));
-                }
-                if (text.contains('bollinger') || text.contains('bb')) {
-                  rules.add(const StrategyRule(
-                    indicator: 'BB_BREAK',
-                    condition: 'CrossAbove',
-                    threshold: 2.0,
-                    period: 20,
-                  ));
-                }
-                if (rules.isEmpty) {
-                  rules.add(const StrategyRule(
-                    indicator: 'EMA_CROSS',
-                    condition: 'CrossAbove',
-                    threshold: 0,
-                    period: 20,
-                  ));
-                  rules.add(const StrategyRule(
-                    indicator: 'RSI_OS',
-                    condition: 'LessThan',
-                    threshold: 40,
-                    period: 14,
-                  ));
-                }
-
-                Navigator.pop(
-                  ctx,
-                  StrategyDefinition(
-                    id: 'strat_ai_${DateTime.now().millisecondsSinceEpoch}',
-                    name: 'AI · $selectedSym ${selectedTf.code} Strategy',
-                    description: promptCtrl.text.trim().isEmpty
-                        ? 'AI-synthesized quantitative rule'
-                        : promptCtrl.text.trim(),
-                    symbol: selectedSym,
-                    timeframe: selectedTf,
-                    isEnabled: true,
-                    riskPercent: text.contains('0.5') ? 0.5 : 1.0,
-                    stopLossAtrMult: text.contains('tight') ? 1.0 : 1.5,
-                    takeProfitAtrMult: 3.0,
-                    entryRules: rules,
-                  ),
-                );
-              },
+              icon: compiling
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.auto_awesome, size: 16),
+              label: Text(compiling ? 'Compiling...' : 'Compile Strategy'),
+              onPressed: compiling
+                  ? null
+                  : () async {
+                      final text = promptCtrl.text.trim();
+                      if (text.isEmpty) {
+                        setS(() =>
+                            compileError = 'Enter a strategy description first.');
+                        return;
+                      }
+                      setS(() {
+                        compiling = true;
+                        compileError = null;
+                      });
+                      final copilot = widget.copilot;
+                      if (copilot != null) {
+                        final res = await copilot.compileStrategyFromText(
+                          text,
+                          defaultSymbol: selectedSym,
+                          defaultTimeframe: selectedTf,
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx, res);
+                      } else {
+                        final fallback = StrategyDefinition(
+                          id: 'strat_${DateTime.now().millisecondsSinceEpoch}',
+                          name: 'Custom Plain-Text Strategy',
+                          symbol: selectedSym,
+                          timeframe: selectedTf,
+                          description: text,
+                          entryRules: const [
+                            StrategyRule(
+                              indicator: 'EMA_CROSS',
+                              condition: 'CrossAbove',
+                              period: 20,
+                            ),
+                            StrategyRule(
+                              indicator: 'RSI_OS',
+                              condition: 'LessThan',
+                              period: 14,
+                              threshold: 35,
+                            ),
+                          ],
+                        );
+                        if (ctx.mounted) {
+                          Navigator.pop(
+                            ctx,
+                            StrategyCompileResult(
+                              strategy: fallback,
+                              providerUsed: 'Local Template',
+                            ),
+                          );
+                        }
+                      }
+                    },
             ),
           ],
         ),
@@ -369,10 +422,14 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
     );
     promptCtrl.dispose();
 
-    if (generated != null) {
-      widget.onSaveStrategy(generated);
-      _loadStrategy(generated);
-      setState(() => _statusBanner = 'Generated & saved "${generated.name}"');
+    if (compileRes != null) {
+      widget.onSaveStrategy(compileRes.strategy);
+      _loadStrategy(compileRes.strategy);
+      setState(() {
+        _statusBanner =
+            'Compiled "${compileRes.strategy.name}" via ${compileRes.providerUsed}'
+            '${compileRes.note != null ? ' (${compileRes.note})' : ''}';
+      });
     }
   }
 
@@ -561,6 +618,28 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                             .toList(),
                         onChanged: (v) {
                           if (v != null) setState(() => _symbol = v);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 145,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _scanUniverse,
+                        decoration: const InputDecoration(
+                          labelText: 'Universe',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _universes.entries
+                            .map((e) => DropdownMenuItem(
+                                  value: e.key,
+                                  child: Text(e.value,
+                                      style: const TextStyle(fontSize: 12)),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _scanUniverse = v);
                         },
                       ),
                     ),
@@ -1097,19 +1176,77 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       lookbackBars: _testLookbackBars,
       requireAllRules: _combinator == 'AND',
     );
+    MultiSymbolBacktestResult? multi;
+    if (draft.scanUniverse != 'SINGLE') {
+      multi = await StrategyScanner.backtestUniverse(
+        draft,
+        widget.marketData,
+        lookbackBars: _testLookbackBars,
+      );
+    }
     widget.onRunEvaluation(draft);
     if (!mounted) return;
     setState(() {
       _testing = false;
       _testResult = bt;
+      _multiBtResult = multi;
+      _statusBanner = multi != null
+          ? '0-token multi-pair backtest: ${multi.perSymbol.length} symbols, ${multi.totalTrades} trades (${multi.avgWinRate.toStringAsFixed(1)}% WR)'
+          : 'Tested "${draft.name}" over ${bt.barsTested} bars (${bt.totalTrades} trades)';
+    });
+  }
+
+  Future<void> _runUniverseScan() async {
+    final draft = _buildCurrentDraft();
+    widget.onSaveStrategy(draft);
+    setState(() {
+      _isCreatingNew = false;
+      _activeTab = 2;
+      _scanning = true;
+      _hitOpinions.clear();
+    });
+
+    final hits = await StrategyScanner.scanUniverse(draft, widget.marketData);
+    if (!mounted) return;
+    final triggeredCount = hits.where((h) => h.triggered).length;
+    setState(() {
+      _scanning = false;
+      _scanHits = hits;
       _statusBanner =
-          'Tested "${draft.name}" over ${bt.barsTested} bars (${bt.totalTrades} trades)';
+          'Scanned ${hits.length} symbols (0 tokens): $triggeredCount live setup${triggeredCount == 1 ? '' : 's'} triggered';
+    });
+  }
+
+  Future<void> _validateHitWithAi(StrategyScanHit hit) async {
+    final copilot = widget.copilot;
+    if (copilot == null) return;
+    setState(() => _validatingSymbol = hit.spec.symbol);
+    final res = await widget.marketData.fetchCandles(
+      hit.spec.symbol,
+      hit.timeframe,
+      count: 120,
+    );
+    final opinion = await copilot.validateScanHit(
+      strategy: _buildCurrentDraft(),
+      hit: hit,
+      candles: res.candles,
+    );
+    if (!mounted) return;
+    setState(() {
+      _validatingSymbol = null;
+      _hitOpinions[hit.spec.symbol] = opinion;
     });
   }
 
   Widget _buildEvaluationTab(BuildContext context, double rr) {
     final draft = _buildCurrentDraft();
     final bt = _testResult;
+    final multi = _multiBtResult;
+    final universeSymbols = SymbolCatalog.resolveUniverse(
+      draft.scanUniverse,
+      fallbackSymbol: draft.symbol,
+      customSymbols: draft.scanSymbols,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -1125,7 +1262,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        'Historical Period Test · ${draft.name}',
+                        '0-Token Backtest & Live Universe Scanner · ${draft.name}',
                         style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 14),
                       ),
@@ -1155,6 +1292,20 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       },
                     ),
                     const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: _scanning ? null : _runUniverseScan,
+                      icon: _scanning
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.radar, size: 16),
+                      label: Text(_scanning
+                          ? 'Scanning...'
+                          : 'Scan Universe (${universeSymbols.length})'),
+                    ),
+                    const SizedBox(width: 8),
                     FilledButton.icon(
                       onPressed: _testing ? null : _runPeriodTest,
                       icon: _testing
@@ -1167,7 +1318,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                               ),
                             )
                           : const Icon(Icons.play_arrow, size: 16),
-                      label: Text(_testing ? 'Testing...' : 'Run Period Test'),
+                      label: Text(_testing ? 'Testing...' : 'Run Backtest'),
                     ),
                   ],
                 ),
@@ -1178,7 +1329,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                   children: [
                     Chip(
                         visualDensity: VisualDensity.compact,
-                        label: Text('Symbol: ${draft.symbol}')),
+                        label: Text(
+                            'Universe: ${_universes[draft.scanUniverse] ?? draft.scanUniverse} (${universeSymbols.length})')),
                     Chip(
                         visualDensity: VisualDensity.compact,
                         label: Text('TF: ${draft.timeframe.code}')),
@@ -1194,6 +1346,218 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
             ),
           ),
         ),
+        if (_scanHits.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.radar, size: 16, color: Color(0xFF10B981)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Live Universe Scan Hits (${_scanHits.where((h) => h.triggered).length} Triggered / ${_scanHits.length} Scanned · 0 Tokens)',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ..._scanHits.map((hit) {
+                    final opinion = _hitOpinions[hit.spec.symbol];
+                    final isValidating = _validatingSymbol == hit.spec.symbol;
+                    final digits = IndicatorEngine.getSymbolDigits(
+                      hit.spec.symbol,
+                      samplePrice: hit.price,
+                    );
+                    final sigColor = hit.signal == 'Buy'
+                        ? const Color(0xFF10B981)
+                        : hit.signal == 'Sell'
+                            ? const Color(0xFFEF4444)
+                            : Colors.grey;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: hit.triggered
+                              ? sigColor.withValues(alpha: 0.6)
+                              : Colors.white12,
+                        ),
+                        color: hit.triggered
+                            ? sigColor.withValues(alpha: 0.06)
+                            : Colors.transparent,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: sigColor.withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  hit.triggered ? hit.signal.toUpperCase() : 'WATCH',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: sigColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                hit.spec.symbol,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                hit.price.toStringAsFixed(digits),
+                                style: const TextStyle(
+                                    fontFamily: 'monospace', fontSize: 12),
+                              ),
+                              const Spacer(),
+                              Text(
+                                'Score ${hit.matchScore.toStringAsFixed(0)}%',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: sigColor,
+                                ),
+                              ),
+                              if (widget.copilot != null) ...[
+                                const SizedBox(width: 10),
+                                OutlinedButton.icon(
+                                  onPressed: isValidating
+                                      ? null
+                                      : () => _validateHitWithAi(hit),
+                                  icon: isValidating
+                                      ? const SizedBox(
+                                          width: 12,
+                                          height: 12,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.psychology, size: 14),
+                                  label: Text(
+                                    isValidating ? 'Checking...' : 'AI 2nd Opinion',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          if (hit.ruleBreakdown.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              hit.ruleBreakdown.join('  ·  '),
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.grey),
+                            ),
+                          ],
+                          if (opinion != null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.black26,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: MarkdownMessageView(
+                                data: opinion,
+                                baseFontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (multi != null) ...[
+          const SizedBox(height: 12),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Multi-Symbol Backtest Summary (${multi.perSymbol.length} Pairs · 0 Tokens)',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _btStatCard('Total Trades', '${multi.totalTrades}',
+                          const Color(0xFFA855F7)),
+                      const SizedBox(width: 8),
+                      _btStatCard(
+                          'Avg Win Rate',
+                          '${multi.avgWinRate.toStringAsFixed(1)}%',
+                          multi.avgWinRate >= 50
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFFF59E0B)),
+                      const SizedBox(width: 8),
+                      _btStatCard(
+                          'Avg Net Return',
+                          '${multi.avgNetReturnPct >= 0 ? '+' : ''}${multi.avgNetReturnPct.toStringAsFixed(2)}%',
+                          multi.avgNetReturnPct >= 0
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFFEF4444)),
+                      const SizedBox(width: 8),
+                      _btStatCard(
+                          'Avg PF / Max DD',
+                          '${multi.avgProfitFactor.toStringAsFixed(2)} / ${multi.maxDrawdownPct.toStringAsFixed(1)}%',
+                          const Color(0xFF38BDF8)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: multi.perSymbol.map((s) {
+                      final pos = s.result.netReturnPct >= 0;
+                      return Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text(
+                          '${s.symbol}: ${s.result.totalTrades}T · ${s.result.winRate.toStringAsFixed(0)}% WR · ${pos ? '+' : ''}${s.result.netReturnPct.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: pos
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFFEF4444),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         if (bt == null)
           const Card(
@@ -1202,7 +1566,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
               padding: EdgeInsets.all(24),
               child: Center(
                 child: Text(
-                  'Select a previous period above and click "Run Period Test" to list all rule evaluations and simulated trades.',
+                  'Click "Run Backtest" for 0-token historical simulation or "Scan Universe" to find live setups across your selected market universe.',
                   style: TextStyle(color: Colors.grey),
                 ),
               ),
