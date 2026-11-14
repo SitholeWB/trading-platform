@@ -1547,13 +1547,25 @@ class _AppShellState extends State<AppShell> {
         ),
       AppPage.sandbox => SimulatorPage(
           selectedSymbol: widget.storage.selectedSymbol,
+          timeframe: widget.storage.selectedTimeframe,
           currentPrice: currentPrice,
+          candles: _candles,
+          openPositions: widget.storage.positions
+              .where((p) => p.status == 'Open')
+              .toList(),
+          activeAlerts: widget.storage.alerts,
+          strategies: widget.storage.strategies,
+          balance: widget.storage.account.balance,
+          equity: widget.storage.account.equity,
           onInjectCandle: (c) {
             setState(() {
               _candles = [..._candles, c];
               _recalculatePositionsAndAlerts();
             });
           },
+          onResetToLive: () => _refreshMarketData(force: true),
+          onQuickOrder: (side, sym, lots, price) =>
+              _placeOrder(side, sym, lots, price),
         ),
       AppPage.chart => LiveChartPage(
           symbol: widget.storage.selectedSymbol,
