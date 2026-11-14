@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 import '../models/trading_models.dart';
 import '../services/ai_copilot_service.dart';
 import '../services/backup_sync_service.dart';
 import '../services/indicator_engine.dart';
 import '../services/localization_service.dart';
 import '../services/market_data_service.dart';
+import '../services/market_hours_service.dart';
 import '../services/notification_service.dart';
 import '../services/section_docs.dart';
 import '../services/storage_service.dart';
@@ -69,7 +71,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WindowListener {
   AppPage _activePage = AppPage.dashboard;
   List<Candle> _candles = [];
   Map<String, MarketQuote> _watchlistQuotes = {};
@@ -80,6 +82,7 @@ class _AppShellState extends State<AppShell> {
   String _timezoneIana = 'Etc/UTC';
   String _languageCode = 'en';
   Timer? _tickTimer;
+  Timer? _sessionSaveTimer;
   late final BackupSyncService _backupSyncService;
   String? _pendingHelpPrompt;
   String? _pendingHelpContext;
@@ -181,6 +184,15 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     _languageCode = widget.storage.languageCode;
     AppL10n.activeLanguage = _languageCode;
+    _activePage = AppPage.values.firstWhere(
+      (p) => p.name == widget.storage.activePageName,
+      orElse: () => AppPage.dashboard,
+    );
+    _isCopilotOpen = widget.storage.isCopilotOpen;
+    _isCopilotExpanded = widget.storage.isCopilotExpanded;
+    try {
+      windowManager.addListener(this);
+    } catch (_) {}
     _backupSyncService = BackupSyncService(widget.storage)..attachAutoSync();
     widget.notifications.addListener(_onNotificationsChanged);
     _ensureCopilotSession(save: false);
@@ -189,15 +201,62 @@ class _AppShellState extends State<AppShell> {
       if (!mounted) return;
       if (_secondsUntilSync <= 1) {
         _secondsUntilSync = 60;
-        _refreshMarketData(force: true);
+        final isDemo = widget.storage.activeProvider == 'Demo';
+        final activeOpen = isDemo ||
+            MarketHoursService.getStatus(widget.storage.selectedSymbol).isOpen;
+        if (activeOpen) {
+          _refreshMarketData(force: true, autoTick: true);
+        } else {
+          _refreshOpenWatchlistQuotesOnly();
+        }
       } else {
         setState(() => _secondsUntilSync--);
       }
     });
   }
 
+  void _scheduleSessionSave() {
+    _sessionSaveTimer?.cancel();
+    _sessionSaveTimer = Timer(const Duration(milliseconds: 500), () {
+      widget.storage.save();
+    });
+  }
+
+  Future<void> _captureWindowBounds() async {
+    try {
+      final maximized = await windowManager.isMaximized();
+      widget.storage.isWindowMaximized = maximized;
+      if (!maximized) {
+        final bounds = await windowManager.getBounds();
+        if (bounds.width >= 800 && bounds.height >= 560) {
+          widget.storage.windowX = bounds.left;
+          widget.storage.windowY = bounds.top;
+          widget.storage.windowWidth = bounds.width;
+          widget.storage.windowHeight = bounds.height;
+        }
+      }
+      _scheduleSessionSave();
+    } catch (_) {}
+  }
+
+  @override
+  void onWindowResized() => _captureWindowBounds();
+
+  @override
+  void onWindowMoved() => _captureWindowBounds();
+
+  @override
+  void onWindowMaximize() => _captureWindowBounds();
+
+  @override
+  void onWindowUnmaximize() => _captureWindowBounds();
+
   @override
   void dispose() {
+    try {
+      windowManager.removeListener(this);
+    } catch (_) {}
+    _sessionSaveTimer?.cancel();
     widget.notifications.removeListener(_onNotificationsChanged);
     _backupSyncService.dispose();
     _tickTimer?.cancel();
@@ -213,7 +272,24 @@ class _AppShellState extends State<AppShell> {
     setState(() => _watchlistQuotes = quotes);
   }
 
-  Future<void> _refreshMarketData({bool force = false}) async {
+  Future<void> _refreshOpenWatchlistQuotesOnly() async {
+    final openSymbols = SymbolCatalog.allSymbols
+        .take(16)
+        .map((s) => s.symbol)
+        .where((s) => MarketHoursService.getStatus(s).isOpen)
+        .toList();
+    if (openSymbols.isEmpty) return;
+    final quotes = await widget.marketData.fetchWatchlistQuotes(openSymbols);
+    if (!mounted) return;
+    setState(() {
+      _watchlistQuotes = {..._watchlistQuotes, ...quotes};
+    });
+  }
+
+  Future<void> _refreshMarketData({
+    bool force = false,
+    bool autoTick = false,
+  }) async {
     if (_isSyncing) return;
     setState(() => _isSyncing = true);
 
@@ -227,7 +303,7 @@ class _AppShellState extends State<AppShell> {
     _candles = res.candles;
     _recalculatePositionsAndAlerts();
     if (force) {
-      await _runAutonomousBotCycle();
+      await _runAutonomousBotCycle(skipClosedMarkets: autoTick);
     }
 
     if (!mounted) return;
@@ -237,13 +313,19 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
-  Future<void> _runAutonomousBotCycle() async {
+  Future<void> _runAutonomousBotCycle({bool skipClosedMarkets = false}) async {
     if (widget.storage.risk.isKillSwitchEngaged) return;
     final enabled =
         widget.storage.strategies.where((s) => s.isEnabled).toList();
     if (enabled.isEmpty) return;
 
+    final isDemo = widget.storage.activeProvider == 'Demo';
     for (final s in enabled) {
+      if (skipClosedMarkets &&
+          !isDemo &&
+          !MarketHoursService.getStatus(s.symbol).isOpen) {
+        continue;
+      }
       final res = await widget.marketData.fetchCandles(
         s.symbol,
         s.timeframe,
@@ -1039,6 +1121,14 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.storage.activePageName != _activePage.name ||
+        widget.storage.isCopilotOpen != _isCopilotOpen ||
+        widget.storage.isCopilotExpanded != _isCopilotExpanded) {
+      widget.storage.activePageName = _activePage.name;
+      widget.storage.isCopilotOpen = _isCopilotOpen;
+      widget.storage.isCopilotExpanded = _isCopilotExpanded;
+      _scheduleSessionSave();
+    }
     final currentPrice = _candles.isNotEmpty
         ? _candles.last.close
         : SymbolCatalog.find(widget.storage.selectedSymbol).defaultBaseline;
@@ -1869,6 +1959,15 @@ class _AppShellState extends State<AppShell> {
           isSyncing: _isSyncing,
           onManualSync: () => _refreshMarketData(force: true),
           onLoadOlderHistory: () => _refreshMarketData(force: true),
+          initialStartIndex: widget.storage.chartStartIndex >= 0
+              ? widget.storage.chartStartIndex
+              : null,
+          initialVisibleCount: widget.storage.chartVisibleCount,
+          onViewportChanged: (startIdx, visCount) {
+            widget.storage.chartStartIndex = startIdx;
+            widget.storage.chartVisibleCount = visCount;
+            _scheduleSessionSave();
+          },
         ),
       AppPage.backup => BackupSyncPage(
           storage: widget.storage,

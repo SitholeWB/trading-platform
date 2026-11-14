@@ -46,6 +46,9 @@ class LiveChartPage extends StatefulWidget {
   final bool isSyncing;
   final VoidCallback onManualSync;
   final VoidCallback? onLoadOlderHistory;
+  final int? initialStartIndex;
+  final int? initialVisibleCount;
+  final void Function(int startIndex, int visibleCount)? onViewportChanged;
 
   const LiveChartPage({
     super.key,
@@ -78,6 +81,9 @@ class LiveChartPage extends StatefulWidget {
     required this.isSyncing,
     required this.onManualSync,
     this.onLoadOlderHistory,
+    this.initialStartIndex,
+    this.initialVisibleCount,
+    this.onViewportChanged,
   });
 
   @override
@@ -851,6 +857,9 @@ class _LiveChartPageState extends State<LiveChartPage> {
           secondsUntilSync: widget.secondsUntilSync,
           isSyncing: widget.isSyncing,
           onManualSync: widget.onManualSync,
+          initialStartIndex: widget.initialStartIndex,
+          initialVisibleCount: widget.initialVisibleCount,
+          onViewportChanged: widget.onViewportChanged,
         );
 
     Widget secondaryPane(Timeframe tf) => NativeChartWidget(

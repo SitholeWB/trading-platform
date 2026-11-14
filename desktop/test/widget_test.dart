@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_platform/models/trading_models.dart';
 import 'package:trading_platform/services/indicator_engine.dart';
 import 'package:trading_platform/services/market_data_service.dart';
+import 'package:trading_platform/services/market_hours_service.dart';
 import 'package:trading_platform/services/strategy_scanner.dart';
 
 void main() {
@@ -60,5 +61,17 @@ void main() {
     );
     expect(res.barsTested, equals(100));
     expect(res.latestRuleBreakdown, isNotEmpty);
+  });
+
+  test('MarketHoursService marks Crypto open 24/7 and Forex/Stocks closed on Saturday', () {
+    final saturdayUtc = DateTime.utc(2026, 11, 14, 15, 0); // Saturday
+    final mondayNyOpenUtc = DateTime.utc(2026, 11, 16, 15, 0); // Monday
+
+    expect(MarketHoursService.getStatus('BTCUSDT', nowUtc: saturdayUtc).isOpen, isTrue);
+    expect(MarketHoursService.getStatus('EURUSD', nowUtc: saturdayUtc).isOpen, isFalse);
+    expect(MarketHoursService.getStatus('AAPL', nowUtc: saturdayUtc).isOpen, isFalse);
+
+    expect(MarketHoursService.getStatus('EURUSD', nowUtc: mondayNyOpenUtc).isOpen, isTrue);
+    expect(MarketHoursService.getStatus('AAPL', nowUtc: mondayNyOpenUtc).isOpen, isTrue);
   });
 }

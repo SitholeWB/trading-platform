@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
+import '../../services/market_hours_service.dart';
 import 'draggable_sync_badge.dart';
 import 'trading_chart_painter.dart';
 
@@ -26,6 +27,9 @@ class NativeChartWidget extends StatefulWidget {
   final bool isSyncing;
   final VoidCallback onManualSync;
   final bool showSyncBadge;
+  final int? initialStartIndex;
+  final int? initialVisibleCount;
+  final void Function(int startIndex, int visibleCount)? onViewportChanged;
 
   const NativeChartWidget({
     super.key,
@@ -47,6 +51,9 @@ class NativeChartWidget extends StatefulWidget {
     required this.isSyncing,
     required this.onManualSync,
     this.showSyncBadge = true,
+    this.initialStartIndex,
+    this.initialVisibleCount,
+    this.onViewportChanged,
   });
 
   @override
@@ -63,6 +70,20 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
   int? _draggingHandleIndex;
   (int, double)? _dragLastDataPoint;
   double _panAccum = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialVisibleCount != null && widget.initialVisibleCount! >= 15) {
+      _visibleCount = widget.initialVisibleCount!;
+    }
+    if (widget.initialStartIndex != null && widget.initialStartIndex! >= 0) {
+      _startIndex = widget.initialStartIndex!;
+    } else if (widget.candles.isNotEmpty) {
+      _startIndex = math.max(0, widget.candles.length - _visibleCount);
+    }
+    _clampViewport();
+  }
 
   @override
   void didUpdateWidget(covariant NativeChartWidget oldWidget) {
@@ -86,6 +107,7 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
       _visibleCount = math.min(110, math.max(20, widget.candles.length));
       _startIndex = math.max(0, widget.candles.length - _visibleCount);
     });
+    widget.onViewportChanged?.call(_startIndex, _visibleCount);
   }
 
   void _clampViewport() {
@@ -314,6 +336,7 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                       _startIndex = (_startIndex + (oldCount - _visibleCount))
                           .clamp(0, math.max(0, widget.candles.length - _visibleCount));
                     });
+                    widget.onViewportChanged?.call(_startIndex, _visibleCount);
                   }
                 },
                 child: MouseRegion(
@@ -476,6 +499,8 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                           _startIndex =
                               (_startIndex - barsShift).clamp(0, maxStart);
                         });
+                        widget.onViewportChanged
+                            ?.call(_startIndex, _visibleCount);
                       }
                     },
                     onPanEnd: (_) {
@@ -528,6 +553,8 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                             secondsUntilSync: widget.secondsUntilSync,
                             isSyncing: widget.isSyncing,
                             onManualSync: widget.onManualSync,
+                            marketStatus:
+                                MarketHoursService.getStatus(widget.symbol),
                           ),
                       ],
                     ),

@@ -46,6 +46,18 @@ class StorageService {
   String lastBackupTarget = '';
   void Function()? onSaved;
 
+  // Session & Window Restore ("Continue where you left off")
+  String activePageName = 'dashboard';
+  bool isCopilotOpen = false;
+  bool isCopilotExpanded = false;
+  int chartStartIndex = -1;
+  int chartVisibleCount = 90;
+  double? windowX;
+  double? windowY;
+  double? windowWidth;
+  double? windowHeight;
+  bool isWindowMaximized = false;
+
   AccountSummary account = const AccountSummary(
     balance: 100000.0,
     equity: 100000.0,
@@ -124,6 +136,17 @@ class StorageService {
             data['autoSyncWebDavEnabled'] as bool? ?? false;
         lastBackupAtMs = data['lastBackupAtMs'] as int? ?? 0;
         lastBackupTarget = data['lastBackupTarget'] as String? ?? '';
+        activePageName = data['activePageName'] as String? ?? 'dashboard';
+        isCopilotOpen = data['isCopilotOpen'] as bool? ?? false;
+        isCopilotExpanded = data['isCopilotExpanded'] as bool? ?? false;
+        chartStartIndex = data['chartStartIndex'] as int? ?? -1;
+        chartVisibleCount =
+            (data['chartVisibleCount'] as int? ?? 90).clamp(15, 500);
+        windowX = (data['windowX'] as num?)?.toDouble();
+        windowY = (data['windowY'] as num?)?.toDouble();
+        windowWidth = (data['windowWidth'] as num?)?.toDouble();
+        windowHeight = (data['windowHeight'] as num?)?.toDouble();
+        isWindowMaximized = data['isWindowMaximized'] as bool? ?? false;
 
         _applyCoreData(data);
       } catch (_) {
@@ -244,6 +267,16 @@ class StorageService {
         'drawingsBySymbol': drawingsBySymbol.map(
           (k, v) => MapEntry(k, v.map((d) => d.toJson()).toList()),
         ),
+        'activePageName': activePageName,
+        'isCopilotOpen': isCopilotOpen,
+        'isCopilotExpanded': isCopilotExpanded,
+        'chartStartIndex': chartStartIndex,
+        'chartVisibleCount': chartVisibleCount,
+        if (windowX != null) 'windowX': windowX,
+        if (windowY != null) 'windowY': windowY,
+        if (windowWidth != null) 'windowWidth': windowWidth,
+        if (windowHeight != null) 'windowHeight': windowHeight,
+        'isWindowMaximized': isWindowMaximized,
       };
       await _stateFile.writeAsString(jsonEncode(payload));
       onSaved?.call();
@@ -313,7 +346,7 @@ class StorageService {
     return {
       'format': 'trading-platform-backup',
       'schemaVersion': 1,
-      'appVersion': '3.0.2',
+      'appVersion': '3.1.0',
       'exportedAtMs': DateTime.now().millisecondsSinceEpoch,
       'exportedAtUtc': DateTime.now().toUtc().toIso8601String(),
       'includesSecrets': withSecrets,

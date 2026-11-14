@@ -1,6 +1,6 @@
 name: trading-platform
 base: core24
-version: '3.0.2'
+version: '3.1.0'
 summary: Algorithmic Trading Platform, Live Charts & AI Copilot
 description: |
   Trading Platform is a native desktop algorithmic trading terminal featuring

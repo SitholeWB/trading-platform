@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import '../../services/localization_service.dart';
+import '../../services/market_hours_service.dart';
 
 class DraggableSyncBadge extends StatefulWidget {
   final int secondsUntilSync;
   final bool isSyncing;
   final VoidCallback onManualSync;
+  final MarketSessionStatus? marketStatus;
 
   const DraggableSyncBadge({
     super.key,
     required this.secondsUntilSync,
     required this.isSyncing,
     required this.onManualSync,
+    this.marketStatus,
   });
 
   @override
@@ -22,9 +25,14 @@ class _DraggableSyncBadgeState extends State<DraggableSyncBadge> {
 
   @override
   Widget build(BuildContext context) {
-    final isUrgent = widget.secondsUntilSync <= 5;
-    final accent =
-        isUrgent ? const Color(0xFFF59E0B) : const Color(0xFF10B981);
+    final isClosed =
+        widget.marketStatus != null && !widget.marketStatus!.isOpen;
+    final isUrgent = !isClosed && widget.secondsUntilSync <= 5;
+    final accent = isClosed
+        ? const Color(0xFF94A3B8)
+        : isUrgent
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFF10B981);
 
     return Positioned(
       right: _offset.dx,
@@ -71,7 +79,9 @@ class _DraggableSyncBadgeState extends State<DraggableSyncBadge> {
                 Text(
                   widget.isSyncing
                       ? AppL10n.tr('chart.refreshing', 'Refreshing...')
-                      : '${AppL10n.tr('chart.refreshIn', 'Refresh in')} ${widget.secondsUntilSync}s',
+                      : isClosed
+                          ? widget.marketStatus!.compactBadgeText
+                          : '${AppL10n.tr('chart.refreshIn', 'Refresh in')} ${widget.secondsUntilSync}s',
                   style: const TextStyle(
                     fontSize: 11,
                     fontFamily: 'monospace',
