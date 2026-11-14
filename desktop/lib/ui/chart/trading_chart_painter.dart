@@ -15,6 +15,8 @@ class TradingChartPainter extends CustomPainter {
   final String? selectedDrawingId;
   final int startIndex;
   final int visibleCount;
+  final double priceOffset;
+  final double priceScale;
   final Offset? crosshairPos;
   final int timezoneOffsetHours;
   final bool isDark;
@@ -31,6 +33,8 @@ class TradingChartPainter extends CustomPainter {
     this.selectedDrawingId,
     required this.startIndex,
     required this.visibleCount,
+    this.priceOffset = 0.0,
+    this.priceScale = 1.0,
     this.crosshairPos,
     required this.timezoneOffsetHours,
     required this.isDark,
@@ -102,6 +106,13 @@ class TradingChartPainter extends CustomPainter {
     final pad = (maxP - minP) * 0.08;
     minP -= pad;
     maxP += pad;
+
+    if (priceOffset != 0.0 || priceScale != 1.0) {
+      final mid = (minP + maxP) * 0.5;
+      final halfSpan = ((maxP - minP) * 0.5) / priceScale.clamp(0.15, 8.0);
+      minP = (mid + priceOffset) - halfSpan;
+      maxP = (mid + priceOffset) + halfSpan;
+    }
 
     double priceToY(double p) =>
         chartH - ((p - minP) / (maxP - minP)) * chartH;

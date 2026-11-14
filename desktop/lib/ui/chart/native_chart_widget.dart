@@ -70,6 +70,10 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
   int? _draggingHandleIndex;
   (int, double)? _dragLastDataPoint;
   double _panAccum = 0;
+  double _priceOffset = 0.0;
+  double _priceScale = 1.0;
+  bool _isScalingPriceAxis = false;
+  bool _isHoveringPriceAxis = false;
 
   @override
   void initState() {
@@ -106,6 +110,8 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
     setState(() {
       _visibleCount = math.min(110, math.max(20, widget.candles.length));
       _startIndex = math.max(0, widget.candles.length - _visibleCount);
+      _priceOffset = 0.0;
+      _priceScale = 1.0;
     });
     widget.onViewportChanged?.call(_startIndex, _visibleCount);
   }
@@ -142,7 +148,15 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
       minP -= minP * 0.01 + 1e-6;
     }
     final pad = (maxP - minP) * 0.08;
-    return (minP - pad, maxP + pad);
+    double lo = minP - pad;
+    double hi = maxP + pad;
+    if (_priceOffset != 0.0 || _priceScale != 1.0) {
+      final mid = (lo + hi) * 0.5;
+      final halfSpan = ((hi - lo) * 0.5) / _priceScale.clamp(0.15, 8.0);
+      lo = (mid + _priceOffset) - halfSpan;
+      hi = (mid + _priceOffset) + halfSpan;
+    }
+    return (lo, hi);
   }
 
   (int timeSec, double price)? _offsetToData(Offset pos, Size size) {
@@ -340,12 +354,15 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                   }
                 },
                 child: MouseRegion(
-                  cursor: widget.activeTool == DrawingTool.cursor
-                      ? SystemMouseCursors.precise
-                      : SystemMouseCursors.click,
+                  cursor: _isHoveringPriceAxis || _isScalingPriceAxis
+                      ? SystemMouseCursors.resizeUpDown
+                      : widget.activeTool == DrawingTool.cursor
+                          ? SystemMouseCursors.precise
+                          : SystemMouseCursors.click,
                   onHover: (e) {
                     final chartW = math.max(
                         10.0, size.width - TradingChartPainter.rightAxisWidth);
+                    final onAxis = e.localPosition.dx >= chartW;
                     final safeStart = _startIndex
                         .clamp(0, math.max(0, widget.candles.length - 1))
                         .toInt();
@@ -357,15 +374,28 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                         .floor()
                         .clamp(0, sliceLen - 1);
                     setState(() {
-                      _crosshair = e.localPosition;
-                      _hoveredIndex = (safeStart + localIdx).toInt();
+                      _isHoveringPriceAxis = onAxis;
+                      _crosshair = onAxis ? null : e.localPosition;
+                      _hoveredIndex =
+                          onAxis ? null : (safeStart + localIdx).toInt();
                     });
                   },
                   onExit: (_) => setState(() {
+                    _isHoveringPriceAxis = false;
                     _crosshair = null;
                     _hoveredIndex = null;
                   }),
                   child: GestureDetector(
+                    onDoubleTapDown: (details) {
+                      final chartW = math.max(10.0,
+                          size.width - TradingChartPainter.rightAxisWidth);
+                      if (details.localPosition.dx >= chartW) {
+                        setState(() {
+                          _priceOffset = 0.0;
+                          _priceScale = 1.0;
+                        });
+                      }
+                    },
                     onTapDown: (details) async {
                       if (widget.activeTool == DrawingTool.cursor) {
                         final hit = _hitTestDrawing(details.localPosition, size);
@@ -399,6 +429,13 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                       }
                     },
                     onPanStart: (details) {
+                      final chartW = math.max(10.0,
+                          size.width - TradingChartPainter.rightAxisWidth);
+                      if (widget.activeTool == DrawingTool.cursor &&
+                          details.localPosition.dx >= chartW) {
+                        setState(() => _isScalingPriceAxis = true);
+                        return;
+                      }
                       if (widget.activeTool == DrawingTool.cursor) {
                         final hit = _hitTestDrawing(details.localPosition, size);
                         if (hit != null && widget.onUpdateDrawing != null) {
@@ -486,24 +523,54 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                         return;
                       }
                       if (widget.candles.isEmpty) return;
+                      if (_isScalingPriceAxis) {
+                        setState(() {
+                          _priceScale = (_priceScale *
+                                  math.exp(-details.delta.dy * 0.008))
+                              .clamp(0.15, 8.0);
+                        });
+                        return;
+                      }
                       final chartW = math.max(
                           10.0, size.width - TradingChartPainter.rightAxisWidth);
+                      final chartH = math.max(
+                          10.0, size.height - TradingChartPainter.bottomAxisHeight);
                       final stepPx = chartW / math.max(1, _visibleCount);
                       _panAccum += details.delta.dx;
                       final barsShift = (_panAccum / stepPx).truncate();
-                      if (barsShift != 0) {
-                        _panAccum -= barsShift * stepPx;
-                        setState(() {
+                      bool changedViewport = false;
+                      setState(() {
+                        if (barsShift != 0) {
+                          _panAccum -= barsShift * stepPx;
                           final maxStart = math.max(
                               0, widget.candles.length - _visibleCount);
                           _startIndex =
                               (_startIndex - barsShift).clamp(0, maxStart);
-                        });
+                          changedViewport = true;
+                        }
+                        if (details.delta.dy != 0) {
+                          final safeStart = _startIndex
+                              .clamp(0, math.max(0, widget.candles.length - 1))
+                              .toInt();
+                          final safeEnd = (safeStart + _visibleCount)
+                              .clamp(safeStart + 1, widget.candles.length)
+                              .toInt();
+                          final slice =
+                              widget.candles.sublist(safeStart, safeEnd);
+                          if (slice.isNotEmpty) {
+                            final (lo, hi) = _priceBounds(slice);
+                            _priceOffset +=
+                                (details.delta.dy / chartH) * (hi - lo);
+                          }
+                        }
+                      });
+                      if (changedViewport) {
                         widget.onViewportChanged
                             ?.call(_startIndex, _visibleCount);
                       }
                     },
                     onPanEnd: (_) {
+                      _isScalingPriceAxis = false;
                       _draggingHandleIndex = null;
                       _dragLastDataPoint = null;
                       if (_draftDrawing != null) {
@@ -532,6 +599,8 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                             selectedDrawingId: _selectedDrawingId,
                             startIndex: _startIndex,
                             visibleCount: _visibleCount,
+                            priceOffset: _priceOffset,
+                            priceScale: _priceScale,
                             crosshairPos: _crosshair,
                             timezoneOffsetHours: widget.timezoneOffsetHours,
                             isDark: isDark,
@@ -561,6 +630,39 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                   ),
                 ),
               ),
+                  if (_priceOffset != 0.0 || _priceScale != 1.0)
+                    Positioned(
+                      bottom: 34,
+                      right: 94,
+                      child: Material(
+                        color: const Color(0xFF0F172A).withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(6),
+                        child: InkWell(
+                          onTap: () => setState(() {
+                            _priceOffset = 0.0;
+                            _priceScale = 1.0;
+                          }),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.16)),
+                            ),
+                            child: const Text(
+                              'Auto Scale',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF38BDF8),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   if (_selectedDrawingId != null &&
                       widget.drawings
                           .any((d) => d.id == _selectedDrawingId))
