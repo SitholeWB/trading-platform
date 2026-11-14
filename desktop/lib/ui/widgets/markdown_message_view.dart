@@ -39,7 +39,9 @@ class MarkdownMessageView extends StatelessWidget {
           1 => baseFontSize + 5,
           2 => baseFontSize + 3.5,
           3 => baseFontSize + 2,
-          _ => baseFontSize + 1,
+          4 => baseFontSize + 1,
+          5 => baseFontSize + 0.5,
+          _ => baseFontSize,
         };
         return Padding(
           padding: const EdgeInsets.only(top: 4, bottom: 2),
@@ -50,7 +52,11 @@ class MarkdownMessageView extends StatelessWidget {
                 TextStyle(
                   fontSize: size,
                   fontWeight: FontWeight.bold,
-                  color: textColor,
+                  color: block.level >= 5
+                      ? (isDark
+                          ? const Color(0xFF38BDF8)
+                          : const Color(0xFF0284C7))
+                      : textColor,
                   height: 1.35,
                 ),
                 isDark,
@@ -308,8 +314,8 @@ class MarkdownMessageView extends StatelessWidget {
         continue;
       }
 
-      // Heading
-      final hMatch = RegExp(r'^(#{1,4})\s+(.+)$').firstMatch(trimmed);
+      // Heading (H1 - H6)
+      final hMatch = RegExp(r'^(#{1,6})\s+(.+)$').firstMatch(trimmed);
       if (hMatch != null) {
         blocks.add(_MdBlock(
           type: _MdBlockType.heading,
@@ -322,21 +328,21 @@ class MarkdownMessageView extends StatelessWidget {
 
       // Table (| col | col |)
       if (trimmed.startsWith('|') &&
-          trimmed.endsWith('|') &&
           i + 1 < lines.length &&
-          RegExp(r'^\|[\s:-]+\|').hasMatch(lines[i + 1].trim())) {
+          RegExp(r'^\|?[\s:|-]+\|').hasMatch(lines[i + 1].trim())) {
         final rows = <List<String>>[];
         List<String> splitRow(String row) {
-          final inner = row.trim();
-          final stripped = inner.substring(1, inner.length - 1);
-          return stripped.split('|').map((c) => c.trim()).toList();
+          var inner = row.trim();
+          if (inner.startsWith('|')) inner = inner.substring(1);
+          if (inner.endsWith('|')) inner = inner.substring(0, inner.length - 1);
+          return inner.split('|').map((c) => c.trim()).toList();
         }
 
         rows.add(splitRow(trimmed));
         i += 2; // skip header + separator
         while (i < lines.length) {
           final r = lines[i].trim();
-          if (r.startsWith('|') && r.endsWith('|')) {
+          if (r.startsWith('|')) {
             rows.add(splitRow(r));
             i++;
           } else {
@@ -361,19 +367,24 @@ class MarkdownMessageView extends StatelessWidget {
         continue;
       }
 
-      // Bullet or numbered list item
+      // Bullet, task, or numbered list item
       final bulletMatch =
-          RegExp(r'^(\s*)([-*•]|\d+\.)\s+(.+)$').firstMatch(line);
+          RegExp(r'^(\s*)([-*+•]|\d+\.)\s+(\[[ xX]\]\s+)?(.+)$')
+              .firstMatch(line);
       if (bulletMatch != null) {
         final indent = (bulletMatch.group(1)!.length / 2).floor().clamp(0, 3);
         final rawMarker = bulletMatch.group(2)!;
-        final marker =
-            (rawMarker == '-' || rawMarker == '*') ? '•' : rawMarker;
+        final task = bulletMatch.group(3);
+        final marker = task != null
+            ? (task.toLowerCase().contains('x') ? '☑' : '☐')
+            : ((rawMarker == '-' || rawMarker == '*' || rawMarker == '+')
+                ? '•'
+                : rawMarker);
         blocks.add(_MdBlock(
           type: _MdBlockType.bulletItem,
           level: indent,
           marker: marker,
-          text: bulletMatch.group(3)!.trim(),
+          text: bulletMatch.group(4)!.trim(),
         ));
         i++;
         continue;
@@ -386,11 +397,11 @@ class MarkdownMessageView extends StatelessWidget {
         final curT = cur.trim();
         if (curT.isEmpty ||
             curT.startsWith('```') ||
-            curT.startsWith('#') ||
+            RegExp(r'^#{1,6}\s+').hasMatch(curT) ||
             curT.startsWith('>') ||
-            RegExp(r'^(\s*)([-*•]|\d+\.)\s+').hasMatch(cur) ||
+            RegExp(r'^(\s*)([-*+•]|\d+\.)\s+').hasMatch(cur) ||
             RegExp(r'^(-{3,}|\*{3,}|_{3,})$').hasMatch(curT) ||
-            (curT.startsWith('|') && curT.endsWith('|'))) {
+            curT.startsWith('|')) {
           break;
         }
         pLines.add(curT);
@@ -418,7 +429,7 @@ class MarkdownMessageView extends StatelessWidget {
   ) {
     final spans = <InlineSpan>[];
     final pattern = RegExp(
-      r'(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|_[^_\n]+_|\[[^\]]+\]\([^)]+\))',
+      r'(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*\n]+\*|_[^_\n]+_|\[[^\]]+\]\([^)]+\))',
     );
     int lastEnd = 0;
 
@@ -459,17 +470,32 @@ class MarkdownMessageView extends StatelessWidget {
             ),
           ),
         ));
+      } else if (token.startsWith('***') && token.endsWith('***')) {
+        spans.addAll(_parseInline(
+          token.substring(3, token.length - 3),
+          baseStyle.copyWith(
+              fontWeight: FontWeight.bold, fontStyle: FontStyle.italic),
+          isDark,
+        ));
       } else if ((token.startsWith('**') && token.endsWith('**')) ||
           (token.startsWith('__') && token.endsWith('__'))) {
-        spans.add(TextSpan(
-          text: token.substring(2, token.length - 2),
-          style: baseStyle.copyWith(fontWeight: FontWeight.bold),
+        spans.addAll(_parseInline(
+          token.substring(2, token.length - 2),
+          baseStyle.copyWith(fontWeight: FontWeight.bold),
+          isDark,
+        ));
+      } else if (token.startsWith('~~') && token.endsWith('~~')) {
+        spans.addAll(_parseInline(
+          token.substring(2, token.length - 2),
+          baseStyle.copyWith(decoration: TextDecoration.lineThrough),
+          isDark,
         ));
       } else if ((token.startsWith('*') && token.endsWith('*')) ||
           (token.startsWith('_') && token.endsWith('_'))) {
-        spans.add(TextSpan(
-          text: token.substring(1, token.length - 1),
-          style: baseStyle.copyWith(fontStyle: FontStyle.italic),
+        spans.addAll(_parseInline(
+          token.substring(1, token.length - 1),
+          baseStyle.copyWith(fontStyle: FontStyle.italic),
+          isDark,
         ));
       } else if (token.startsWith('[')) {
         final linkMatch = RegExp(r'^\[([^\]]+)\]\(([^)]+)\)$').firstMatch(token);
