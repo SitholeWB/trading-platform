@@ -27,6 +27,11 @@ mkdir -p "$STAGE_DIR/usr/share/applications"
 
 cp -a "$BUNDLE_DIR"/. "$STAGE_DIR/opt/trading-platform/"
 chmod +x "$STAGE_DIR/opt/trading-platform/trading_platform"
+for lib in libcef.so libGLESv2.so libvk_swiftshader.so libvulkan.so.1 libEGL.so libflutter_linux_gtk.so libwebview_cef_plugin.so; do
+  if [[ -f "$STAGE_DIR/opt/trading-platform/lib/$lib" ]]; then
+    strip --strip-unneeded "$STAGE_DIR/opt/trading-platform/lib/$lib" || true
+  fi
+done
 
 cat > "$STAGE_DIR/usr/bin/trading-platform" <<'EOF'
 #!/usr/bin/env bash

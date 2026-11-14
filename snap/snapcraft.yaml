@@ -59,6 +59,12 @@ parts:
       - xclip
     override-prime: |
       craftctl default
+      # Strip 1.1+ GB of debug symbols from bundled CEF/ANGLE/SwiftShader/GTK libs
+      for lib in libcef.so libGLESv2.so libvk_swiftshader.so libvulkan.so.1 libEGL.so libflutter_linux_gtk.so libwebview_cef_plugin.so; do
+        if [ -f "$CRAFT_PRIME/opt/trading-platform/lib/$lib" ]; then
+          strip --strip-unneeded "$CRAFT_PRIME/opt/trading-platform/lib/$lib" || true
+        fi
+      done
       mkdir -p "$CRAFT_PRIME/bin"
       cat > "$CRAFT_PRIME/bin/launch-trading-platform" <<'EOF'
       #!/usr/bin/env bash
