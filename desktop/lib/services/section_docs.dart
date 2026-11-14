@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'localization_service.dart';
+import 'section_docs_l10n.dart';
 
 class SectionDoc {
   final String id;
@@ -170,10 +172,27 @@ Switch seamlessly between the **Native GPU Bot Chart** and the embedded **Tradin
     ),
   ];
 
-  static SectionDoc forSectionId(String id) {
-    return all.firstWhere(
+  static List<SectionDoc> allForLanguage(String languageCode) {
+    final map = kSectionDocsL10n[languageCode];
+    if (map == null) return all;
+    return all.map((doc) {
+      final loc = map[doc.id];
+      if (loc == null) return doc;
+      return SectionDoc(
+        id: doc.id,
+        title: loc.title,
+        category: AppL10n.t(languageCode, loc.categoryKey, doc.category),
+        icon: doc.icon,
+        markdown: loc.markdown,
+      );
+    }).toList();
+  }
+
+  static SectionDoc forSectionId(String id, {String languageCode = 'en'}) {
+    final list = allForLanguage(languageCode);
+    return list.firstWhere(
       (d) => d.id == id,
-      orElse: () => all.first,
+      orElse: () => list.first,
     );
   }
 }

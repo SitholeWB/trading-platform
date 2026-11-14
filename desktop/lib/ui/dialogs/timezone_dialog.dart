@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../services/localization_service.dart';
 
 import 'package:flutter/material.dart';
 
@@ -111,14 +112,20 @@ class _TimezoneSelectorDialogState extends State<TimezoneSelectorDialog> {
                 children: [
                   const Icon(Icons.public, size: 20, color: Color(0xFF3B82F6)),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Platform Timezone & Market Sessions',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                        Text('Applies to charts, TradingView Live, and audit timestamps',
-                            style: TextStyle(fontSize: 11, color: Colors.white60)),
+                        Text(
+                            AppL10n.tr('tz.title',
+                                'Platform Timezone & Market Sessions'),
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w700)),
+                        Text(
+                            AppL10n.tr('tz.subtitle',
+                                'Applies to charts, TradingView Live, and audit timestamps'),
+                            style: const TextStyle(
+                                fontSize: 11, color: Colors.white60)),
                       ],
                     ),
                   ),
@@ -152,9 +159,10 @@ class _TimezoneSelectorDialogState extends State<TimezoneSelectorDialog> {
               TextField(
                 controller: _searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  hintText: 'Search city, region, or IANA timezone (e.g. Johannesburg, New_York)...',
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  hintText: AppL10n.tr('tz.searchHint',
+                      'Search city, region, or IANA timezone (e.g. Johannesburg, New_York)...'),
                   isDense: true,
                 ),
                 onChanged: (v) => setState(() => _query = v),

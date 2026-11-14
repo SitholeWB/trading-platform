@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
+import '../../services/localization_service.dart';
 
 class AuditRadarPage extends StatefulWidget {
   final List<SignalAuditLog> logs;
@@ -52,25 +53,26 @@ class _AuditRadarPageState extends State<AuditRadarPage> {
               const Icon(Icons.track_changes,
                   size: 20, color: Color(0xFFF59E0B)),
               const SizedBox(width: 8),
-              const Text(
-                'Near-Miss & Signal Audit Radar',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              Text(
+                AppL10n.tr('radar.title', 'Near-Miss & Signal Audit Radar'),
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               if (widget.onEvaluateAll != null) ...[
                 FilledButton.icon(
                   onPressed: widget.onEvaluateAll,
                   icon: const Icon(Icons.play_arrow, size: 16),
-                  label: const Text('Evaluate All Active'),
+                  label: Text(AppL10n.tr('radar.evalAll', 'Evaluate All Active')),
                 ),
                 const SizedBox(width: 10),
               ],
               SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'ALL', label: Text('All')),
-                  ButtonSegment(value: 'EXECUTED', label: Text('Executed')),
-                  ButtonSegment(value: 'NEARMISS', label: Text('Near-Miss')),
-                  ButtonSegment(value: 'REJECTED', label: Text('Rejected')),
+                segments: [
+                  ButtonSegment(value: 'ALL', label: Text(AppL10n.tr('radar.all', 'All'))),
+                  ButtonSegment(value: 'EXECUTED', label: Text(AppL10n.tr('radar.executed', 'Executed'))),
+                  ButtonSegment(value: 'NEARMISS', label: Text(AppL10n.tr('radar.nearMissLabel', 'Near-Miss'))),
+                  ButtonSegment(value: 'REJECTED', label: Text(AppL10n.tr('radar.rejected', 'Rejected'))),
                 ],
                 selected: {_filter},
                 onSelectionChanged: (s) => setState(() => _filter = s.first),
@@ -82,33 +84,35 @@ class _AuditRadarPageState extends State<AuditRadarPage> {
             spacing: 10,
             runSpacing: 8,
             children: [
-              _statChip('Total Audits', '${widget.logs.length}',
-                  const Color(0xFF38BDF8)),
-              _statChip(
-                  'Executed', '$executedCount', const Color(0xFF10B981)),
-              _statChip(
-                  'Near-Misses', '$nearMissCount', const Color(0xFFF59E0B)),
-              _statChip('Avg Match', '${avgScore.toStringAsFixed(0)}%',
-                  const Color(0xFFA855F7)),
+              _statChip(AppL10n.tr('radar.totalAudits', 'Total Audits'),
+                  '${widget.logs.length}', const Color(0xFF38BDF8)),
+              _statChip(AppL10n.tr('radar.executed', 'Executed'),
+                  '$executedCount', const Color(0xFF10B981)),
+              _statChip(AppL10n.tr('radar.nearMisses', 'Near-Misses'),
+                  '$nearMissCount', const Color(0xFFF59E0B)),
+              _statChip(AppL10n.tr('radar.avgMatch', 'Avg Match'),
+                  '${avgScore.toStringAsFixed(0)}%', const Color(0xFFA855F7)),
             ],
           ),
           const SizedBox(height: 10),
           TextField(
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search, size: 18),
-              hintText: 'Filter audit logs by symbol, strategy, or reason...',
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search, size: 18),
+              hintText: AppL10n.tr('radar.filterHint',
+                  'Filter audit logs by symbol, strategy, or reason...'),
               isDense: true,
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
             ),
             onChanged: (v) => setState(() => _query = v),
           ),
           const SizedBox(height: 12),
           Expanded(
             child: filtered.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'No audit logs match this filter yet.',
-                      style: TextStyle(color: Colors.grey),
+                      AppL10n.tr(
+                          'radar.noMatch', 'No audit logs match this filter yet.'),
+                      style: const TextStyle(color: Colors.grey),
                     ),
                   )
                 : Card(
@@ -126,7 +130,7 @@ class _AuditRadarPageState extends State<AuditRadarPage> {
                           leading: Chip(
                             backgroundColor: color.withValues(alpha: 0.16),
                             label: Text(
-                              log.outcome,
+                              AppL10n.enumTerm(log.outcome),
                               style: TextStyle(
                                 color: color,
                                 fontWeight: FontWeight.bold,
@@ -147,14 +151,14 @@ class _AuditRadarPageState extends State<AuditRadarPage> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    '${log.direction} @ ${IndicatorEngine.formatPrice(log.price, log.symbol)}',
+                                    '${AppL10n.enumTerm(log.direction)} @ ${IndicatorEngine.formatPrice(log.price, log.symbol)}',
                                     style: const TextStyle(
                                       fontFamily: 'monospace',
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                   Text(
-                                    'Match: ${log.matchScore.toStringAsFixed(0)}%',
+                                    '${AppL10n.tr('radar.match', 'Match')}: ${log.matchScore.toStringAsFixed(0)}%',
                                     style: const TextStyle(
                                         fontSize: 11, color: Colors.grey),
                                   ),
@@ -165,7 +169,7 @@ class _AuditRadarPageState extends State<AuditRadarPage> {
                                 OutlinedButton(
                                   onPressed: () => widget.onOpenChart!(
                                       log.symbol, log.timeframe),
-                                  child: const Text('Chart'),
+                                  child: Text(AppL10n.tr('scan.chart', 'Chart')),
                                 ),
                               ],
                             ],

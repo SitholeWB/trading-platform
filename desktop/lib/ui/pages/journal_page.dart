@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
+import '../../services/localization_service.dart';
 import '../../services/symbol_catalog.dart';
 import '../widgets/markdown_message_view.dart';
 
@@ -206,12 +207,12 @@ class JournalPage extends StatefulWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
+              child: Text(AppL10n.tr('common.cancel', 'Cancel')),
             ),
             FilledButton.icon(
               onPressed: () => Navigator.of(ctx).pop(true),
               icon: const Icon(Icons.save, size: 16),
-              label: const Text('Save Note'),
+              label: Text(AppL10n.tr('journal.saveNote', 'Save Note')),
             ),
           ],
         ),
@@ -459,11 +460,11 @@ class _JournalPageState extends State<JournalPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
+              child: Text(AppL10n.tr('common.cancel', 'Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Save'),
+              child: Text(AppL10n.tr('common.save', 'Save')),
             ),
           ],
         ),
@@ -503,16 +504,17 @@ class _JournalPageState extends State<JournalPage> {
           Row(
             children: [
               SegmentedButton<int>(
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: 0,
-                    icon: Icon(Icons.notes, size: 16),
-                    label: Text('Journal Notes'),
+                    icon: const Icon(Icons.notes, size: 16),
+                    label: Text(AppL10n.tr('journal.notesTab', 'Journal Notes')),
                   ),
                   ButtonSegment(
                     value: 1,
-                    icon: Icon(Icons.rate_review_outlined, size: 16),
-                    label: Text('Trade Reviews & Tag Stats'),
+                    icon: const Icon(Icons.rate_review_outlined, size: 16),
+                    label: Text(AppL10n.tr(
+                        'journal.reviewsTab', 'Trade Reviews & Tag Stats')),
                   ),
                 ],
                 selected: {_tabIndex},
@@ -522,7 +524,7 @@ class _JournalPageState extends State<JournalPage> {
               FilledButton.icon(
                 onPressed: () => _startInlineEditor(),
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('New Note'),
+                label: Text(AppL10n.tr('journal.newNote', 'New Note')),
               ),
             ],
           ),
@@ -561,10 +563,11 @@ class _JournalPageState extends State<JournalPage> {
                 children: [
                   TextField(
                     onChanged: (v) => setState(() => _search = v.trim()),
-                    decoration: const InputDecoration(
-                      hintText: 'Search notes...',
-                      prefixIcon: Icon(Icons.search, size: 16),
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: AppL10n.tr(
+                          'journal.searchHint', 'Search notes...'),
+                      prefixIcon: const Icon(Icons.search, size: 16),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -572,9 +575,10 @@ class _JournalPageState extends State<JournalPage> {
                   DropdownButtonFormField<String>(
                     initialValue: _filterTag,
                     isDense: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Filter by Tag',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText:
+                          AppL10n.tr('journal.filterTag', 'Filter by Tag'),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                     items: ['All', ...JournalPage.tags]
@@ -729,7 +733,7 @@ class _JournalPageState extends State<JournalPage> {
                             FilledButton.icon(
                               onPressed: () => _startInlineEditor(),
                               icon: const Icon(Icons.add, size: 16),
-                              label: const Text('Write First Note'),
+                              label: Text(AppL10n.tr('journal.writeFirst', 'Write First Note')),
                             ),
                           ],
                         ),
@@ -761,7 +765,7 @@ class _JournalPageState extends State<JournalPage> {
                 OutlinedButton.icon(
                   onPressed: () => _startInlineEditor(e),
                   icon: const Icon(Icons.edit_outlined, size: 16),
-                  label: const Text('Edit'),
+                  label: Text(AppL10n.tr('common.edit', 'Edit')),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
@@ -862,10 +866,16 @@ class _JournalPageState extends State<JournalPage> {
                 ),
                 const Spacer(),
                 SegmentedButton<int>(
-                  segments: const [
-                    ButtonSegment(value: 0, label: Text('Write')),
-                    ButtonSegment(value: 1, label: Text('Split')),
-                    ButtonSegment(value: 2, label: Text('Preview')),
+                  segments: [
+                    ButtonSegment(
+                        value: 0,
+                        label: Text(AppL10n.tr('journal.write', 'Write'))),
+                    ButtonSegment(
+                        value: 1,
+                        label: Text(AppL10n.tr('journal.split', 'Split'))),
+                    ButtonSegment(
+                        value: 2,
+                        label: Text(AppL10n.tr('journal.preview', 'Preview'))),
                   ],
                   selected: {_editorMode},
                   onSelectionChanged: (s) =>
@@ -874,13 +884,13 @@ class _JournalPageState extends State<JournalPage> {
                 const SizedBox(width: 10),
                 TextButton(
                   onPressed: _cancelInlineEditor,
-                  child: const Text('Cancel'),
+                  child: Text(AppL10n.tr('common.cancel', 'Cancel')),
                 ),
                 const SizedBox(width: 6),
                 FilledButton.icon(
                   onPressed: _saveInlineEditor,
                   icon: const Icon(Icons.save_outlined, size: 16),
-                  label: const Text('Save Note'),
+                  label: Text(AppL10n.tr('journal.saveNote', 'Save Note')),
                 ),
               ],
             ),

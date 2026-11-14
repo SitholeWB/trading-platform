@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/localization_service.dart';
 
 class ShortcutsDialog extends StatelessWidget {
   const ShortcutsDialog({super.key});
@@ -6,11 +7,15 @@ class ShortcutsDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shortcuts = [
-      ('Ctrl + K / /', 'Open Symbol Search'),
-      ('Ctrl + /', 'Show Keyboard Shortcuts'),
-      ('1 - 8', 'Switch Navigation Pages'),
-      ('Space', 'Toggle Bot Chart / TradingView Live (on Live Chart)'),
-      ('Esc', 'Close Active Dialog or Drawer'),
+      ('Ctrl + K / /', AppL10n.tr('shortcuts.search', 'Open Symbol Search')),
+      ('Ctrl + /', AppL10n.tr('shortcuts.show', 'Show Keyboard Shortcuts')),
+      ('1 - 8', AppL10n.tr('shortcuts.switchPages', 'Switch Navigation Pages')),
+      (
+        'Space',
+        AppL10n.tr('shortcuts.toggleChart',
+            'Toggle Bot Chart / TradingView Live (on Live Chart)')
+      ),
+      ('Esc', AppL10n.tr('shortcuts.closeDialog', 'Close Active Dialog or Drawer')),
     ];
 
     return Dialog(
@@ -26,9 +31,11 @@ class ShortcutsDialog extends StatelessWidget {
                 children: [
                   const Icon(Icons.keyboard, size: 20, color: Color(0xFF3B82F6)),
                   const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text('Keyboard Shortcuts',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  Expanded(
+                    child: Text(
+                        AppL10n.tr('shortcuts.title', 'Keyboard Shortcuts'),
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w700)),
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),

@@ -1,28 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../services/localization_service.dart';
 
-class LanguageOption {
-  const LanguageOption({
-    required this.code,
-    required this.nativeName,
-    required this.englishName,
-    required this.flag,
-  });
-
-  final String code;
-  final String nativeName;
-  final String englishName;
-  final String flag;
-}
-
-const List<LanguageOption> kSupportedLanguages = [
-  LanguageOption(code: 'en', nativeName: 'English', englishName: 'English', flag: '🇺🇸'),
-  LanguageOption(code: 'es', nativeName: 'Español', englishName: 'Spanish', flag: '🇪🇸'),
-  LanguageOption(code: 'fr', nativeName: 'Français', englishName: 'French', flag: '🇫🇷'),
-  LanguageOption(code: 'de', nativeName: 'Deutsch', englishName: 'German', flag: '🇩🇪'),
-  LanguageOption(code: 'pt', nativeName: 'Português', englishName: 'Portuguese', flag: '🇵🇹'),
-  LanguageOption(code: 'ja', nativeName: '日本語', englishName: 'Japanese', flag: '🇯🇵'),
-  LanguageOption(code: 'zh', nativeName: '中文', englishName: 'Chinese', flag: '🇨🇳'),
-];
+export '../../services/localization_service.dart'
+    show LanguageOption, kSupportedLanguages;
 
 class LanguageSelectorDialog extends StatelessWidget {
   const LanguageSelectorDialog({
@@ -36,9 +16,10 @@ class LanguageSelectorDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeInfo = AppL10n.infoFor(currentLanguage);
     return Dialog(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 500),
+        constraints: const BoxConstraints(maxWidth: 440, maxHeight: 540),
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Column(
@@ -49,14 +30,21 @@ class LanguageSelectorDialog extends StatelessWidget {
                 children: [
                   const Icon(Icons.translate, size: 20, color: Color(0xFF3B82F6)),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Select Platform Language',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                        Text('Interface & TradingView locale preference',
-                            style: TextStyle(fontSize: 11, color: Colors.white60)),
+                        Text(
+                          AppL10n.t(currentLanguage, 'header.changeLanguage',
+                              'Select Platform Language'),
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          '${AppL10n.t(currentLanguage, 'common.language', 'Language')} • ${activeInfo.flag} ${activeInfo.nativeName}',
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.white60),
+                        ),
                       ],
                     ),
                   ),
@@ -100,10 +88,30 @@ class LanguageSelectorDialog extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(lang.nativeName,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w600, fontSize: 13)),
-                                  Text(lang.englishName,
+                                  Row(
+                                    children: [
+                                      Text(lang.nativeName,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600, fontSize: 13)),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 5, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.08),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          lang.code.toUpperCase(),
+                                          style: const TextStyle(
+                                              fontSize: 9.5,
+                                              fontFamily: 'monospace',
+                                              color: Colors.white70),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Text('${lang.englishName} · ${lang.region}',
                                       style: const TextStyle(
                                           fontSize: 11, color: Colors.white60)),
                                 ],

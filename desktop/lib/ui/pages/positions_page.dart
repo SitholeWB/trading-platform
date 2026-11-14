@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
+import '../../services/localization_service.dart';
 import 'journal_page.dart';
 
 class PositionsPage extends StatelessWidget {
@@ -100,11 +101,11 @@ class PositionsPage extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
+              child: Text(AppL10n.tr('common.cancel', 'Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Save Note'),
+              child: Text(AppL10n.tr('journal.saveNote', 'Save Note')),
             ),
           ],
         ),
@@ -125,11 +126,11 @@ class PositionsPage extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.restart_alt, color: Color(0xFF38BDF8)),
-              SizedBox(width: 8),
-              Text('Reset Demo Account'),
+              const Icon(Icons.restart_alt, color: Color(0xFF38BDF8)),
+              const SizedBox(width: 8),
+              Text(AppL10n.tr('pos.resetDemoTitle', 'Reset Demo Account')),
             ],
           ),
           content: SizedBox(
@@ -138,9 +139,10 @@ class PositionsPage extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Choose a starting paper balance. This will clear open/closed positions, reset PnL metrics, and disengage the kill switch.',
-                  style: TextStyle(fontSize: 12.5, color: Colors.grey),
+                Text(
+                  AppL10n.tr('pos.resetDemoDesc',
+                      'Choose a starting paper balance. This will clear open/closed positions, reset PnL metrics, and disengage the kill switch.'),
+                  style: const TextStyle(fontSize: 12.5, color: Colors.grey),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -165,10 +167,11 @@ class PositionsPage extends StatelessWidget {
                   controller: customCtrl,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Starting Balance (USD)',
+                  decoration: InputDecoration(
+                    labelText: AppL10n.tr(
+                        'pos.startingBalance', 'Starting Balance (USD)'),
                     prefixText: '\$ ',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                   onChanged: (v) {
@@ -184,12 +187,13 @@ class PositionsPage extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
+              child: Text(AppL10n.tr('common.cancel', 'Cancel')),
             ),
             FilledButton.icon(
               onPressed: () => Navigator.of(ctx).pop(true),
               icon: const Icon(Icons.check, size: 16),
-              label: const Text('Reset Account'),
+              label:
+                  Text(AppL10n.tr('pos.resetAccountBtn', 'Reset Account')),
             ),
           ],
         ),
@@ -217,23 +221,25 @@ class PositionsPage extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Modify SL / TP · ${p.symbol} (#${p.ticket})'),
+        title: Text(
+            '${AppL10n.tr('pos.modifySlTp', 'Modify SL / TP')} · ${p.symbol} (#${p.ticket})'),
         content: SizedBox(
           width: 340,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '${p.orderType.toUpperCase()} ${p.lots.toStringAsFixed(2)} lots @ ${IndicatorEngine.formatPrice(p.entryPrice, p.symbol)}',
+                '${p.orderType.toUpperCase()} ${p.lots.toStringAsFixed(2)} ${AppL10n.tr('pos.lots', 'lots')} @ ${IndicatorEngine.formatPrice(p.entryPrice, p.symbol)}',
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: slCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Stop Loss Price (blank = none)',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: AppL10n.tr(
+                      'pos.slBlankNone', 'Stop Loss Price (blank = none)'),
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
               ),
@@ -241,9 +247,10 @@ class PositionsPage extends StatelessWidget {
               TextField(
                 controller: tpCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Take Profit Price (blank = none)',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: AppL10n.tr(
+                      'pos.tpBlankNone', 'Take Profit Price (blank = none)'),
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
               ),
@@ -253,11 +260,11 @@ class PositionsPage extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: Text(AppL10n.tr('common.cancel', 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Save'),
+            child: Text(AppL10n.tr('common.save', 'Save')),
           ),
         ],
       ),
@@ -320,7 +327,7 @@ class PositionsPage extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: Text(AppL10n.tr('common.cancel', 'Cancel')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -355,7 +362,7 @@ class PositionsPage extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
-          title: const Text('Edit Risk Guardrails'),
+          title: Text(AppL10n.tr('pos.editGuardrails', 'Edit Risk Guardrails')),
           content: SizedBox(
             width: 380,
             child: Column(
@@ -363,7 +370,9 @@ class PositionsPage extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Expanded(child: Text('Max Daily Drawdown %')),
+                    Expanded(
+                        child: Text(AppL10n.tr(
+                            'pos.maxDailyDdPct', 'Max Daily Drawdown %'))),
                     Text('${maxDd.toStringAsFixed(1)}%',
                         style: const TextStyle(fontFamily: 'monospace')),
                   ],
@@ -377,7 +386,9 @@ class PositionsPage extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    const Expanded(child: Text('Max Risk / Trade %')),
+                    Expanded(
+                        child: Text(AppL10n.tr(
+                            'pos.maxRiskTradePct', 'Max Risk / Trade %'))),
                     Text('${maxRisk.toStringAsFixed(2)}%',
                         style: const TextStyle(fontFamily: 'monospace')),
                   ],
@@ -391,7 +402,9 @@ class PositionsPage extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    const Expanded(child: Text('Max Open Positions')),
+                    Expanded(
+                        child: Text(AppL10n.tr(
+                            'pos.maxOpenPos', 'Max Open Positions'))),
                     Text('$maxPos',
                         style: const TextStyle(fontFamily: 'monospace')),
                   ],
@@ -409,7 +422,7 @@ class PositionsPage extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
+              child: Text(AppL10n.tr('common.cancel', 'Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(
@@ -419,7 +432,7 @@ class PositionsPage extends StatelessWidget {
                   maxOpenPositions: maxPos,
                 ),
               ),
-              child: const Text('Save Guardrails'),
+              child: Text(AppL10n.tr('pos.saveGuardrails', 'Save Guardrails')),
             ),
           ],
         ),
@@ -451,17 +464,20 @@ class PositionsPage extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Text(
-                          'Active Positions & Execution Ledger',
-                          style: TextStyle(
+                        Text(
+                          AppL10n.tr('pos.title',
+                              'Active Positions & Execution Ledger'),
+                          style: const TextStyle(
                               fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(width: 8),
-                        Chip(label: Text('${open.length} Open')),
+                        Chip(
+                            label: Text(
+                                '${open.length} ${AppL10n.tr('dash.open', 'Open')}')),
                         const SizedBox(width: 8),
                         if (open.isNotEmpty)
                           Text(
-                            'Net PnL: ${openPnl >= 0 ? '+' : '-'}\$${openPnl.abs().toStringAsFixed(2)}',
+                            '${AppL10n.tr('pos.netPnl', 'Net PnL')}: ${openPnl >= 0 ? '+' : '-'}\$${openPnl.abs().toStringAsFixed(2)}',
                             style: TextStyle(
                               fontFamily: 'monospace',
                               fontWeight: FontWeight.bold,
@@ -478,26 +494,30 @@ class PositionsPage extends StatelessWidget {
                             ),
                             onPressed: onCloseAllPositions,
                             icon: const Icon(Icons.close_fullscreen, size: 15),
-                            label: const Text('Close All'),
+                            label: Text(AppL10n.tr('pos.closeAll', 'Close All')),
                           ),
                       ],
                     ),
                     const Divider(),
                     Expanded(
                       child: open.isEmpty && closed.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
-                                'No positions yet. Use Quick Trade on the Live Chart or Market Scanner.',
-                                style: TextStyle(color: Colors.grey),
+                                AppL10n.tr('pos.noPositions',
+                                    'No positions yet. Use Quick Trade on the Live Chart or Market Scanner.'),
+                                style: const TextStyle(color: Colors.grey),
                               ),
                             )
                           : ListView(
                               children: [
                                 if (open.isNotEmpty) ...[
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 6),
-                                    child: Text('OPEN POSITIONS',
-                                        style: TextStyle(
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 6),
+                                    child: Text(
+                                        AppL10n.tr('pos.openPositionsTab',
+                                            'OPEN POSITIONS'),
+                                        style: const TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
                                             color: Colors.grey)),
@@ -505,10 +525,13 @@ class PositionsPage extends StatelessWidget {
                                   ...open.map((p) => _posTile(context, p, true)),
                                 ],
                                 if (closed.isNotEmpty) ...[
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 6),
-                                    child: Text('CLOSED HISTORY',
-                                        style: TextStyle(
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 6),
+                                    child: Text(
+                                        AppL10n.tr('pos.closedHistoryTab',
+                                            'CLOSED HISTORY'),
+                                        style: const TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
                                             color: Colors.grey)),
@@ -537,9 +560,9 @@ class PositionsPage extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            const Text(
-                              'Risk Console',
-                              style: TextStyle(
+                            Text(
+                              AppL10n.tr('pos.riskConsole', 'Risk Console'),
+                              style: const TextStyle(
                                   fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                             const Spacer(),
@@ -547,38 +570,47 @@ class PositionsPage extends StatelessWidget {
                               TextButton.icon(
                                 onPressed: () => _showResetDemoDialog(context),
                                 icon: const Icon(Icons.restart_alt, size: 16),
-                                label: const Text('Reset Demo',
-                                    style: TextStyle(fontSize: 12)),
+                                label: Text(
+                                    AppL10n.tr('pos.resetDemo', 'Reset Demo'),
+                                    style: const TextStyle(fontSize: 12)),
                               ),
                             if (onUpdateRisk != null)
                               IconButton(
-                                tooltip: 'Edit Risk Guardrails',
+                                tooltip: AppL10n.tr('pos.editGuardrails',
+                                    'Edit Risk Guardrails'),
                                 icon: const Icon(Icons.tune, size: 18),
                                 onPressed: () => _showRiskEditor(context),
                               ),
                           ],
                         ),
                         const Divider(),
+                        _metric(AppL10n.tr('pos.balance', 'Balance'),
+                            '\$${account.balance.toStringAsFixed(2)}'),
+                        _metric(AppL10n.tr('pos.equity', 'Equity'),
+                            '\$${account.equity.toStringAsFixed(2)}'),
                         _metric(
-                            'Balance', '\$${account.balance.toStringAsFixed(2)}'),
-                        _metric('Equity', '\$${account.equity.toStringAsFixed(2)}'),
-                        _metric(
-                          'Daily Realized PnL',
+                          AppL10n.tr(
+                              'pos.dailyRealizedPnl', 'Daily Realized PnL'),
                           '${account.dailyRealizedPnl >= 0 ? '+' : '-'}\$${account.dailyRealizedPnl.abs().toStringAsFixed(2)}',
                         ),
                         _metric(
-                          'Daily Drawdown',
+                          AppL10n.tr('pos.dailyDrawdown', 'Daily Drawdown'),
                           '${account.currentDrawdownPercent.toStringAsFixed(2)}% / ${risk.maxDailyDrawdownPercent.toStringAsFixed(1)}%',
                         ),
-                        _metric('Max Risk / Trade',
+                        _metric(
+                            AppL10n.tr(
+                                'pos.maxRiskPerTrade', 'Max Risk / Trade'),
                             '${risk.maxRiskPerTradePercent.toStringAsFixed(2)}%'),
-                        _metric('Max Open Positions', '${risk.maxOpenPositions}'),
+                        _metric(
+                            AppL10n.tr(
+                                'pos.maxOpenPositions', 'Max Open Positions'),
+                            '${risk.maxOpenPositions}'),
                         if (risk.isKillSwitchEngaged &&
                             (risk.killSwitchReason ?? '').isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
-                              'Halt reason: ${risk.killSwitchReason}',
+                              '${AppL10n.tr('pos.haltReason', 'Halt reason')}: ${risk.killSwitchReason}',
                               style: const TextStyle(
                                   fontSize: 11.5, color: Color(0xFFEF4444)),
                             ),
@@ -597,8 +629,10 @@ class PositionsPage extends StatelessWidget {
                                 ? Icons.play_arrow
                                 : Icons.dangerous),
                             label: Text(risk.isKillSwitchEngaged
-                                ? 'DISENGAGE KILL SWITCH'
-                                : 'ENGAGE KILL SWITCH'),
+                                ? AppL10n.tr('pos.disengageKillSwitch',
+                                    'DISENGAGE KILL SWITCH')
+                                : AppL10n.tr('pos.engageKillSwitch',
+                                    'ENGAGE KILL SWITCH')),
                           ),
                         ),
                       ],
@@ -637,24 +671,26 @@ class PositionsPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.emoji_events_outlined,
+                const Icon(Icons.emoji_events_outlined,
                     size: 18, color: Color(0xFFF59E0B)),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Text(
-                  'Strategy Paper Leaderboard',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  AppL10n.tr('pos.leaderboard', 'Strategy Paper Leaderboard'),
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             const Divider(),
             if (entries.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
-                  'No paper trades yet. Place a manual order or enable Auto-Trade on a strategy.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  AppL10n.tr('pos.noPaperTrades',
+                      'No paper trades yet. Place a manual order or enable Auto-Trade on a strategy.'),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               )
             else
@@ -696,7 +732,7 @@ class PositionsPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Open: $openCount · Closed: ${closedList.length} · Win: ${winRate.toStringAsFixed(0)}%',
+                              '${AppL10n.tr('dash.open', 'Open')}: $openCount · ${AppL10n.tr('pos.closed', 'Closed')}: ${closedList.length} · ${AppL10n.tr('pos.win', 'Win')}: ${winRate.toStringAsFixed(0)}%',
                               style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
@@ -796,7 +832,7 @@ class PositionsPage extends StatelessWidget {
             const SizedBox(width: 4),
             OutlinedButton(
               onPressed: () => onClosePosition(p.ticket),
-              child: const Text('Close'),
+              child: Text(AppL10n.tr('pos.close', 'Close')),
             ),
           ],
         ],

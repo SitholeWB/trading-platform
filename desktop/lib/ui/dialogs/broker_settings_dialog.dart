@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/ai_copilot_service.dart';
+import '../../services/localization_service.dart';
 import '../../services/storage_service.dart';
 
 class BrokerSettingsDialog extends StatefulWidget {
@@ -77,10 +78,10 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                   children: [
                     const Icon(Icons.settings, size: 20),
                     const SizedBox(width: 8),
-                    const Text(
-                      'Platform, Broker & AI Settings',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    Text(
+                      AppL10n.tr('settings.title', 'Platform Settings'),
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     const Spacer(),
                     IconButton(
@@ -91,15 +92,21 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                 ),
                 const Divider(),
                 const SizedBox(height: 8),
-                const Text('Market Data & Execution Provider',
+                Text(AppL10n.tr('settings.marketProvider', 'Market Data & Execution Provider'),
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'KeylessPublic', label: Text('Keyless Live')),
-                    ButtonSegment(value: 'Oanda', label: Text('OANDA')),
-                    ButtonSegment(value: 'TwelveData', label: Text('TwelveData')),
-                    ButtonSegment(value: 'Demo', label: Text('Demo Sim')),
+                  segments: [
+                    ButtonSegment(
+                        value: 'KeylessPublic',
+                        label: Text(AppL10n.tr(
+                            'settings.keylessLive', 'Keyless Live'))),
+                    const ButtonSegment(value: 'Oanda', label: Text('OANDA')),
+                    const ButtonSegment(
+                        value: 'TwelveData', label: Text('TwelveData')),
+                    ButtonSegment(
+                        value: 'Demo',
+                        label: Text(AppL10n.tr('settings.demoSim', 'Demo Sim'))),
                   ],
                   selected: {_provider},
                   onSelectionChanged: (s) => setState(() => _provider = s.first),
@@ -108,9 +115,10 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _oandaAccount,
-                    decoration: const InputDecoration(
-                      labelText: 'OANDA Account ID',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: AppL10n.tr(
+                          'settings.oandaAccountId', 'OANDA Account ID'),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -118,15 +126,17 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                   TextField(
                     controller: _oandaKey,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'OANDA API Token',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText:
+                          AppL10n.tr('settings.oandaToken', 'OANDA API Token'),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Use OANDA Practice (fxPractice)'),
+                    title: Text(AppL10n.tr('settings.oandaPractice',
+                        'Use OANDA Practice (fxPractice)')),
                     value: _oandaPractice,
                     onChanged: (v) => setState(() => _oandaPractice = v),
                   ),
@@ -136,25 +146,27 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                   TextField(
                     controller: _twelveKey,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'TwelveData API Key',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: AppL10n.tr(
+                          'settings.twelveDataKey', 'TwelveData API Key'),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
                 ],
                 const SizedBox(height: 16),
-                const Text('AI Quant Copilot Engine',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(AppL10n.tr('settings.aiEngine', 'AI Quant Copilot Engine'),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
                   initialValue: AiCopilotService.providers
                           .any((p) => p.id == _aiProvider)
                       ? _aiProvider
                       : 'BuiltIn',
-                  decoration: const InputDecoration(
-                    labelText: 'AI Provider',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText:
+                        AppL10n.tr('settings.aiProvider', 'AI Provider'),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                   items: AiCopilotService.providers
@@ -342,7 +354,8 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.network_check, size: 16),
-                      label: const Text('Test AI Connection'),
+                      label: Text(
+                          AppL10n.tr('settings.testAi', 'Test AI Connection')),
                     ),
                     if (_aiTestStatus != null) ...[
                       const SizedBox(width: 10),
@@ -363,14 +376,23 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                const Text('Appearance & Desktop Alerts',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(AppL10n.tr('settings.appearance', 'Appearance & Desktop Alerts'),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 SegmentedButton<ThemeMode>(
-                  segments: const [
-                    ButtonSegment(value: ThemeMode.dark, label: Text('Yaru Dark')),
-                    ButtonSegment(value: ThemeMode.light, label: Text('Yaru Light')),
-                    ButtonSegment(value: ThemeMode.system, label: Text('System')),
+                  segments: [
+                    ButtonSegment(
+                        value: ThemeMode.dark,
+                        label: Text(
+                            AppL10n.tr('settings.yaruDark', 'Yaru Dark'))),
+                    ButtonSegment(
+                        value: ThemeMode.light,
+                        label: Text(
+                            AppL10n.tr('settings.yaruLight', 'Yaru Light'))),
+                    ButtonSegment(
+                        value: ThemeMode.system,
+                        label: Text(
+                            AppL10n.tr('settings.systemTheme', 'System'))),
                   ],
                   selected: {_themeMode},
                   onSelectionChanged: (s) =>
@@ -378,7 +400,7 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Native Linux Desktop Notifications'),
+                  title: Text(AppL10n.tr('settings.nativeNotifs', 'Native Linux Desktop Notifications')),
                   value: _desktopNotifs,
                   onChanged: (v) => setState(() => _desktopNotifs = v),
                 ),
@@ -388,7 +410,7 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+                      child: Text(AppL10n.tr('common.cancel', 'Cancel')),
                     ),
                     const SizedBox(width: 8),
                     FilledButton(
@@ -410,7 +432,7 @@ class _BrokerSettingsDialogState extends State<BrokerSettingsDialog> {
                         widget.onSaved();
                         if (context.mounted) Navigator.pop(context);
                       },
-                      child: const Text('Save Settings'),
+                      child: Text(AppL10n.tr('common.save', 'Save Settings')),
                     ),
                   ],
                 ),

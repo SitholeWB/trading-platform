@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/localization_service.dart';
 
 class AboutPlatformDialog extends StatefulWidget {
   final String activeProvider;
@@ -15,7 +16,7 @@ class _AboutPlatformDialogState extends State<AboutPlatformDialog> {
 
   @override
   Widget build(BuildContext context) {
-    const version = '2.0.1';
+    const version = '3.0.0';
     return Dialog(
       child: SizedBox(
         width: 460,
@@ -32,15 +33,15 @@ class _AboutPlatformDialogState extends State<AboutPlatformDialog> {
                     child: Image.asset('assets/icon.png', width: 42, height: 42),
                   ),
                   const SizedBox(width: 12),
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Trading Platform Workstation',
-                        style: TextStyle(
+                        AppL10n.tr('common.appTitle', 'Trading Platform'),
+                        style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold),
                       ),
-                      Text(
+                      const Text(
                         'v$version · Native Flutter Desktop (Yaru)',
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
@@ -67,7 +68,9 @@ class _AboutPlatformDialogState extends State<AboutPlatformDialog> {
                 children: [
                   OutlinedButton.icon(
                     icon: Icon(_copied ? Icons.check : Icons.copy, size: 16),
-                    label: Text(_copied ? 'Copied!' : 'Copy Diagnostics'),
+                    label: Text(_copied
+                        ? AppL10n.tr('about.copied', 'Copied!')
+                        : AppL10n.tr('about.copyDiag', 'Copy Diagnostics')),
                     onPressed: () async {
                       await Clipboard.setData(ClipboardData(
                         text:
@@ -79,7 +82,7 @@ class _AboutPlatformDialogState extends State<AboutPlatformDialog> {
                   const SizedBox(width: 8),
                   FilledButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
+                    child: Text(AppL10n.tr('common.close', 'Close')),
                   ),
                 ],
               ),

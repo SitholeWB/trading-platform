@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Trading Platform
+GenericName=Algorithmic Trading & Charting Terminal
+Comment=Native Desktop Algorithmic Trading, Strategy Studio, Market Scanner & AI Copilot
+Exec=trading-platform %U
+Icon=${SNAP}/meta/gui/icon.png
+Terminal=false
+Categories=Finance;Office;Development;
+StartupNotify=true
+StartupWMClass=com.tradingplatform.desktop
+Keywords=trading;forex;crypto;charts;strategy;backtest;

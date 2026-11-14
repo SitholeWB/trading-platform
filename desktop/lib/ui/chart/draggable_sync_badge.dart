@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/localization_service.dart';
 
 class DraggableSyncBadge extends StatefulWidget {
   final int secondsUntilSync;
@@ -69,8 +70,8 @@ class _DraggableSyncBadgeState extends State<DraggableSyncBadge> {
                 const SizedBox(width: 6),
                 Text(
                   widget.isSyncing
-                      ? 'Syncing...'
-                      : 'Refresh in ${widget.secondsUntilSync}s',
+                      ? AppL10n.tr('chart.refreshing', 'Refreshing...')
+                      : '${AppL10n.tr('chart.refreshIn', 'Refresh in')} ${widget.secondsUntilSync}s',
                   style: const TextStyle(
                     fontSize: 11,
                     fontFamily: 'monospace',

@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../../services/localization_service.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -132,7 +133,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
-          title: const Text('Technical Indicators'),
+          title: Text(AppL10n.tr('chart.indicators', 'Technical Indicators')),
           content: SizedBox(
             width: 360,
             child: SingleChildScrollView(
@@ -197,7 +198,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Done'),
+              child: Text(AppL10n.tr('common.done', 'Done')),
             ),
           ],
         ),
@@ -293,9 +294,9 @@ class _LiveChartPageState extends State<LiveChartPage> {
             padding: const EdgeInsets.fromLTRB(12, 10, 6, 6),
             child: Row(
               children: [
-                const Text(
-                  'WATCHLIST',
-                  style: TextStyle(
+                Text(
+                  AppL10n.tr('chart.watchlist', 'WATCHLIST'),
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.8,
@@ -304,12 +305,14 @@ class _LiveChartPageState extends State<LiveChartPage> {
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.search, size: 16),
-                  tooltip: 'Browse All 45+ Symbols',
+                  tooltip:
+                      AppL10n.tr('chart.browseSymbols', 'Browse All 45+ Symbols'),
                   onPressed: widget.onOpenSymbolSearch,
                 ),
                 IconButton(
                   icon: const Icon(Icons.chevron_left, size: 18),
-                  tooltip: 'Collapse Watchlist',
+                  tooltip: AppL10n.tr(
+                      'chart.collapseWatchlist', 'Collapse Watchlist'),
                   onPressed: widget.onToggleWatchlist,
                 ),
               ],
@@ -430,16 +433,17 @@ class _LiveChartPageState extends State<LiveChartPage> {
                     Expanded(
                       child: Text(
                         widget.isSyncing
-                            ? 'Refreshing live quotes...'
-                            : 'Refresh prices in ${widget.secondsUntilSync}s',
+                            ? AppL10n.tr('chart.refreshingQuotes',
+                                'Refreshing live quotes...')
+                            : '${AppL10n.tr('chart.refreshPricesIn', 'Refresh prices in')} ${widget.secondsUntilSync}s',
                         style: const TextStyle(
                             fontSize: 10.5, fontWeight: FontWeight.w600),
                       ),
                     ),
                     InkWell(
                       onTap: widget.onManualSync,
-                      child: const Text('Sync',
-                          style: TextStyle(
+                      child: Text(AppL10n.tr('chart.sync', 'Sync'),
+                          style: const TextStyle(
                               fontSize: 10.5,
                               color: Color(0xFF38BDF8),
                               fontWeight: FontWeight.bold)),
@@ -448,7 +452,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Feed: ${widget.providerName} · Rate-limit protected',
+                  '${AppL10n.tr('common.feed', 'Feed')}: ${widget.providerName} · ${AppL10n.tr('chart.rateLimitProtected', 'Rate-limit protected')}',
                   style: const TextStyle(fontSize: 10, color: Colors.grey),
                 ),
               ],
@@ -473,7 +477,8 @@ class _LiveChartPageState extends State<LiveChartPage> {
           const SizedBox(height: 8),
           IconButton(
             icon: const Icon(Icons.chevron_right, size: 18),
-            tooltip: 'Expand Watchlist',
+            tooltip:
+                AppL10n.tr('chart.expandWatchlist', 'Expand Watchlist'),
             onPressed: widget.onToggleWatchlist,
           ),
           const Spacer(),
@@ -481,9 +486,9 @@ class _LiveChartPageState extends State<LiveChartPage> {
             quarterTurns: 3,
             child: InkWell(
               onTap: widget.onToggleWatchlist,
-              child: const Text(
-                'WATCHLIST',
-                style: TextStyle(
+              child: Text(
+                AppL10n.tr('chart.watchlist', 'WATCHLIST'),
+                style: const TextStyle(
                   fontSize: 10,
                   letterSpacing: 1.5,
                   color: Colors.grey,
@@ -570,7 +575,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
                     items: ChartType.values
                         .map((ct) => DropdownMenuItem(
                               value: ct,
-                              child: Text(ct.shortLabel,
+                              child: Text(AppL10n.enumTerm(ct.shortLabel),
                                   style: const TextStyle(fontSize: 12)),
                             ))
                         .toList(),
@@ -583,7 +588,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
                   // Indicators
                   OutlinedButton(
                     onPressed: _openIndicatorsModal,
-                    child: const Text('fx Indicators',
+                    child: Text(AppL10n.tr('chart.fxIndicators', 'fx Indicators'),
                         style: TextStyle(fontSize: 11.5)),
                   ),
                   const SizedBox(width: 6),
@@ -593,7 +598,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
                     onPressed: widget.onOpenAlerts,
                     icon: const Icon(Icons.notifications_none,
                         size: 14, color: Color(0xFFF59E0B)),
-                    label: const Text('Alerts',
+                    label: Text(AppL10n.tr('chart.alerts', 'Alerts'),
                         style: TextStyle(fontSize: 11.5)),
                   ),
                   if (widget.onQuickNote != null) ...[
@@ -602,7 +607,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
                       onPressed: widget.onQuickNote,
                       icon: const Icon(Icons.note_add_outlined,
                           size: 14, color: Color(0xFF38BDF8)),
-                      label: const Text('Note',
+                      label: Text(AppL10n.tr('chart.note', 'Note'),
                           style: TextStyle(fontSize: 11.5)),
                     ),
                   ],
@@ -613,42 +618,50 @@ class _LiveChartPageState extends State<LiveChartPage> {
 
           // Right-side layout & quick trade tools
           PopupMenuButton<ChartLayoutMode>(
-            tooltip: 'Split / Multi-Chart Layout',
+            tooltip:
+                AppL10n.tr('chart.splitLayout', 'Split / Multi-Chart Layout'),
             icon: const Icon(Icons.view_quilt, size: 18),
             onSelected: (m) => setState(() => _layoutMode = m),
-            itemBuilder: (_) => const [
+            itemBuilder: (_) => [
               PopupMenuItem(
-                  value: ChartLayoutMode.single, child: Text('[1] Single Chart')),
+                  value: ChartLayoutMode.single,
+                  child: Text(AppL10n.tr('chart.single', '[1] Single Chart'))),
               PopupMenuItem(
                   value: ChartLayoutMode.splitV,
-                  child: Text('[|] Dual Vertical')),
+                  child:
+                      Text(AppL10n.tr('chart.dualVert', '[|] Dual Vertical'))),
               PopupMenuItem(
                   value: ChartLayoutMode.splitH,
-                  child: Text('[=] Dual Horizontal')),
+                  child: Text(
+                      AppL10n.tr('chart.dualHoriz', '[=] Dual Horizontal'))),
               PopupMenuItem(
-                  value: ChartLayoutMode.grid4, child: Text('[+] Quad 2x2 Grid')),
+                  value: ChartLayoutMode.grid4,
+                  child: Text(AppL10n.tr('chart.quad', '[+] Quad 2x2 Grid'))),
             ],
           ),
           FilledButton.tonalIcon(
             onPressed: () => setState(() => _showOrderDock = !_showOrderDock),
             icon: const Icon(Icons.bolt, size: 15),
-            label: const Text('Trade', style: TextStyle(fontSize: 11.5)),
+            label: Text(AppL10n.tr('chart.trade', 'Trade'),
+                style: const TextStyle(fontSize: 11.5)),
           ),
           const SizedBox(width: 4),
           if (widget.onLoadOlderHistory != null)
             IconButton(
               icon: const Icon(Icons.history, size: 18),
-              tooltip: '+Bars (Load Older History)',
+              tooltip:
+                  AppL10n.tr('chart.plusBars', '+Bars (Load Older History)'),
               onPressed: widget.onLoadOlderHistory,
             ),
           IconButton(
             icon: const Icon(Icons.camera_alt_outlined, size: 18),
-            tooltip: 'Save Chart Snapshot (PNG)',
+            tooltip:
+                AppL10n.tr('chart.saveSnapshot', 'Save Chart Snapshot (PNG)'),
             onPressed: _exportSnapshot,
           ),
           IconButton(
             icon: const Icon(Icons.fit_screen, size: 18),
-            tooltip: 'Reset Zoom / Fit Content',
+            tooltip: AppL10n.tr('chart.resetZoom', 'Reset Zoom / Fit Content'),
             onPressed: () => _chartKey.currentState?.fitContent(),
           ),
         ],
@@ -805,7 +818,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
             ),
             TextButton(
               onPressed: widget.onOpenAlerts,
-              child: const Text('Manage Alerts'),
+              child: Text(AppL10n.tr('chart.manageAlerts', 'Manage Alerts')),
             ),
           ],
         ),
@@ -916,7 +929,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
           Row(
             children: [
               Text(
-                '1-Click Trade · ${widget.symbol}',
+                '${AppL10n.tr('chart.oneClickTrade', '1-Click Trade')} · ${widget.symbol}',
                 style: const TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.bold,
@@ -934,7 +947,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Lots:',
+              Text(AppL10n.tr('chart.lots', 'Lots:'),
                   style: TextStyle(fontSize: 11, color: Colors.grey)),
               Row(
                 children: [
@@ -1013,7 +1026,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
                     sl: double.tryParse(_slCtrl.text.trim()),
                     tp: double.tryParse(_tpCtrl.text.trim()),
                   ),
-                  child: const Text('SELL'),
+                  child: Text(AppL10n.tr('chart.sell', 'SELL')),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1029,7 +1042,7 @@ class _LiveChartPageState extends State<LiveChartPage> {
                     sl: double.tryParse(_slCtrl.text.trim()),
                     tp: double.tryParse(_tpCtrl.text.trim()),
                   ),
-                  child: const Text('BUY'),
+                  child: Text(AppL10n.tr('chart.buy', 'BUY')),
                 ),
               ),
             ],

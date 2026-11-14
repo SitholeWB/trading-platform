@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import '../../services/localization_service.dart';
 import '../../services/section_docs.dart';
 import '../widgets/markdown_message_view.dart';
 
 class DocumentationPage extends StatefulWidget {
   final ValueChanged<SectionDoc>? onAskAiAboutSection;
+  final String languageCode;
 
   const DocumentationPage({
     super.key,
     this.onAskAiAboutSection,
+    this.languageCode = 'en',
   });
 
   @override
@@ -18,19 +21,23 @@ class _DocumentationPageState extends State<DocumentationPage> {
   String _query = '';
   int _selectedCategory = 0;
 
-  static const _categories = [
-    'All Topics',
-    'Workspace & Trading',
-    'Rule Studio & AI',
-    'Scanner & Risk',
-    'Charts & Precision',
+  static const _categoryKeys = [
+    'docs.allTopics',
+    'docs.catWorkspace',
+    'docs.catRuleStudio',
+    'docs.catScannerRisk',
+    'docs.catChartsPrecision',
   ];
 
   @override
   Widget build(BuildContext context) {
+    final lang = widget.languageCode;
+    final categories =
+        _categoryKeys.map((k) => AppL10n.t(lang, k)).toList();
+    final docs = SectionDocs.allForLanguage(lang);
     final q = _query.trim().toLowerCase();
-    final catName = _categories[_selectedCategory];
-    final filtered = SectionDocs.all.where((s) {
+    final catName = categories[_selectedCategory];
+    final filtered = docs.where((s) {
       if (_selectedCategory != 0 && s.category != catName) {
         return false;
       }
@@ -52,19 +59,21 @@ class _DocumentationPageState extends State<DocumentationPage> {
               const Icon(Icons.menu_book_outlined,
                   color: Color(0xFF38BDF8), size: 22),
               const SizedBox(width: 8),
-              const Text(
-                'Platform Guide & Documentation',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Text(
+                AppL10n.t(lang, 'docs.title', 'Platform Guide & Documentation'),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               SizedBox(
                 width: 300,
                 child: TextField(
                   onChanged: (v) => setState(() => _query = v),
-                  decoration: const InputDecoration(
-                    hintText: 'Search guides, indicators, shortcuts...',
-                    prefixIcon: Icon(Icons.search, size: 17),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: AppL10n.t(lang, 'docs.searchHint',
+                        'Search guides, indicators, shortcuts...'),
+                    prefixIcon: const Icon(Icons.search, size: 17),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                 ),
@@ -75,9 +84,9 @@ class _DocumentationPageState extends State<DocumentationPage> {
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: List.generate(_categories.length, (i) {
+            children: List.generate(categories.length, (i) {
               return ChoiceChip(
-                label: Text(_categories[i], style: const TextStyle(fontSize: 12)),
+                label: Text(categories[i], style: const TextStyle(fontSize: 12)),
                 selected: _selectedCategory == i,
                 onSelected: (_) => setState(() => _selectedCategory = i),
               );
@@ -86,10 +95,11 @@ class _DocumentationPageState extends State<DocumentationPage> {
           const SizedBox(height: 12),
           Expanded(
             child: filtered.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'No documentation topics match your search.',
-                      style: TextStyle(color: Colors.grey),
+                      AppL10n.t(lang, 'docs.noMatch',
+                          'No documentation topics match your search.'),
+                      style: const TextStyle(color: Colors.grey),
                     ),
                   )
                 : ListView.separated(
@@ -133,9 +143,10 @@ class _DocumentationPageState extends State<DocumentationPage> {
                                           widget.onAskAiAboutSection!(s),
                                       icon: const Icon(Icons.auto_awesome,
                                           size: 14, color: Color(0xFFA855F7)),
-                                      label: const Text(
-                                        'Ask AI about this',
-                                        style: TextStyle(fontSize: 11.5),
+                                      label: Text(
+                                        AppL10n.t(lang, 'docs.askAiExplain',
+                                            'Ask AI to Explain This'),
+                                        style: const TextStyle(fontSize: 11.5),
                                       ),
                                       style: OutlinedButton.styleFrom(
                                         visualDensity: VisualDensity.compact,

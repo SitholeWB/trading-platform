@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../../services/localization_service.dart';
 import '../../services/storage_service.dart';
 
 class FeedbackDialog extends StatefulWidget {
@@ -202,9 +203,10 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                 children: [
                   const Icon(Icons.feedback_outlined, size: 20),
                   const SizedBox(width: 8),
-                  const Text(
-                    'Send Feedback',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  Text(
+                    AppL10n.tr('feedback.title', 'Send Feedback'),
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   IconButton(
@@ -216,27 +218,34 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
               const Divider(),
               if (_success) ...[
                 const SizedBox(height: 12),
-                const Text(
-                  'Thank you! Your feedback was delivered directly to the developer channel.',
-                  style: TextStyle(color: Color(0xFF10B981)),
+                Text(
+                  AppL10n.tr('feedback.deliveredDesc',
+                      'Thank you! Your feedback was delivered directly to the developer channel.'),
+                  style: const TextStyle(color: Color(0xFF10B981)),
                 ),
                 const SizedBox(height: 16),
                 Align(
                   alignment: Alignment.centerRight,
                   child: FilledButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Done'),
+                    child: Text(AppL10n.tr('common.close', 'Done')),
                   ),
                 ),
               ] else ...[
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
-                  children: ['Suggestion', 'Bug', 'Feature', 'General']
+                  children: [
+                    ('Suggestion', AppL10n.tr('feedback.strategy', 'Suggestion')),
+                    ('Bug', AppL10n.tr('feedback.bug', 'Bug')),
+                    ('Feature', AppL10n.tr('feedback.feature', 'Feature')),
+                    ('General', AppL10n.tr('feedback.general', 'General')),
+                  ]
                       .map((cat) => ChoiceChip(
-                            label: Text(cat),
-                            selected: _category == cat,
-                            onSelected: (_) => setState(() => _category = cat),
+                            label: Text(cat.$2),
+                            selected: _category == cat.$1,
+                            onSelected: (_) =>
+                                setState(() => _category = cat.$1),
                           ))
                       .toList(),
                 ),
@@ -246,9 +255,10 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                     Expanded(
                       child: TextField(
                         controller: _nameCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Name (Optional)',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr(
+                              'feedback.nameLabel', 'Name (Optional)'),
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                       ),
@@ -257,9 +267,10 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                     Expanded(
                       child: TextField(
                         controller: _contactCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Email / Handle (Optional)',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr('feedback.contactLabel',
+                              'Email / Handle (Optional)'),
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                       ),
@@ -270,16 +281,17 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                 TextField(
                   controller: _msgCtrl,
                   maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'Message',
-                    hintText: 'Share a bug report, feature request, or idea...',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: AppL10n.tr('feedback.messageLabel', 'Message'),
+                    hintText: AppL10n.tr('feedback.messagePlaceholder',
+                        'Share a bug report, feature request, or idea...'),
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    Text('Verify: $_num1 + $_num2 = '),
+                    Text('${AppL10n.tr('feedback.antiBotTitle', 'Verify')}: $_num1 + $_num2 = '),
                     SizedBox(
                       width: 80,
                       child: TextField(
@@ -303,16 +315,17 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+                      child: Text(AppL10n.tr('common.cancel', 'Cancel')),
                     ),
                     const SizedBox(width: 8),
                     FilledButton(
                       onPressed: (_submitting || _cooldown > 0) ? null : _submit,
                       child: Text(_cooldown > 0
-                          ? 'Wait ${_cooldown}s'
+                          ? '${_cooldown}s'
                           : _submitting
-                              ? 'Sending...'
-                              : 'Submit Feedback'),
+                              ? AppL10n.tr('feedback.sending', 'Sending...')
+                              : AppL10n.tr(
+                                  'feedback.sendButton', 'Submit Feedback')),
                     ),
                   ],
                 ),

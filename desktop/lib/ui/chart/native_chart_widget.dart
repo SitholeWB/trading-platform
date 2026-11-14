@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import '../../services/localization_service.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../models/trading_models.dart';
@@ -400,20 +401,21 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Chart Annotation'),
+        title: Text(AppL10n.tr('chart.addAnnotation', 'Add Chart Annotation')),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Enter chart note...'),
+          decoration: InputDecoration(
+              hintText: AppL10n.tr('chart.enterNote', 'Enter chart note...')),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(AppL10n.tr('common.cancel', 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Add'),
+            child: Text(AppL10n.tr('common.add', 'Add')),
           ),
         ],
       ),

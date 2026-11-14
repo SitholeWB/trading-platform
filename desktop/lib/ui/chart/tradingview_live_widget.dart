@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_cef/webview_cef.dart';
 
 import '../../models/trading_models.dart';
+import '../../services/localization_service.dart';
 import '../../services/symbol_catalog.dart';
 import 'cef_bootstrap.dart';
 
@@ -190,7 +191,7 @@ class _TradingViewLiveWidgetState extends State<TradingViewLiveWidget> {
       'timezone': widget.timezone.isEmpty ? 'Etc/UTC' : widget.timezone,
       'theme': theme,
       'style': tvStyle,
-      'locale': 'en',
+      'locale': AppL10n.activeLanguage,
       'backgroundColor': bgColor,
       'gridColor': gridColor,
       'allow_symbol_change': true,

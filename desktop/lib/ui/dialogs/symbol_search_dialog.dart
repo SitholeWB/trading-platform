@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/trading_models.dart';
+import '../../services/localization_service.dart';
 import '../../services/symbol_catalog.dart';
 
 class SymbolSearchDialog extends StatefulWidget {
@@ -39,9 +40,11 @@ class _SymbolSearchDialogState extends State<SymbolSearchDialog> {
                 children: [
                   const Icon(Icons.search, size: 20),
                   const SizedBox(width: 8),
-                  const Text(
-                    'Symbol Catalog (45+ Markets)',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  Text(
+                    AppL10n.tr(
+                        'symbol.catalogTitle', 'Symbol Catalog (45+ Markets)'),
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   IconButton(
@@ -54,10 +57,11 @@ class _SymbolSearchDialogState extends State<SymbolSearchDialog> {
               TextField(
                 autofocus: true,
                 onChanged: (v) => setState(() => _query = v),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  hintText: 'Search symbol or instrument (e.g. EURUSD, XAUUSD, PEPEUSDT, NVDA)...',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  hintText: AppL10n.tr('symbol.searchHint',
+                      'Search symbol or instrument (e.g. EURUSD, XAUUSD, PEPEUSDT, NVDA)...'),
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
               ),
@@ -70,7 +74,7 @@ class _SymbolSearchDialogState extends State<SymbolSearchDialog> {
                     return Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: ChoiceChip(
-                        label: Text(cat.label),
+                        label: Text(AppL10n.enumTerm(cat.label)),
                         selected: active,
                         onSelected: (_) => setState(() => _category = cat),
                       ),

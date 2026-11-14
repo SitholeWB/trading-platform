@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/localization_service.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
 import '../chart/native_chart_widget.dart';
@@ -85,9 +86,10 @@ class DashboardPage extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          const Text(
-                            'Algorithmic Execution Robot',
-                            style: TextStyle(
+                          Text(
+                            AppL10n.tr(
+                                'dash.robotTitle', 'Algorithmic Execution Robot'),
+                            style: const TextStyle(
                               fontSize: 13.5,
                               fontWeight: FontWeight.bold,
                             ),
@@ -104,7 +106,9 @@ class DashboardPage extends StatelessWidget {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              isKillSwitch ? 'HALTED' : 'SCANNING',
+                              isKillSwitch
+                                  ? AppL10n.tr('dash.halted', 'HALTED')
+                                  : AppL10n.tr('dash.scanning', 'SCANNING'),
                               style: TextStyle(
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.bold,
@@ -119,7 +123,7 @@ class DashboardPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Drawdown: ${account.currentDrawdownPercent.toStringAsFixed(2)}% / ${risk.maxDailyDrawdownPercent.toStringAsFixed(1)}% · ${auditLogs.length} audit events',
+                        '${AppL10n.tr('dash.drawdown', 'Drawdown')}: ${account.currentDrawdownPercent.toStringAsFixed(2)}% / ${risk.maxDailyDrawdownPercent.toStringAsFixed(1)}% · ${auditLogs.length} ${AppL10n.tr('dash.auditEvents', 'audit events')}',
                         style:
                             const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
@@ -146,18 +150,18 @@ class DashboardPage extends StatelessWidget {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(10),
                       onTap: onOpenChart,
-                      child: const Padding(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 10),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.candlestick_chart,
+                            const Icon(Icons.candlestick_chart,
                                 size: 18, color: Colors.white),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             Text(
-                              'Open Live Chart',
-                              style: TextStyle(
+                              AppL10n.tr('nav.chart', 'Open Live Chart'),
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
@@ -177,14 +181,15 @@ class DashboardPage extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: onOpenScanner,
                   icon: const Icon(Icons.radar, size: 16),
-                  label: const Text('Scanner', style: TextStyle(fontSize: 12)),
+                  label: Text(AppL10n.tr('dash.scannerBtn', 'Scanner'),
+                      style: const TextStyle(fontSize: 12)),
                 ),
                 const SizedBox(width: 6),
                 OutlinedButton.icon(
                   onPressed: onOpenStrategies,
                   icon: const Icon(Icons.auto_awesome, size: 16),
-                  label:
-                      const Text('Strategies', style: TextStyle(fontSize: 12)),
+                  label: Text(AppL10n.tr('dash.strategiesBtn', 'Strategies'),
+                      style: const TextStyle(fontSize: 12)),
                 ),
               ],
             ),
@@ -197,9 +202,9 @@ class DashboardPage extends StatelessWidget {
           children: [
             Expanded(
               child: _compactKpiCard(
-                'Equity',
+                AppL10n.tr('dash.equity', 'Equity'),
                 '\$${account.equity.toStringAsFixed(2)}',
-                'Bal \$${account.balance.toStringAsFixed(0)}',
+                '${AppL10n.tr('dash.bal', 'Bal')} \$${account.balance.toStringAsFixed(0)}',
                 const Color(0xFF38BDF8),
                 Icons.account_balance_wallet_outlined,
               ),
@@ -207,9 +212,9 @@ class DashboardPage extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: _compactKpiCard(
-                'Floating PnL',
+                AppL10n.tr('dash.floatingPnl', 'Floating PnL'),
                 '${totalPnl >= 0 ? '+' : '-'}\$${totalPnl.abs().toStringAsFixed(2)}',
-                '${openPos.length} Open',
+                '${openPos.length} ${AppL10n.tr('dash.open', 'Open')}',
                 totalPnl >= 0
                     ? const Color(0xFF10B981)
                     : const Color(0xFFEF4444),
@@ -219,9 +224,9 @@ class DashboardPage extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: _compactKpiCard(
-                'Active Bots',
+                AppL10n.tr('dash.activeBots', 'Active Bots'),
                 '$activeStrats / ${strategies.length}',
-                '${auditLogs.length} Signals',
+                '${auditLogs.length} ${AppL10n.tr('dash.signals', 'Signals')}',
                 const Color(0xFFA855F7),
                 Icons.memory,
               ),
@@ -229,9 +234,11 @@ class DashboardPage extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: _compactKpiCard(
-                'Focus ($selectedSymbol)',
+                '${AppL10n.tr('dash.focus', 'Focus')} ($selectedSymbol)',
                 IndicatorEngine.formatPrice(currentPrice, selectedSymbol),
-                isKillSwitch ? 'KILL SWITCH' : 'Risk Normal',
+                isKillSwitch
+                    ? AppL10n.tr('header.killSwitch', 'KILL SWITCH')
+                    : AppL10n.tr('dash.riskNormal', 'Risk Normal'),
                 isKillSwitch
                     ? const Color(0xFFEF4444)
                     : const Color(0xFF10B981),
@@ -257,7 +264,7 @@ class DashboardPage extends StatelessWidget {
                           size: 17, color: Color(0xFF38BDF8)),
                       const SizedBox(width: 6),
                       Text(
-                        'Live Market Preview · $selectedSymbol (${timeframe.code})',
+                        '${AppL10n.tr('dash.livePreview', 'Live Market Preview')} · $selectedSymbol (${timeframe.code})',
                         style: const TextStyle(
                             fontSize: 13.5, fontWeight: FontWeight.bold),
                       ),
@@ -344,9 +351,10 @@ class DashboardPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Active Algorithmic Strategies',
-                        style: TextStyle(
+                      Text(
+                        AppL10n.tr('dash.activeStrategies',
+                            'Active Algorithmic Strategies'),
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 13.5),
                       ),
                       const SizedBox(height: 8),
@@ -367,12 +375,15 @@ class DashboardPage extends StatelessWidget {
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w600, fontSize: 12.5)),
                             subtitle: Text(
-                              '${s.symbol} · ${s.timeframe.code} · Risk ${s.riskPercent}%',
+                              '${s.symbol} · ${s.timeframe.code} · ${AppL10n.tr('dash.risk', 'Risk')} ${s.riskPercent}%',
                               style: const TextStyle(fontSize: 11),
                             ),
                             trailing: Chip(
                               visualDensity: VisualDensity.compact,
-                              label: Text(s.isEnabled ? 'ACTIVE' : 'PAUSED',
+                              label: Text(
+                                  s.isEnabled
+                                      ? AppL10n.tr('common.active', 'ACTIVE')
+                                      : AppL10n.tr('common.paused', 'PAUSED'),
                                   style: const TextStyle(fontSize: 9.5)),
                             ),
                           )),
@@ -390,18 +401,21 @@ class DashboardPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Recent Signal Audit Trail',
-                        style: TextStyle(
+                      Text(
+                        AppL10n.tr(
+                            'dash.recentAudit', 'Recent Signal Audit Trail'),
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 13.5),
                       ),
                       const SizedBox(height: 8),
                       if (auditLogs.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Text(
-                            'No strategy evaluations recorded yet. Run a scan or wait for the 1m cadence.',
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                            AppL10n.tr('dash.noAuditYet',
+                                'No strategy evaluations recorded yet. Run a scan or wait for the 1m cadence.'),
+                            style: const TextStyle(
+                                color: Colors.grey, fontSize: 12),
                           ),
                         )
                       else

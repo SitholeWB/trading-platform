@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
+import '../../services/localization_service.dart';
 import '../../services/strategy_scanner.dart';
 import '../chart/native_chart_widget.dart';
 
@@ -396,9 +397,10 @@ class _SimulatorPageState extends State<SimulatorPage> {
                       children: [
                         Row(
                           children: [
-                            const Text(
-                              'Synthetic Market & Risk Stress-Test Lab',
-                              style: TextStyle(
+                            Text(
+                              AppL10n.tr('sim.labTitle',
+                                  'Synthetic Market & Risk Stress-Test Lab'),
+                              style: const TextStyle(
                                   fontSize: 15, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(width: 8),
@@ -414,9 +416,10 @@ class _SimulatorPageState extends State<SimulatorPage> {
                                       .withValues(alpha: 0.5),
                                 ),
                               ),
-                              child: const Text(
-                                'SYNTHETIC / FAKE DATA',
-                                style: TextStyle(
+                              child: Text(
+                                AppL10n.tr('sim.syntheticBadge',
+                                    'SYNTHETIC / FAKE DATA'),
+                                style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFFF59E0B),
@@ -426,25 +429,29 @@ class _SimulatorPageState extends State<SimulatorPage> {
                           ],
                         ),
                         const SizedBox(height: 2),
-                        const Text(
-                          'Not real market prices — generates fake market regimes & shocks to stress-test your strategies, SL/TP sizing, and max drawdown survival.',
-                          style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                        Text(
+                          AppL10n.tr('sim.labSubtitle',
+                              'Not real market prices — generates fake market regimes & shocks to stress-test your strategies, SL/TP sizing, and max drawdown survival.'),
+                          style:
+                              const TextStyle(fontSize: 11.5, color: Colors.grey),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 12),
                   SegmentedButton<int>(
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: 0,
-                        icon: Icon(Icons.shield_outlined, size: 15),
-                        label: Text('Strategy Stress-Test'),
+                        icon: const Icon(Icons.shield_outlined, size: 15),
+                        label: Text(AppL10n.tr(
+                            'sim.stressTest', 'Strategy Stress-Test')),
                       ),
                       ButtonSegment(
                         value: 1,
-                        icon: Icon(Icons.bolt, size: 15),
-                        label: Text('Live Shock Replay'),
+                        icon: const Icon(Icons.bolt, size: 15),
+                        label: Text(AppL10n.tr(
+                            'sim.shockReplay', 'Live Shock Replay')),
                       ),
                     ],
                     selected: {_mode},
@@ -489,9 +496,11 @@ class _SimulatorPageState extends State<SimulatorPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    '1. Choose Strategy to Stress-Test',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  Text(
+                    AppL10n.tr(
+                        'sim.step1', '1. Choose Strategy to Stress-Test'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   const SizedBox(height: 8),
                   if (widget.strategies.isEmpty)
@@ -501,18 +510,20 @@ class _SimulatorPageState extends State<SimulatorPage> {
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: Colors.white12),
                       ),
-                      child: const Text(
-                        'No saved strategies yet. Create one in Strategies first.',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      child: Text(
+                        AppL10n.tr('sim.noStrategies',
+                            'No saved strategies yet. Create one in Strategies first.'),
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     )
                   else
                     DropdownButtonFormField<String>(
                       initialValue: strat?.id,
                       isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Strategy',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: AppL10n.tr('sim.strategyLabel', 'Strategy'),
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                       items: widget.strategies
@@ -535,7 +546,8 @@ class _SimulatorPageState extends State<SimulatorPage> {
                       children: [
                         Chip(
                           visualDensity: VisualDensity.compact,
-                          label: Text('Risk: ${strat.riskPercent}%',
+                          label: Text(
+                              '${AppL10n.tr('dash.risk', 'Risk')}: ${strat.riskPercent}%',
                               style: const TextStyle(fontSize: 11)),
                         ),
                         Chip(
@@ -551,30 +563,44 @@ class _SimulatorPageState extends State<SimulatorPage> {
                         Chip(
                           visualDensity: VisualDensity.compact,
                           label: Text(
-                              '${strat.entryRules.length} rule${strat.entryRules.length == 1 ? '' : 's'} (${strat.combinator})',
+                              '${strat.entryRules.length} ${strat.entryRules.length == 1 ? AppL10n.tr('sim.rule', 'rule') : AppL10n.tr('sim.rules', 'rules')} (${strat.combinator})',
                               style: const TextStyle(fontSize: 11)),
                         ),
                       ],
                     ),
                   ],
                   const Divider(height: 22),
-                  const Text(
-                    '2. Synthetic Period (Fake History)',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  Text(
+                    AppL10n.tr(
+                        'sim.step2', '2. Synthetic Period (Fake History)'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<int>(
                     initialValue: _periodMonths,
-                    decoration: const InputDecoration(
-                      labelText: 'Simulated Period',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: AppL10n.tr('sim.period', 'Simulated Period'),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 1, child: Text('1 Month (30 Days)')),
-                      DropdownMenuItem(value: 3, child: Text('3 Months (90 Days)')),
-                      DropdownMenuItem(value: 6, child: Text('6 Months (180 Days)')),
-                      DropdownMenuItem(value: 12, child: Text('1 Year (365 Days)')),
+                    items: [
+                      DropdownMenuItem(
+                          value: 1,
+                          child: Text(
+                              AppL10n.tr('sim.1m', '1 Month (30 Days)'))),
+                      DropdownMenuItem(
+                          value: 3,
+                          child: Text(
+                              AppL10n.tr('sim.3m', '3 Months (90 Days)'))),
+                      DropdownMenuItem(
+                          value: 6,
+                          child: Text(
+                              AppL10n.tr('sim.6m', '6 Months (180 Days)'))),
+                      DropdownMenuItem(
+                          value: 12,
+                          child: Text(
+                              AppL10n.tr('sim.1y', '1 Year (365 Days)'))),
                     ],
                     onChanged: (v) {
                       if (v != null) setState(() => _periodMonths = v);
@@ -583,39 +609,44 @@ class _SimulatorPageState extends State<SimulatorPage> {
                   if (strat != null) ...[
                     const SizedBox(height: 6),
                     Text(
-                      'Generates $barCount synthetic ${strat.timeframe.code} candles (~$_periodMonths mo).',
+                      '${AppL10n.tr('sim.generates', 'Generates')} $barCount ${AppL10n.tr('sim.synthetic', 'synthetic')} ${strat.timeframe.code} ${AppL10n.tr('sim.candles', 'candles')} (~$_periodMonths ${AppL10n.tr('sim.mo', 'mo')}).',
                       style: const TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   ],
                   const Divider(height: 22),
-                  const Text(
-                    '3. Synthetic Market Regime',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  Text(
+                    AppL10n.tr('sim.step3', '3. Synthetic Market Regime'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     initialValue: _stressRegime,
-                    decoration: const InputDecoration(
-                      labelText: 'Market Behavior',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: AppL10n.tr('sim.behavior', 'Market Behavior'),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                         value: 'Bullish Trend',
-                        child: Text('Bullish Trend (Pullbacks + Drift)'),
+                        child: Text(AppL10n.tr('sim.bullish',
+                            'Bullish Trend (Pullbacks + Drift)')),
                       ),
                       DropdownMenuItem(
                         value: 'Bearish Trend',
-                        child: Text('Bearish Trend (Bounces + Drift)'),
+                        child: Text(AppL10n.tr('sim.bearish',
+                            'Bearish Trend (Bounces + Drift)')),
                       ),
                       DropdownMenuItem(
                         value: 'Sideways / Whipsaw Chop',
-                        child: Text('Sideways / Whipsaw Chop'),
+                        child: Text(AppL10n.tr(
+                            'sim.chop', 'Sideways / Whipsaw Chop')),
                       ),
                       DropdownMenuItem(
                         value: 'High-Volatility & Flash Crashes',
-                        child: Text('High-Volatility & Flash Crashes'),
+                        child: Text(AppL10n.tr(
+                            'sim.crash', 'High-Volatility & Flash Crashes')),
                       ),
                     ],
                     onChanged: (v) {
@@ -627,8 +658,8 @@ class _SimulatorPageState extends State<SimulatorPage> {
                     onPressed: strat == null ? null : _runSyntheticStressTest,
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: Text(_runNumber == 0
-                        ? 'Generate & Stress-Test'
-                        : 'Re-Roll Synthetic Run #${_runNumber + 1}'),
+                        ? AppL10n.tr('sim.runTest', 'Generate & Stress-Test')
+                        : '${AppL10n.tr('sim.syntheticRun', 'Synthetic Run')} #${_runNumber + 1}'),
                   ),
                   const Spacer(),
                   Container(
@@ -640,9 +671,11 @@ class _SimulatorPageState extends State<SimulatorPage> {
                         color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
                       ),
                     ),
-                    child: const Text(
-                      'Tip: Run the same strategy across "Sideways Chop" and "Flash Crashes" 3-5 times to see if your SL multiplier & Max Drawdown survive worst-case conditions.',
-                      style: TextStyle(fontSize: 11, color: Color(0xFFFCD34D)),
+                    child: Text(
+                      AppL10n.tr('sim.tip',
+                          'Tip: Run the same strategy across "Sideways Chop" and "Flash Crashes" 3-5 times to see if your SL multiplier & Max Drawdown survive worst-case conditions.'),
+                      style: const TextStyle(
+                          fontSize: 11, color: Color(0xFFFCD34D)),
                     ),
                   ),
                 ],
@@ -663,15 +696,18 @@ class _SimulatorPageState extends State<SimulatorPage> {
                         const Icon(Icons.shield_outlined,
                             size: 46, color: Color(0xFFF59E0B)),
                         const SizedBox(height: 10),
-                        const Text(
-                          'Ready to Stress-Test Your Risk Management',
-                          style: TextStyle(
+                        Text(
+                          AppL10n.tr('sim.readyTitle',
+                              'Ready to Stress-Test Your Risk Management'),
+                          style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 15),
                         ),
                         const SizedBox(height: 6),
-                        const Text(
-                          'Pick a strategy, choose 1M–1Y of fake data + a market regime on the left, then click "Generate & Stress-Test".',
-                          style: TextStyle(color: Colors.grey, fontSize: 12.5),
+                        Text(
+                          AppL10n.tr('sim.readyDesc',
+                              'Pick a strategy, choose 1M–1Y of fake data + a market regime on the left, then click "Generate & Stress-Test".'),
+                          style: const TextStyle(
+                              color: Colors.grey, fontSize: 12.5),
                         ),
                       ],
                     ),
@@ -933,8 +969,8 @@ class _SimulatorPageState extends State<SimulatorPage> {
                                       CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.refresh, size: 15),
-                          label: const Text('Reset Live',
-                              style: TextStyle(fontSize: 11.5)),
+                          label: Text(AppL10n.tr('sim.resetLive', 'Reset Live'),
+                              style: const TextStyle(fontSize: 11.5)),
                         ),
                       ],
                     ),
@@ -954,8 +990,9 @@ class _SimulatorPageState extends State<SimulatorPage> {
                                 0.10,
                                 widget.currentPrice,
                               ),
-                              child: const Text('Test Buy 0.10',
-                                  style: TextStyle(fontSize: 11.5)),
+                              child: Text(
+                                  AppL10n.tr('sim.testBuy', 'Test Buy 0.10'),
+                                  style: const TextStyle(fontSize: 11.5)),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -971,18 +1008,20 @@ class _SimulatorPageState extends State<SimulatorPage> {
                                 0.10,
                                 widget.currentPrice,
                               ),
-                              child: const Text('Test Sell 0.10',
-                                  style: TextStyle(fontSize: 11.5)),
+                              child: Text(
+                                  AppL10n.tr('sim.testSell', 'Test Sell 0.10'),
+                                  style: const TextStyle(fontSize: 11.5)),
                             ),
                           ),
                         ],
                       ),
                     ],
                     const Divider(height: 20),
-                    const Text(
-                      '1. One-Click Synthetic Shocks',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    Text(
+                      AppL10n.tr(
+                          'sim.shocksTitle', '1. One-Click Synthetic Shocks'),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                     const SizedBox(height: 8),
                     Wrap(
@@ -992,30 +1031,33 @@ class _SimulatorPageState extends State<SimulatorPage> {
                         ActionChip(
                           avatar: const Icon(Icons.trending_up,
                               size: 15, color: Color(0xFF10B981)),
-                          label: const Text('Breakout +1.5%',
-                              style: TextStyle(fontSize: 11.5)),
+                          label: Text(AppL10n.tr('sim.breakout', 'Breakout +1.5%'),
+                              style: const TextStyle(fontSize: 11.5)),
                           onPressed: () => _injectScenario(
-                            label: 'Breakout Spike',
+                            label: AppL10n.tr(
+                                'sim.breakoutSpike', 'Breakout Spike'),
                             closePct: 1.5,
                           ),
                         ),
                         ActionChip(
                           avatar: const Icon(Icons.trending_down,
                               size: 15, color: Color(0xFFEF4444)),
-                          label: const Text('Flash Crash -2.5%',
-                              style: TextStyle(fontSize: 11.5)),
+                          label: Text(AppL10n.tr('sim.flashCrash', 'Flash Crash -2.5%'),
+                              style: const TextStyle(fontSize: 11.5)),
                           onPressed: () => _injectScenario(
-                            label: 'Flash Crash',
+                            label:
+                                AppL10n.tr('sim.flashCrash', 'Flash Crash'),
                             closePct: -2.5,
                           ),
                         ),
                         ActionChip(
                           avatar: const Icon(Icons.bolt,
                               size: 15, color: Color(0xFFF59E0B)),
-                          label: const Text('Bull Stop-Hunt Wick',
-                              style: TextStyle(fontSize: 11.5)),
+                          label: Text(AppL10n.tr('sim.bullWick', 'Bull Stop-Hunt Wick'),
+                              style: const TextStyle(fontSize: 11.5)),
                           onPressed: () => _injectScenario(
-                            label: 'Bull Stop-Hunt',
+                            label: AppL10n.tr(
+                                'sim.bullStopHunt', 'Bull Stop-Hunt'),
                             closePct: 0.4,
                             wickLowPct: -1.3,
                           ),
@@ -1023,10 +1065,11 @@ class _SimulatorPageState extends State<SimulatorPage> {
                         ActionChip(
                           avatar: const Icon(Icons.bolt,
                               size: 15, color: Color(0xFFF59E0B)),
-                          label: const Text('Bear Stop-Hunt Wick',
-                              style: TextStyle(fontSize: 11.5)),
+                          label: Text(AppL10n.tr('sim.bearWick', 'Bear Stop-Hunt Wick'),
+                              style: const TextStyle(fontSize: 11.5)),
                           onPressed: () => _injectScenario(
-                            label: 'Bear Stop-Hunt',
+                            label: AppL10n.tr(
+                                'sim.bearStopHunt', 'Bear Stop-Hunt'),
                             closePct: -0.4,
                             wickHighPct: 1.3,
                           ),
@@ -1034,10 +1077,10 @@ class _SimulatorPageState extends State<SimulatorPage> {
                       ],
                     ),
                     const Divider(height: 20),
-                    const Text(
-                      '2. Manual Candle Move',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    Text(
+                      AppL10n.tr('sim.manualMove', '2. Manual Candle Move'),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                     Row(
                       children: [
@@ -1066,7 +1109,7 @@ class _SimulatorPageState extends State<SimulatorPage> {
                             icon: const Icon(Icons.arrow_upward, size: 15),
                             label: Text('+${_deltaPercent.toStringAsFixed(2)}%'),
                             onPressed: () => _injectScenario(
-                              label: 'Bull Impulse',
+                              label: AppL10n.tr('sim.bullImpulse', 'Bull Impulse'),
                               closePct: _deltaPercent,
                             ),
                           ),
@@ -1079,7 +1122,7 @@ class _SimulatorPageState extends State<SimulatorPage> {
                             icon: const Icon(Icons.arrow_downward, size: 15),
                             label: Text('-${_deltaPercent.toStringAsFixed(2)}%'),
                             onPressed: () => _injectScenario(
-                              label: 'Bear Impulse',
+                              label: AppL10n.tr('sim.bearImpulse', 'Bear Impulse'),
                               closePct: -_deltaPercent,
                             ),
                           ),
@@ -1089,10 +1132,11 @@ class _SimulatorPageState extends State<SimulatorPage> {
                     const Divider(height: 20),
                     Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            '3. Weekend Auto-Replay (1s)',
-                            style: TextStyle(
+                            AppL10n.tr('sim.autoReplay',
+                                '3. Weekend Auto-Replay (1s)'),
+                            style: const TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                         ),
@@ -1105,24 +1149,25 @@ class _SimulatorPageState extends State<SimulatorPage> {
                     DropdownButtonFormField<String>(
                       initialValue: _replayRegime,
                       isDense: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Replay Regime',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText:
+                            AppL10n.tr('sim.replayRegime', 'Replay Regime'),
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
-                      items: const [
+                      items: [
                         DropdownMenuItem(
                             value: 'Random Walk',
-                            child: Text('Random Walk (Balanced)')),
+                            child: Text(AppL10n.tr('sim.randomWalk', 'Random Walk (Balanced)'))),
                         DropdownMenuItem(
                             value: 'Bull Drift',
-                            child: Text('Bullish Trend Drift')),
+                            child: Text(AppL10n.tr('sim.bullDrift', 'Bullish Trend Drift'))),
                         DropdownMenuItem(
                             value: 'Bear Drift',
-                            child: Text('Bearish Trend Drift')),
+                            child: Text(AppL10n.tr('sim.bearDrift', 'Bearish Trend Drift'))),
                         DropdownMenuItem(
                             value: 'Volatility',
-                            child: Text('High Volatility Shock')),
+                            child: Text(AppL10n.tr('sim.highVolShock', 'High Volatility Shock'))),
                       ],
                       onChanged: (v) {
                         if (v != null) setState(() => _replayRegime = v);
@@ -1134,10 +1179,11 @@ class _SimulatorPageState extends State<SimulatorPage> {
                           setState(() => _showCustomOhlc = !_showCustomOhlc),
                       child: Row(
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              '4. Exact Price / Custom OHLCV',
-                              style: TextStyle(
+                              AppL10n.tr('sim.exactOhlcv',
+                                  '4. Exact Price / Custom OHLCV'),
+                              style: const TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 13),
                             ),
                           ),
@@ -1174,7 +1220,7 @@ class _SimulatorPageState extends State<SimulatorPage> {
                           const SizedBox(width: 8),
                           FilledButton.icon(
                             icon: const Icon(Icons.add_chart, size: 15),
-                            label: const Text('Inject'),
+                            label: Text(AppL10n.tr('sim.inject', 'Inject')),
                             onPressed: _injectCustomCandle,
                           ),
                         ],
@@ -1197,9 +1243,10 @@ class _SimulatorPageState extends State<SimulatorPage> {
                   margin: EdgeInsets.zero,
                   clipBehavior: Clip.antiAlias,
                   child: widget.candles.isEmpty
-                      ? const Center(
-                          child: Text('Waiting for candles...',
-                              style: TextStyle(color: Colors.grey)),
+                      ? Center(
+                          child: Text(
+                              AppL10n.tr('sim.waiting', 'Waiting for candles...'),
+                              style: const TextStyle(color: Colors.grey)),
                         )
                       : NativeChartWidget(
                           symbol: widget.selectedSymbol,
@@ -1236,15 +1283,16 @@ class _SimulatorPageState extends State<SimulatorPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Account & Position Impact',
-                                style: TextStyle(
+                              Text(
+                                AppL10n.tr('sim.accountImpact',
+                                    'Account & Position Impact'),
+                                style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 12.5),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Equity: \$${widget.equity.toStringAsFixed(2)} (${openPnl >= 0 ? '+' : ''}\$${openPnl.toStringAsFixed(2)})',
+                                '${AppL10n.tr('dash.equity', 'Equity')}: \$${widget.equity.toStringAsFixed(2)} (${openPnl >= 0 ? '+' : ''}\$${openPnl.toStringAsFixed(2)})',
                                 style: TextStyle(
                                   fontSize: 11.5,
                                   fontFamily: 'monospace',
@@ -1256,9 +1304,10 @@ class _SimulatorPageState extends State<SimulatorPage> {
                               const Divider(height: 12),
                               Expanded(
                                 child: symbolPositions.isEmpty
-                                    ? const Center(
+                                    ? Center(
                                         child: Text(
-                                          'No open positions on this symbol.',
+                                          AppL10n.tr('sim.noOpenOnSymbol',
+                                              'No open positions on this symbol.'),
                                           style: TextStyle(
                                               fontSize: 11, color: Colors.grey),
                                         ),
@@ -1305,10 +1354,11 @@ class _SimulatorPageState extends State<SimulatorPage> {
                               Expanded(
                                 child: (symbolAlerts.isEmpty &&
                                         symbolStrategies.isEmpty)
-                                    ? const Center(
+                                    ? Center(
                                         child: Text(
-                                          'No active alerts or strategies.',
-                                          style: TextStyle(
+                                          AppL10n.tr('sim.noAlertsOrStrats',
+                                              'No active alerts or strategies.'),
+                                          style: const TextStyle(
                                               fontSize: 11, color: Colors.grey),
                                         ),
                                       )
@@ -1360,9 +1410,9 @@ class _SimulatorPageState extends State<SimulatorPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Shock Event Log',
-                                style: TextStyle(
+                              Text(
+                                AppL10n.tr('sim.shockLog', 'Shock Event Log'),
+                                style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 12.5),
                               ),

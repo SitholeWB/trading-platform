@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import '../models/trading_models.dart';
 import 'indicator_engine.dart';
+import 'localization_service.dart';
 import 'storage_service.dart';
 import 'strategy_scanner.dart';
 import 'symbol_catalog.dart';
@@ -139,11 +140,17 @@ class AiCopilotService {
     required List<Candle> candles,
     List<ChatMessage> history = const [],
     String? extraContext,
+    String languageCode = 'en',
   }) async {
     final baseDiag = _buildTraderContext(symbol, timeframe, candles);
-    final diag = (extraContext != null && extraContext.trim().isNotEmpty)
-        ? '$baseDiag\n\nSECTION DOCUMENTATION:\n${extraContext.trim()}'
-        : baseDiag;
+    final langInstr = AppL10n.languagePromptInstruction(languageCode);
+    final parts = <String>[
+      baseDiag,
+      if (langInstr.isNotEmpty) 'LANGUAGE REQUIREMENT:\n$langInstr',
+      if (extraContext != null && extraContext.trim().isNotEmpty)
+        'SECTION DOCUMENTATION:\n${extraContext.trim()}',
+    ];
+    final diag = parts.join('\n\n');
     final provider = storage.aiProvider;
     final spec = specFor(provider);
     final model = storage.aiModel.trim().isNotEmpty

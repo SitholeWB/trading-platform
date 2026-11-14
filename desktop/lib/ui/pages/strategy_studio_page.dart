@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../models/trading_models.dart';
 import '../../services/ai_copilot_service.dart';
 import '../../services/indicator_engine.dart';
+import '../../services/localization_service.dart';
 import '../../services/market_data_service.dart';
 import '../../services/strategy_scanner.dart';
 import '../../services/symbol_catalog.dart';
@@ -301,11 +302,12 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       barrierDismissible: !compiling,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.auto_awesome, color: Color(0xFFA855F7), size: 20),
-              SizedBox(width: 8),
-              Text('Plain-Text AI Strategy Compiler'),
+              const Icon(Icons.auto_awesome, color: Color(0xFFA855F7), size: 20),
+              const SizedBox(width: 8),
+              Text(AppL10n.tr(
+                  'strat.aiCompilerTitle', 'Plain-Text AI Strategy Compiler')),
             ],
           ),
           content: SizedBox(
@@ -451,7 +453,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
           actions: [
             TextButton(
               onPressed: compiling ? null : () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
+              child: Text(AppL10n.tr('common.cancel', 'Cancel')),
             ),
             FilledButton.icon(
               icon: compiling
@@ -558,9 +560,9 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                 padding: const EdgeInsets.fromLTRB(12, 12, 10, 8),
                 child: Row(
                   children: [
-                    const Text(
-                      'RULE STUDIO',
-                      style: TextStyle(
+                    Text(
+                      AppL10n.tr('strat.ruleStudio', 'RULE STUDIO'),
+                      style: const TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.9,
@@ -569,7 +571,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                     ),
                     const Spacer(),
                     IconButton(
-                      tooltip: 'AI Strategy Generator',
+                      tooltip: AppL10n.tr(
+                          'strat.aiGenerator', 'AI Strategy Generator'),
                       icon: const Icon(Icons.auto_awesome,
                           size: 18, color: Color(0xFFA855F7)),
                       onPressed: _showAiGeneratorDialog,
@@ -577,7 +580,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                     FilledButton.icon(
                       onPressed: _startNewStrategy,
                       icon: const Icon(Icons.add, size: 15),
-                      label: const Text('New', style: TextStyle(fontSize: 12)),
+                      label: Text(AppL10n.tr('strat.new', 'New'),
+                          style: const TextStyle(fontSize: 12)),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
@@ -696,8 +700,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                         controller: _nameCtrl,
                         style: const TextStyle(
                             fontSize: 14, fontWeight: FontWeight.bold),
-                        decoration: const InputDecoration(
-                          labelText: 'Strategy Name',
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr('strat.name', 'Strategy Name'),
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -708,8 +712,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       width: 130,
                       child: DropdownButtonFormField<String>(
                         initialValue: _symbol,
-                        decoration: const InputDecoration(
-                          labelText: 'Symbol',
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr('strat.symbol', 'Symbol'),
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -730,8 +734,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       width: 145,
                       child: DropdownButtonFormField<String>(
                         initialValue: _scanUniverse,
-                        decoration: const InputDecoration(
-                          labelText: 'Universe',
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr('strat.universe', 'Universe'),
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -752,8 +756,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       width: 100,
                       child: DropdownButtonFormField<Timeframe>(
                         initialValue: _timeframe,
-                        decoration: const InputDecoration(
-                          labelText: 'TF',
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr('strat.tf', 'TF'),
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -773,7 +777,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('Active', style: TextStyle(fontSize: 12)),
+                        Text(AppL10n.tr('strat.active', 'Active'),
+                            style: const TextStyle(fontSize: 12)),
                         Switch(
                           value: _isEnabled,
                           onChanged: (v) => setState(() => _isEnabled = v),
@@ -787,8 +792,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('Auto-Trade',
-                              style: TextStyle(fontSize: 12)),
+                          Text(AppL10n.tr('strat.autoTrade', 'Auto-Trade'),
+                              style: const TextStyle(fontSize: 12)),
                           Switch(
                             value: _autoTrade,
                             onChanged: (v) => setState(() => _autoTrade = v),
@@ -807,19 +812,21 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.play_arrow, size: 16),
-                        label: const Text('Test Strategy'),
+                        label: Text(AppL10n.tr(
+                            'strat.testStrategy', 'Test Strategy')),
                       ),
                     ],
                     const SizedBox(width: 8),
                     FilledButton.icon(
                       onPressed: _saveCurrent,
                       icon: const Icon(Icons.save, size: 16),
-                      label: const Text('Save'),
+                      label: Text(AppL10n.tr('common.save', 'Save')),
                     ),
                     if (!_isCreatingNew && _selectedId != null) ...[
                       const SizedBox(width: 6),
                       IconButton(
-                        tooltip: 'Delete Strategy',
+                        tooltip:
+                            AppL10n.tr('strat.delete', 'Delete Strategy'),
                         icon: const Icon(Icons.delete_outline,
                             color: Colors.redAccent),
                         onPressed: () => widget.onDeleteStrategy(_selectedId!),
@@ -883,14 +890,21 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                 ),
                 child: Row(
                   children: [
-                    _tabChip(0, 'Visual Builder', Icons.tune),
+                    _tabChip(
+                        0,
+                        AppL10n.tr('strat.visualBuilder', 'Visual Builder'),
+                        Icons.tune),
                     const SizedBox(width: 6),
-                    _tabChip(1, 'JSON Definition', Icons.code),
+                    _tabChip(1, AppL10n.tr('strat.jsonDef', 'JSON Definition'),
+                        Icons.code),
                     const SizedBox(width: 6),
-                    _tabChip(2, 'Risk & Evaluation', Icons.analytics_outlined),
+                    _tabChip(
+                        2,
+                        AppL10n.tr('strat.riskEval', 'Risk & Evaluation'),
+                        Icons.analytics_outlined),
                     const Spacer(),
                     Text(
-                      'R:R 1:${rr.toStringAsFixed(1)} · Risk ${_riskPercent.toStringAsFixed(1)}%',
+                      'R:R 1:${rr.toStringAsFixed(1)} · ${AppL10n.tr('dash.risk', 'Risk')} ${_riskPercent.toStringAsFixed(1)}%',
                       style: const TextStyle(
                         fontSize: 11.5,
                         fontFamily: 'monospace',
@@ -932,8 +946,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       children: [
         TextField(
           controller: _descCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Strategy Description / Notes',
+          decoration: InputDecoration(
+            labelText: AppL10n.tr('strat.description', 'Strategy Description / Notes'),
             border: OutlineInputBorder(),
             isDense: true,
           ),
@@ -949,16 +963,23 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
               children: [
                 Row(
                   children: [
-                    const Text(
-                      'Risk & Rule Combinator',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    Text(
+                      AppL10n.tr(
+                          'strat.riskCombinator', 'Risk & Rule Combinator'),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                     const Spacer(),
                     SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'AND', label: Text('ALL (AND)')),
-                        ButtonSegment(value: 'OR', label: Text('ANY (OR)')),
+                      segments: [
+                        ButtonSegment(
+                            value: 'AND',
+                            label: Text(
+                                AppL10n.tr('strat.allAnd', 'ALL (AND)'))),
+                        ButtonSegment(
+                            value: 'OR',
+                            label:
+                                Text(AppL10n.tr('strat.anyOr', 'ANY (OR)'))),
                       ],
                       selected: {_combinator},
                       onSelectionChanged: (v) =>
@@ -973,7 +994,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Risk %: ${_riskPercent.toStringAsFixed(2)}%',
+                          Text(
+                              '${AppL10n.tr('strat.riskPct', 'Risk %')}: ${_riskPercent.toStringAsFixed(2)}%',
                               style: const TextStyle(fontSize: 11.5)),
                           Slider(
                             value: _riskPercent,
@@ -989,7 +1011,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('SL ATR: ${_slMult.toStringAsFixed(1)}x',
+                          Text(
+                              '${AppL10n.tr('strat.slAtr', 'SL ATR')}: ${_slMult.toStringAsFixed(1)}x',
                               style: const TextStyle(fontSize: 11.5)),
                           Slider(
                             value: _slMult,
@@ -1005,7 +1028,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('TP ATR: ${_tpMult.toStringAsFixed(1)}x',
+                          Text(
+                              '${AppL10n.tr('strat.tpAtr', 'TP ATR')}: ${_tpMult.toStringAsFixed(1)}x',
                               style: const TextStyle(fontSize: 11.5)),
                           Slider(
                             value: _tpMult,
@@ -1032,9 +1056,11 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Trade Management, HTF Filter & Guardrails',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                Text(
+                  AppL10n.tr('strat.tradeMgmt',
+                      'Trade Management, HTF Filter & Guardrails'),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -1043,19 +1069,19 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       child: DropdownButtonFormField<String>(
                         initialValue: _directionMode,
                         isDense: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Direction Mode',
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr('strat.directionMode', 'Direction Mode'),
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
-                        items: const [
+                        items: [
                           DropdownMenuItem(
-                              value: 'LongOnly', child: Text('Long Only')),
+                              value: 'LongOnly', child: Text(AppL10n.tr('strat.longOnly', 'Long Only'))),
                           DropdownMenuItem(
                               value: 'Both',
-                              child: Text('Both (Auto-Mirrored)')),
+                              child: Text(AppL10n.tr('strat.bothMirrored', 'Both (Auto-Mirrored)'))),
                           DropdownMenuItem(
-                              value: 'ShortOnly', child: Text('Short Only')),
+                              value: 'ShortOnly', child: Text(AppL10n.tr('strat.shortOnly', 'Short Only'))),
                         ],
                         onChanged: (v) {
                           if (v != null) setState(() => _directionMode = v);
@@ -1067,14 +1093,14 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                       child: DropdownButtonFormField<String>(
                         initialValue: _htfTimeframe?.code ?? 'NONE',
                         isDense: true,
-                        decoration: const InputDecoration(
-                          labelText: 'HTF Trend Filter',
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr('strat.htfFilter', 'HTF Trend Filter'),
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
                         items: [
-                          const DropdownMenuItem(
-                              value: 'NONE', child: Text('None')),
+                          DropdownMenuItem(
+                              value: 'NONE', child: Text(AppL10n.tr('strat.none', 'None'))),
                           ...Timeframe.values.map((t) => DropdownMenuItem(
                               value: t.code,
                               child: Text('${t.code} Confirmation'))),
@@ -1094,9 +1120,9 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                         child: DropdownButtonFormField<String>(
                           initialValue: _htfIndicator,
                           isDense: true,
-                          decoration: const InputDecoration(
-                            labelText: 'HTF Indicator',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: AppL10n.tr('strat.htfIndicator', 'HTF Indicator'),
+                            border: const OutlineInputBorder(),
                             isDense: true,
                           ),
                           items: const [
@@ -1128,10 +1154,11 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                         initialValue: _breakEvenR.toStringAsFixed(1),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Break-Even (R)',
-                          hintText: '0 = off',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr(
+                              'strat.breakEvenR', 'Break-Even (R)'),
+                          hintText: AppL10n.tr('strat.zeroOff', '0 = off'),
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         onChanged: (v) {
@@ -1149,10 +1176,11 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                         initialValue: _trailingAtrMult.toStringAsFixed(1),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Trailing ATR',
-                          hintText: '0 = off',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr(
+                              'strat.trailingAtr', 'Trailing ATR'),
+                          hintText: AppL10n.tr('strat.zeroOff', '0 = off'),
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         onChanged: (v) {
@@ -1169,10 +1197,11 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                         key: ValueKey('${_selectedId}_maxhold'),
                         initialValue: _maxHoldBars.toString(),
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Max Hold Bars',
-                          hintText: '0 = off',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr(
+                              'strat.maxHoldBars', 'Max Hold Bars'),
+                          hintText: AppL10n.tr('strat.zeroOff', '0 = off'),
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         onChanged: (v) {
@@ -1189,10 +1218,11 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                         key: ValueKey('${_selectedId}_cool'),
                         initialValue: _cooldownBarsAfterSl.toString(),
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'SL Cooldown Bars',
-                          hintText: '0 = off',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: AppL10n.tr(
+                              'strat.slCooldownBars', 'SL Cooldown Bars'),
+                          hintText: AppL10n.tr('strat.zeroOff', '0 = off'),
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         onChanged: (v) {
@@ -1210,9 +1240,10 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                         initialValue: _spreadBps.toStringAsFixed(1),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Spread (bps)',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText:
+                              AppL10n.tr('strat.spreadBps', 'Spread (bps)'),
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         onChanged: (v) {
@@ -1248,9 +1279,11 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
         // Optional Exit Rules
         Row(
           children: [
-            const Text(
-              'Optional Exit Rules (Close Early)',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+            Text(
+              AppL10n.tr(
+                  'strat.optionalExit', 'Optional Exit Rules (Close Early)'),
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
             ),
             const Spacer(),
             OutlinedButton.icon(
@@ -1261,7 +1294,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                     period: 14,
                   ))),
               icon: const Icon(Icons.add, size: 15),
-              label: const Text('Add Exit Rule', style: TextStyle(fontSize: 12)),
+              label: Text(AppL10n.tr('strat.addExitRule', 'Add Exit Rule'),
+                  style: const TextStyle(fontSize: 12)),
             ),
           ],
         ),
@@ -1314,8 +1348,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
               const SizedBox(width: 6),
               Text(
                 depth == 0
-                    ? 'Root Entry Logic (${group.totalRuleCount} rules)'
-                    : 'Nested Group',
+                    ? '${AppL10n.tr('strat.rootLogic', 'Root Entry Logic')} (${group.totalRuleCount} ${AppL10n.tr('sim.rules', 'rules')})'
+                    : AppL10n.tr('strat.nestedGroupLabel', 'Nested Group'),
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 12.5,
@@ -1324,9 +1358,13 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
               ),
               const SizedBox(width: 10),
               SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'AND', label: Text('AND')),
-                  ButtonSegment(value: 'OR', label: Text('OR')),
+                segments: [
+                  ButtonSegment(
+                      value: 'AND',
+                      label: Text(AppL10n.tr('strat.and', 'AND'))),
+                  ButtonSegment(
+                      value: 'OR',
+                      label: Text(AppL10n.tr('strat.or', 'OR'))),
                 ],
                 selected: {isOr ? 'OR' : 'AND'},
                 style: const ButtonStyle(
@@ -1349,7 +1387,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                   ],
                 )),
                 icon: const Icon(Icons.add, size: 14),
-                label: const Text('+ Rule', style: TextStyle(fontSize: 11.5)),
+                label: Text(AppL10n.tr('strat.addRule', '+ Rule'),
+                    style: const TextStyle(fontSize: 11.5)),
               ),
               if (depth < 2) ...[
                 const SizedBox(width: 6),
@@ -1371,14 +1410,14 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                     ],
                   )),
                   icon: const Icon(Icons.create_new_folder_outlined, size: 14),
-                  label: const Text('+ Nested Group',
-                      style: TextStyle(fontSize: 11.5)),
+                  label: Text(AppL10n.tr('strat.nestedGroup', '+ Nested Group'),
+                      style: const TextStyle(fontSize: 11.5)),
                 ),
               ],
               if (onRemoveGroup != null) ...[
                 const SizedBox(width: 4),
                 IconButton(
-                  tooltip: 'Delete Group',
+                  tooltip: AppL10n.tr('strat.deleteGroup', 'Delete Group'),
                   icon: const Icon(Icons.delete_outline,
                       size: 17, color: Colors.redAccent),
                   onPressed: onRemoveGroup,
@@ -1464,8 +1503,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
               flex: 2,
               child: DropdownButtonFormField<String>(
                 initialValue: indVal,
-                decoration: const InputDecoration(
-                  labelText: 'Indicator',
+                decoration: InputDecoration(
+                  labelText: AppL10n.tr('strat.indicator', 'Indicator'),
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -1492,8 +1531,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
               flex: 2,
               child: DropdownButtonFormField<String>(
                 initialValue: condVal,
-                decoration: const InputDecoration(
-                  labelText: 'Condition',
+                decoration: InputDecoration(
+                  labelText: AppL10n.tr('strat.condition', 'Condition'),
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -1523,8 +1562,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                 initialValue: rule.threshold.toString(),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Threshold',
+                decoration: InputDecoration(
+                  labelText: AppL10n.tr('strat.threshold', 'Threshold'),
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -1548,8 +1587,8 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                 key: ValueKey('${keyPrefix}_per'),
                 initialValue: rule.period.toString(),
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Period',
+                decoration: InputDecoration(
+                  labelText: AppL10n.tr('strat.period', 'Period'),
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -1568,7 +1607,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
             ),
             const SizedBox(width: 4),
             IconButton(
-              tooltip: 'Remove Rule',
+              tooltip: AppL10n.tr('strat.removeRule', 'Remove Rule'),
               icon: const Icon(Icons.close, size: 17),
               onPressed: onDelete,
             ),
@@ -1600,7 +1639,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                   setState(() => _statusBanner = 'Copied JSON to clipboard');
                 },
                 icon: const Icon(Icons.copy, size: 15),
-                label: const Text('Copy JSON'),
+                label: Text(AppL10n.tr('strat.copyJson', 'Copy JSON')),
               ),
             ],
           ),
@@ -1743,25 +1782,25 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                             fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                     ),
-                    const Text('Period: ',
+                    Text('\${AppL10n.tr(\'strat.period\', \'Period\')}: ',
                         style: TextStyle(fontSize: 12, color: Colors.grey)),
                     DropdownButton<int>(
                       value: _testLookbackBars,
                       isDense: true,
                       underline: const SizedBox.shrink(),
-                      items: const [
+                      items: [
                         DropdownMenuItem(
-                            value: 100, child: Text('Last 100 Bars')),
+                            value: 100, child: Text('${AppL10n.tr('strat.lastBars', 'Last')} 100 ${AppL10n.tr('strat.bars', 'Bars')}')),
                         DropdownMenuItem(
-                            value: 300, child: Text('Last 300 Bars')),
+                            value: 300, child: Text('${AppL10n.tr('strat.lastBars', 'Last')} 300 ${AppL10n.tr('strat.bars', 'Bars')}')),
                         DropdownMenuItem(
-                            value: 500, child: Text('Last 500 Bars')),
+                            value: 500, child: Text('${AppL10n.tr('strat.lastBars', 'Last')} 500 ${AppL10n.tr('strat.bars', 'Bars')}')),
                         DropdownMenuItem(
-                            value: 1000, child: Text('Last 1,000 Bars')),
+                            value: 1000, child: Text('${AppL10n.tr('strat.lastBars', 'Last')} 1,000 ${AppL10n.tr('strat.bars', 'Bars')}')),
                         DropdownMenuItem(
-                            value: 2000, child: Text('Last 2,000 Bars')),
+                            value: 2000, child: Text('${AppL10n.tr('strat.lastBars', 'Last')} 2,000 ${AppL10n.tr('strat.bars', 'Bars')}')),
                         DropdownMenuItem(
-                            value: 5000, child: Text('Last 5,000 Bars')),
+                            value: 5000, child: Text('${AppL10n.tr('strat.lastBars', 'Last')} 5,000 ${AppL10n.tr('strat.bars', 'Bars')}')),
                       ],
                       onChanged: (v) {
                         if (v != null) setState(() => _testLookbackBars = v);
@@ -1779,7 +1818,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                           : const Icon(Icons.radar, size: 16),
                       label: Text(_scanning
                           ? 'Scanning...'
-                          : 'Scan Universe (${universeSymbols.length})'),
+                          : '${AppL10n.tr('strat.scanUniverse', 'Scan Universe')} (${universeSymbols.length})'),
                     ),
                     const SizedBox(width: 8),
                     FilledButton.icon(
@@ -1794,7 +1833,9 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                               ),
                             )
                           : const Icon(Icons.play_arrow, size: 16),
-                      label: Text(_testing ? 'Testing...' : 'Run Backtest'),
+                      label: Text(_testing
+                          ? AppL10n.tr('scan.scanning', 'Testing...')
+                          : AppL10n.tr('strat.runBacktest', 'Run Backtest')),
                     ),
                   ],
                 ),

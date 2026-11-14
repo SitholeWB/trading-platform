@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/trading_models.dart';
 import '../services/ai_copilot_service.dart';
 import '../services/indicator_engine.dart';
+import '../services/localization_service.dart';
 import '../services/market_data_service.dart';
 import '../services/notification_service.dart';
 import '../services/section_docs.dart';
@@ -106,9 +107,31 @@ class _AppShellState extends State<AppShell> {
       context: context,
       builder: (_) => LanguageSelectorDialog(
         currentLanguage: _languageCode,
-        onSelect: (code) => setState(() => _languageCode = code),
+        onSelect: (code) {
+          setState(() {
+            _languageCode = code;
+            AppL10n.activeLanguage = code;
+            widget.storage.languageCode = code;
+          });
+          widget.storage.save();
+        },
       ),
     );
+  }
+
+  String _pageLabel(AppPage page) {
+    final key = switch (page) {
+      AppPage.dashboard => 'nav.dashboard',
+      AppPage.scanner => 'nav.scanner',
+      AppPage.strategies => 'nav.strategies',
+      AppPage.radar => 'nav.radar',
+      AppPage.positions => 'nav.positions',
+      AppPage.sandbox => 'nav.simulator',
+      AppPage.chart => 'nav.chart',
+      AppPage.docs => 'nav.docs',
+      AppPage.journal => 'nav.journal',
+    };
+    return AppL10n.t(_languageCode, key, page.title);
   }
 
   void _openShortcutsDialog() {
@@ -118,9 +141,42 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  void _onNotificationsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _openAlertsDialog() {
+    final currentPrice = _candles.isNotEmpty
+        ? _candles.last.close
+        : SymbolCatalog.find(widget.storage.selectedSymbol).defaultBaseline;
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertsDialog(
+        symbol: widget.storage.selectedSymbol,
+        currentPrice: currentPrice,
+        alerts: widget.storage.alerts,
+        notifications: widget.notifications,
+        showAllSymbols: true,
+        onAddAlert: (a) {
+          widget.storage.alerts.add(a);
+          widget.storage.save();
+          setState(() {});
+        },
+        onDeleteAlert: (id) {
+          widget.storage.alerts.removeWhere((a) => a.id == id);
+          widget.storage.save();
+          setState(() {});
+        },
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
+    _languageCode = widget.storage.languageCode;
+    AppL10n.activeLanguage = _languageCode;
+    widget.notifications.addListener(_onNotificationsChanged);
     _ensureCopilotSession(save: false);
     _loadInitialData();
     _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -136,6 +192,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
+    widget.notifications.removeListener(_onNotificationsChanged);
     _tickTimer?.cancel();
     super.dispose();
   }
@@ -712,7 +769,7 @@ class _AppShellState extends State<AppShell> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('Save to Trading Journal'),
+          title: Text(AppL10n.tr('app.saveToJournal', 'Save to Trading Journal')),
           content: SizedBox(
             width: 460,
             child: Column(
@@ -721,16 +778,16 @@ class _AppShellState extends State<AppShell> {
               children: [
                 SegmentedButton<bool>(
                   segments: [
-                    const ButtonSegment(
+                    ButtonSegment(
                       value: false,
-                      icon: Icon(Icons.note_add_outlined, size: 16),
-                      label: Text('Create New Note'),
+                      icon: const Icon(Icons.note_add_outlined, size: 16),
+                      label: Text(AppL10n.tr('app.createNewNote', 'Create New Note')),
                     ),
                     ButtonSegment(
                       value: true,
                       enabled: existing.isNotEmpty,
                       icon: const Icon(Icons.playlist_add, size: 16),
-                      label: const Text('Append to Existing'),
+                      label: Text(AppL10n.tr('app.appendExisting', 'Append to Existing')),
                     ),
                   ],
                   selected: {appendMode},
@@ -820,7 +877,7 @@ class _AppShellState extends State<AppShell> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
+              child: Text(AppL10n.tr('common.cancel', 'Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
@@ -871,14 +928,37 @@ class _AppShellState extends State<AppShell> {
     titleCtrl.dispose();
   }
 
+  static const String _guideSessionId = 'copilot_section_guide';
+
   void _askAiAboutSection(SectionDoc doc) {
+    final now = DateTime.now().toUtc();
+    final sessions = List<CopilotSession>.from(widget.storage.copilotSessions);
+    final hasGuide = sessions.any((s) => s.id == _guideSessionId);
+    if (!hasGuide) {
+      sessions.insert(
+        0,
+        CopilotSession(
+          id: _guideSessionId,
+          title: AppL10n.t(
+              _languageCode, 'copilot.guideTitle', 'Platform Guide (Section Help)'),
+          symbol: widget.storage.selectedSymbol,
+          timeframe: widget.storage.selectedTimeframe,
+          messages: const [],
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+    }
     setState(() {
+      widget.storage.copilotSessions = sessions;
+      widget.storage.activeCopilotSessionId = _guideSessionId;
       _isCopilotOpen = true;
       _pendingHelpPrompt =
           'Explain how the "${doc.title}" section works and how to use it step by step.';
       _pendingHelpContext = doc.markdown;
       _pendingHelpSeq++;
     });
+    widget.storage.save();
   }
 
   Widget _buildCopilotDrawer() {
@@ -915,6 +995,7 @@ class _AppShellState extends State<AppShell> {
       pendingHelpPrompt: _pendingHelpPrompt,
       pendingHelpContext: _pendingHelpContext,
       pendingHelpSeq: _pendingHelpSeq,
+      languageCode: _languageCode,
     );
   }
 
@@ -1001,7 +1082,7 @@ class _AppShellState extends State<AppShell> {
               child: FloatingActionButton.extended(
                 onPressed: () => setState(() => _isCopilotOpen = true),
                 icon: const Icon(Icons.auto_awesome),
-                label: const Text('AI Copilot'),
+                label: Text(AppL10n.tr('app.aiCopilotBtn', 'AI Copilot')),
               ),
             ),
         ],
@@ -1050,10 +1131,10 @@ class _AppShellState extends State<AppShell> {
                 ),
                 if (!collapsed) ...[
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Trading\nPlatform',
-                      style: TextStyle(
+                      AppL10n.t(_languageCode, 'common.appTitle', 'Trading Platform'),
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 12.5,
                         height: 1.15,
@@ -1069,10 +1150,11 @@ class _AppShellState extends State<AppShell> {
               padding: const EdgeInsets.all(8),
               children: navPages.map((page) {
                 final active = _activePage == page;
+                final label = _pageLabel(page);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Tooltip(
-                    message: collapsed ? page.title : '',
+                    message: collapsed ? label : '',
                     child: ListTile(
                       dense: true,
                       selected: active,
@@ -1082,7 +1164,7 @@ class _AppShellState extends State<AppShell> {
                       leading: Icon(page.icon, size: 19),
                       title: collapsed
                           ? null
-                          : Text(page.title,
+                          : Text(label,
                               style: const TextStyle(fontSize: 12.5)),
                       trailing: !collapsed &&
                               page == AppPage.positions &&
@@ -1111,7 +1193,8 @@ class _AppShellState extends State<AppShell> {
                   leading: const Icon(Icons.menu_book_outlined, size: 18),
                   title: collapsed
                       ? null
-                      : const Text('Docs', style: TextStyle(fontSize: 12.5)),
+                      : Text(AppL10n.t(_languageCode, 'nav.docs', 'User Manual'),
+                          style: const TextStyle(fontSize: 12.5)),
                   onTap: () => setState(() => _activePage = AppPage.docs),
                 ),
                 ListTile(
@@ -1119,8 +1202,9 @@ class _AppShellState extends State<AppShell> {
                   leading: const Icon(Icons.feedback_outlined, size: 18),
                   title: collapsed
                       ? null
-                      : const Text('Feedback',
-                          style: TextStyle(fontSize: 12.5)),
+                      : Text(
+                          AppL10n.t(_languageCode, 'common.feedback', 'Feedback'),
+                          style: const TextStyle(fontSize: 12.5)),
                   onTap: () => showDialog(
                     context: context,
                     builder: (_) => FeedbackDialog(
@@ -1134,8 +1218,9 @@ class _AppShellState extends State<AppShell> {
                   leading: const Icon(Icons.settings_outlined, size: 18),
                   title: collapsed
                       ? null
-                      : const Text('Settings',
-                          style: TextStyle(fontSize: 12.5)),
+                      : Text(
+                          AppL10n.t(_languageCode, 'common.settings', 'Settings'),
+                          style: const TextStyle(fontSize: 12.5)),
                   onTap: () => showDialog(
                     context: context,
                     builder: (_) => BrokerSettingsDialog(
@@ -1152,7 +1237,11 @@ class _AppShellState extends State<AppShell> {
                     collapsed ? Icons.chevron_right : Icons.chevron_left,
                     size: 18,
                   ),
-                  tooltip: collapsed ? 'Expand Sidebar' : 'Collapse Sidebar',
+                  tooltip: collapsed
+                      ? AppL10n.t(
+                          _languageCode, 'header.expandSidebar', 'Expand Sidebar')
+                      : AppL10n.t(_languageCode, 'header.collapseSidebar',
+                          'Collapse Sidebar'),
                   onPressed: () {
                     setState(() {
                       widget.storage.isNavCollapsed = !collapsed;
@@ -1176,147 +1265,207 @@ class _AppShellState extends State<AppShell> {
         '${nowLocal.hour.toString().padLeft(2, '0')}:${nowLocal.minute.toString().padLeft(2, '0')}:${nowLocal.second.toString().padLeft(2, '0')}';
 
     return Container(
-      height: 54,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 54),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(
           bottom: BorderSide(color: Theme.of(context).dividerColor),
         ),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 8,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text(
-            _activePage.title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
-          ),
-          const SizedBox(width: 16),
-
-          // Prominent Chart Mode Toggle in Top Appbar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF090E1A),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: const Color(0xFF06B6D4).withValues(alpha: 0.55)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'CHART MODE:',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF22D3EE),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _engineBtn(
-                  label: 'Bot Chart',
-                  icon: Icons.memory,
-                  active: widget.storage.chartEngine == ChartEngineMode.native,
-                  onTap: () {
-                    setState(() {
-                      widget.storage.chartEngine = ChartEngineMode.native;
-                      _activePage = AppPage.chart;
-                    });
-                    widget.storage.save();
-                  },
-                ),
-                const SizedBox(width: 4),
-                _engineBtn(
-                  label: 'TradingView Live',
-                  icon: Icons.public,
-                  active:
-                      widget.storage.chartEngine == ChartEngineMode.tradingview,
-                  onTap: () {
-                    setState(() {
-                      widget.storage.chartEngine = ChartEngineMode.tradingview;
-                      _activePage = AppPage.chart;
-                    });
-                    widget.storage.save();
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          const Spacer(),
-
-          // Essential Account Figures
-          _accountStat(
-              'EQUITY', '\$${widget.storage.account.equity.toStringAsFixed(2)}'),
-          const SizedBox(width: 16),
-          _accountStat(
-              'BALANCE', '\$${widget.storage.account.balance.toStringAsFixed(2)}'),
-          const SizedBox(width: 16),
-          _accountStat(
-            'DRAWDOWN',
-            '${widget.storage.account.currentDrawdownPercent.toStringAsFixed(2)}%',
-            color: widget.storage.account.currentDrawdownPercent > 3.5
-                ? const Color(0xFFEF4444)
-                : const Color(0xFF10B981),
-          ),
-          const SizedBox(width: 14),
-
-          // Live Timezone Clock Button
-          OutlinedButton.icon(
-            onPressed: _openTimezoneDialog,
-            icon: const Icon(Icons.access_time, size: 14),
-            label: Text(
-              '$clockStr (${widget.storage.timezoneLabel.split(' ').first})',
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 11.5),
-            ),
-          ),
-          const SizedBox(width: 6),
-          IconButton(
-            tooltip: 'Language ($_languageCode)',
-            icon: const Icon(Icons.translate, size: 17),
-            onPressed: _openLanguageDialog,
-          ),
-          IconButton(
-            tooltip: 'Keyboard Shortcuts (Ctrl+/)',
-            icon: const Icon(Icons.keyboard_outlined, size: 17),
-            onPressed: _openShortcutsDialog,
-          ),
-          const SizedBox(width: 4),
-          ActionChip(
-            avatar: const Icon(Icons.help_outline,
-                size: 14, color: Color(0xFF38BDF8)),
-            label: Text(
-              'Ask AI: ${_activePage.title}',
-              style: const TextStyle(fontSize: 11),
-            ),
-            tooltip: 'Ask AI how this section works (uses section docs)',
-            visualDensity: VisualDensity.compact,
-            onPressed: () =>
-                _askAiAboutSection(SectionDocs.forSectionId(_activePage.name)),
-          ),
-
-          if (openCount > 0 || widget.storage.risk.isKillSwitchEngaged) ...[
-            const SizedBox(width: 10),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: widget.storage.risk.isKillSwitchEngaged
-                    ? const Color(0xFFDC2626)
-                    : const Color(0xFF7F1D1D),
+          Wrap(
+            spacing: 14,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                _pageLabel(_activePage),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 14.5),
               ),
-              onPressed: () async {
-                widget.storage.risk = widget.storage.risk.copyWith(
-                  isKillSwitchEngaged: !widget.storage.risk.isKillSwitchEngaged,
-                );
-                await widget.storage.save();
-                setState(() {});
-              },
-              icon: const Icon(Icons.dangerous, size: 15),
-              label: Text(widget.storage.risk.isKillSwitchEngaged
-                  ? 'HALTED'
-                  : 'KILL SWITCH'),
-            ),
-          ],
+
+              // Prominent Chart Mode Toggle in Top Appbar
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF090E1A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: const Color(0xFF06B6D4).withValues(alpha: 0.55)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      AppL10n.t(_languageCode, 'header.chartMode', 'CHART MODE:'),
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF22D3EE),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _engineBtn(
+                      label: AppL10n.t(_languageCode, 'header.botChart', 'Bot Chart'),
+                      icon: Icons.memory,
+                      active:
+                          widget.storage.chartEngine == ChartEngineMode.native,
+                      onTap: () {
+                        setState(() {
+                          widget.storage.chartEngine = ChartEngineMode.native;
+                          _activePage = AppPage.chart;
+                        });
+                        widget.storage.save();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    _engineBtn(
+                      label: AppL10n.t(
+                          _languageCode, 'header.tvLive', 'TradingView Live'),
+                      icon: Icons.public,
+                      active: widget.storage.chartEngine ==
+                          ChartEngineMode.tradingview,
+                      onTap: () {
+                        setState(() {
+                          widget.storage.chartEngine =
+                              ChartEngineMode.tradingview;
+                          _activePage = AppPage.chart;
+                        });
+                        widget.storage.save();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              // Essential Account Figures
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _accountStat(
+                      AppL10n.t(_languageCode, 'header.equity', 'Equity')
+                          .toUpperCase(),
+                      '\$${widget.storage.account.equity.toStringAsFixed(2)}'),
+                  const SizedBox(width: 14),
+                  _accountStat(
+                      AppL10n.t(_languageCode, 'header.balance', 'Balance')
+                          .toUpperCase(),
+                      '\$${widget.storage.account.balance.toStringAsFixed(2)}'),
+                  const SizedBox(width: 14),
+                  _accountStat(
+                    AppL10n.t(
+                            _languageCode, 'header.dailyDrawdown', 'Daily DD')
+                        .toUpperCase(),
+                    '${widget.storage.account.currentDrawdownPercent.toStringAsFixed(2)}%',
+                    color: widget.storage.account.currentDrawdownPercent > 3.5
+                        ? const Color(0xFFEF4444)
+                        : const Color(0xFF10B981),
+                  ),
+                ],
+              ),
+
+              // Utility Actions & Help
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  // Live Timezone Clock Button
+                  OutlinedButton.icon(
+                    onPressed: _openTimezoneDialog,
+                    icon: const Icon(Icons.access_time, size: 14),
+                    label: Text(
+                      '$clockStr (${widget.storage.timezoneLabel.split(' ').first})',
+                      style: const TextStyle(
+                          fontFamily: 'monospace', fontSize: 11.5),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: AppL10n.t(_languageCode, 'header.alertsTooltip',
+                        'Strategy Alerts & Background Scanner'),
+                    icon: Badge(
+                      isLabelVisible: widget.notifications.unreadCount > 0 ||
+                          widget.storage.alerts.any((a) => !a.triggered),
+                      label: Text(
+                        '${widget.notifications.unreadCount > 0 ? widget.notifications.unreadCount : widget.storage.alerts.where((a) => !a.triggered).length}',
+                        style: const TextStyle(
+                            fontSize: 9.5, fontWeight: FontWeight.bold),
+                      ),
+                      backgroundColor: widget.notifications.unreadCount > 0
+                          ? const Color(0xFFEF4444)
+                          : const Color(0xFFF59E0B),
+                      child: const Icon(Icons.notifications_outlined, size: 18),
+                    ),
+                    onPressed: _openAlertsDialog,
+                  ),
+                  IconButton(
+                    tooltip:
+                        '${AppL10n.t(_languageCode, 'header.changeLanguage', 'Change Language')} (${_languageCode.toUpperCase()})',
+                    icon: const Icon(Icons.translate, size: 17),
+                    onPressed: _openLanguageDialog,
+                  ),
+                  IconButton(
+                    tooltip: AppL10n.t(_languageCode, 'header.shortcuts',
+                        'Keyboard Shortcuts (Ctrl+/)'),
+                    icon: const Icon(Icons.keyboard_outlined, size: 17),
+                    onPressed: _openShortcutsDialog,
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.help_outline,
+                        size: 14, color: Color(0xFF38BDF8)),
+                    label: Text(
+                      '${AppL10n.t(_languageCode, 'header.askAi', 'Ask AI')}: ${_pageLabel(_activePage)}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    tooltip: 'Ask AI how this section works (uses section docs)',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _askAiAboutSection(SectionDocs.forSectionId(
+                      _activePage.name,
+                      languageCode: _languageCode,
+                    )),
+                  ),
+                  if (openCount > 0 || widget.storage.risk.isKillSwitchEngaged)
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: widget.storage.risk.isKillSwitchEngaged
+                            ? const Color(0xFFDC2626)
+                            : const Color(0xFF7F1D1D),
+                      ),
+                      onPressed: () async {
+                        widget.storage.risk = widget.storage.risk.copyWith(
+                          isKillSwitchEngaged:
+                              !widget.storage.risk.isKillSwitchEngaged,
+                        );
+                        await widget.storage.save();
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.dangerous, size: 15),
+                      label: Text(widget.storage.risk.isKillSwitchEngaged
+                          ? AppL10n.t(_languageCode, 'common.halted', 'Halted')
+                              .toUpperCase()
+                          : AppL10n.t(_languageCode, 'header.killSwitch',
+                              'KILL SWITCH')),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -1683,6 +1832,7 @@ class _AppShellState extends State<AppShell> {
           onLoadOlderHistory: () => _refreshMarketData(force: true),
         ),
       AppPage.docs => DocumentationPage(
+          languageCode: _languageCode,
           onAskAiAboutSection: _askAiAboutSection,
         ),
     };

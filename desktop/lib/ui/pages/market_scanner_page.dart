@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/trading_models.dart';
 import '../../services/indicator_engine.dart';
+import '../../services/localization_service.dart';
 import '../../services/market_data_service.dart';
 import '../../services/strategy_scanner.dart';
 import '../../services/symbol_catalog.dart';
@@ -206,15 +207,21 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
             children: [
               const Icon(Icons.radar, size: 20, color: Color(0xFF38BDF8)),
               const SizedBox(width: 8),
-              const Text(
-                'Robotic Multi-Market Scanner',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              Text(
+                AppL10n.tr('scanner.title', 'Robotic Multi-Market Scanner'),
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
               ),
               const SizedBox(width: 16),
               SegmentedButton<int>(
-                segments: const [
-                  ButtonSegment(value: 0, label: Text('Live Scan')),
-                  ButtonSegment(value: 1, label: Text('Backtester')),
+                segments: [
+                  ButtonSegment(
+                      value: 0,
+                      label: Text(AppL10n.tr('scanner.liveScan', 'Live Scan'))),
+                  ButtonSegment(
+                      value: 1,
+                      label: Text(
+                          AppL10n.tr('scanner.backtester', 'Backtester'))),
                 ],
                 selected: {_tabIndex},
                 onSelectionChanged: (s) {
@@ -225,9 +232,14 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
               const Spacer(),
               if (_tabIndex == 0) ...[
                 SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('Generic')),
-                    ButtonSegment(value: true, label: Text('Strategies')),
+                  segments: [
+                    ButtonSegment(
+                        value: false,
+                        label: Text(AppL10n.tr('scanner.generic', 'Generic'))),
+                    ButtonSegment(
+                        value: true,
+                        label: Text(
+                            AppL10n.tr('scanner.strategies', 'Strategies'))),
                   ],
                   selected: {_strategyScanMode},
                   onSelectionChanged: (s) {
@@ -244,9 +256,10 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                         ? _selectedStrategyId
                         : '__ALL__',
                     items: [
-                      const DropdownMenuItem(
+                      DropdownMenuItem(
                         value: '__ALL__',
-                        child: Text('All Active Strategies'),
+                        child: Text(AppL10n.tr(
+                            'scanner.allActive', 'All Active Strategies')),
                       ),
                       ...widget.strategies.map((s) => DropdownMenuItem(
                             value: s.id,
@@ -265,7 +278,8 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                 DropdownButton<AssetCategory>(
                   value: _category,
                   items: AssetCategory.values
-                      .map((c) => DropdownMenuItem(value: c, child: Text(c.label)))
+                      .map((c) => DropdownMenuItem(
+                          value: c, child: Text(AppL10n.enumTerm(c.label))))
                       .toList(),
                   onChanged: (v) {
                     if (v != null) {
@@ -297,7 +311,9 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.refresh, size: 16),
-                  label: Text(_scanning ? 'Scanning...' : 'Scan Now'),
+                  label: Text(_scanning
+                      ? AppL10n.tr('scan.scanning', 'Scanning...')
+                      : AppL10n.tr('scan.scanMarket', 'Scan Now')),
                 ),
               ] else ...[
                 DropdownButton<String>(
@@ -305,9 +321,10 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                       ? _btStrategyId
                       : '__builtin__',
                   items: [
-                    const DropdownMenuItem(
+                    DropdownMenuItem(
                       value: '__builtin__',
-                      child: Text('Built-in EMA+RSI'),
+                      child: Text(AppL10n.tr(
+                          'scanner.builtinEmaRsi', 'Built-in EMA+RSI')),
                     ),
                     ...widget.strategies.map((s) => DropdownMenuItem(
                           value: s.id,
@@ -375,7 +392,8 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                         return ListTile(
                           leading: Chip(
                             label: Text(
-                              hit.spec.category.label.toUpperCase(),
+                              AppL10n.enumTerm(hit.spec.category.label)
+                                  .toUpperCase(),
                               style: const TextStyle(fontSize: 10),
                             ),
                           ),
@@ -397,8 +415,8 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                             ],
                           ),
                           subtitle: Text(
-                            'Price: ${IndicatorEngine.formatPrice(hit.price, hit.spec.symbol)} · '
-                            'RSI: ${hit.rsi.toStringAsFixed(1)} · Trend: ${hit.trend}',
+                            '${AppL10n.tr('scanner.price', 'Price')}: ${IndicatorEngine.formatPrice(hit.price, hit.spec.symbol)} · '
+                            'RSI: ${hit.rsi.toStringAsFixed(1)} · ${AppL10n.tr('scanner.trend', 'Trend')}: ${AppL10n.enumTerm(hit.trend)}',
                             style: const TextStyle(
                                 fontFamily: 'monospace', fontSize: 11.5),
                           ),
@@ -409,7 +427,7 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                                 backgroundColor:
                                     sigColor.withValues(alpha: 0.16),
                                 label: Text(
-                                  '${hit.signal} (${hit.score.toStringAsFixed(0)})',
+                                  '${AppL10n.enumTerm(hit.signal)} (${hit.score.toStringAsFixed(0)})',
                                   style: TextStyle(
                                     color: sigColor,
                                     fontWeight: FontWeight.bold,
@@ -421,7 +439,7 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                               OutlinedButton(
                                 onPressed: () =>
                                     widget.onOpenChart(hit.spec.symbol, _tf),
-                                child: const Text('Chart'),
+                                child: Text(AppL10n.tr('scan.chart', 'Chart')),
                               ),
                               const SizedBox(width: 6),
                               if (isBuy || isSell)
@@ -457,15 +475,19 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
           spacing: 12,
           runSpacing: 12,
           children: [
-            _btStat('Total Trades', '$_btTrades', const Color(0xFF38BDF8)),
-            _btStat('Win Rate', '${_btWinRate.toStringAsFixed(1)}%',
+            _btStat(AppL10n.tr('scanner.totalTrades', 'Total Trades'),
+                '$_btTrades', const Color(0xFF38BDF8)),
+            _btStat(AppL10n.tr('scanner.winRate', 'Win Rate'),
+                '${_btWinRate.toStringAsFixed(1)}%',
                 _btWinRate >= 50 ? const Color(0xFF10B981) : const Color(0xFFF59E0B)),
-            _btStat('Profit Factor', _btProfitFactor.toStringAsFixed(2),
+            _btStat(AppL10n.tr('scanner.profitFactor', 'Profit Factor'),
+                _btProfitFactor.toStringAsFixed(2),
                 _btProfitFactor >= 1.2 ? const Color(0xFF10B981) : const Color(0xFFEF4444)),
-            _btStat('Net Return',
+            _btStat(AppL10n.tr('scanner.netReturn', 'Net Return'),
                 '${_btReturnPct >= 0 ? "+" : ""}${_btReturnPct.toStringAsFixed(2)}%',
                 _btReturnPct >= 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444)),
-            _btStat('Max Drawdown', '${_btMaxDdPct.toStringAsFixed(2)}%',
+            _btStat(AppL10n.tr('scanner.maxDrawdown', 'Max Drawdown'),
+                '${_btMaxDdPct.toStringAsFixed(2)}%',
                 const Color(0xFFEF4444)),
           ],
         ),
@@ -473,7 +495,9 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
         Expanded(
           child: Card(
             child: _btLog.isEmpty
-                ? const Center(child: Text('Click "Run Backtest" to simulate trades.'))
+                ? Center(
+                    child: Text(AppL10n.tr('scanner.clickRunBacktest',
+                        'Click "Run Backtest" to simulate trades.')))
                 : ListView.separated(
                     itemCount: _btLog.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
@@ -496,21 +520,23 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
       return const Card(child: Center(child: CircularProgressIndicator()));
     }
     if (widget.strategies.isEmpty) {
-      return const Card(
+      return Card(
         child: Center(
           child: Text(
-            'No strategies configured yet. Create one in Rule Studio to scan by strategy.',
-            style: TextStyle(color: Colors.grey),
+            AppL10n.tr('scanner.noStrategies',
+                'No strategies configured yet. Create one in Rule Studio to scan by strategy.'),
+            style: const TextStyle(color: Colors.grey),
           ),
         ),
       );
     }
     if (_strategyHits.isEmpty) {
-      return const Card(
+      return Card(
         child: Center(
           child: Text(
-            'No strategy scan results yet. Click "Scan Now" to evaluate your strategies across the market.',
-            style: TextStyle(color: Colors.grey),
+            AppL10n.tr('scanner.noScanResults',
+                'No strategy scan results yet. Click "Scan Now" to evaluate your strategies across the market.'),
+            style: const TextStyle(color: Colors.grey),
           ),
         ),
       );
@@ -569,7 +595,7 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                 Chip(
                   backgroundColor: sigColor.withValues(alpha: 0.16),
                   label: Text(
-                    '${hit.signal} (${hit.matchScore.toStringAsFixed(0)}%)',
+                    '${AppL10n.enumTerm(hit.signal)} (${hit.matchScore.toStringAsFixed(0)}%)',
                     style: TextStyle(
                       color: sigColor,
                       fontWeight: FontWeight.bold,
@@ -580,7 +606,7 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                 const SizedBox(width: 8),
                 OutlinedButton(
                   onPressed: () => widget.onOpenChart(hit.spec.symbol, _tf),
-                  child: const Text('Chart'),
+                  child: Text(AppL10n.tr('scan.chart', 'Chart')),
                 ),
                 if (isBuy || isSell) ...[
                   const SizedBox(width: 6),
@@ -595,7 +621,9 @@ class _MarketScannerPageState extends State<MarketScannerPage> {
                       0.10,
                       hit.price,
                     ),
-                    child: Text(isBuy ? 'Buy' : 'Sell'),
+                    child: Text(isBuy
+                        ? AppL10n.tr('dash.buy', 'Buy')
+                        : AppL10n.tr('dash.sell', 'Sell')),
                   ),
                 ],
               ],
