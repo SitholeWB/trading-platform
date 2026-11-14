@@ -65,7 +65,7 @@ class AiCopilotService {
     AiProviderSpec(
       id: 'Gemini',
       label: 'Google Gemini',
-      defaultModel: 'gemini-2.5-flash',
+      defaultModel: 'gemini-3.5-flash',
       defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta',
       requiresKey: true,
     ),
@@ -554,6 +554,57 @@ $context
     required String apiKey,
     required List<ChatMessage> history,
   }) async {
+    try {
+      return await _callGeminiOnce(
+        prompt: prompt,
+        context: context,
+        model: model,
+        apiKey: apiKey,
+        history: history,
+        timeout: const Duration(seconds: 25),
+      );
+    } catch (e) {
+      final msg = e.toString();
+      final shouldFallback = msg.contains('TimeoutException') ||
+          msg.contains('HTTP 404') ||
+          msg.contains('NOT_FOUND');
+      if (!shouldFallback) rethrow;
+
+      final liveModels = await fetchAvailableModels(
+        provider: 'Gemini',
+        apiKey: apiKey,
+        endpoint: '',
+      );
+      final preferred = [
+        'gemini-3.5-flash',
+        'gemini-flash-latest',
+        'gemini-3-flash-preview',
+        ...liveModels.where((m) => m.contains('flash') && !m.contains('tts') && !m.contains('image')),
+      ];
+      final fallbackModel = preferred.firstWhere(
+        (m) => m != model && liveModels.contains(m),
+        orElse: () => liveModels.firstWhere((m) => m != model, orElse: () => ''),
+      );
+      if (fallbackModel.isEmpty) rethrow;
+      return _callGeminiOnce(
+        prompt: prompt,
+        context: context,
+        model: fallbackModel,
+        apiKey: apiKey,
+        history: history,
+        timeout: const Duration(seconds: 30),
+      );
+    }
+  }
+
+  Future<String?> _callGeminiOnce({
+    required String prompt,
+    required String context,
+    required String model,
+    required String apiKey,
+    required List<ChatMessage> history,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
     final uri = Uri.parse(
       'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
     );
@@ -579,6 +630,7 @@ $context
     };
     final resp = await _postJson(
       uri,
+      timeout: timeout,
       headers: {
         'Content-Type': 'application/json',
         'x-goog-api-key': apiKey,
