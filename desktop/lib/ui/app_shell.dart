@@ -71,6 +71,7 @@ class _AppShellState extends State<AppShell> {
   bool _isSyncing = false;
   int _secondsUntilSync = 60;
   bool _isCopilotOpen = false;
+  bool _isCopilotExpanded = false;
   String _timezoneIana = 'Etc/UTC';
   String _languageCode = 'en';
   Timer? _tickTimer;
@@ -665,43 +666,92 @@ class _AppShellState extends State<AppShell> {
                     Expanded(
                       child: Row(
                         children: [
-                          Expanded(child: _buildActivePage(currentPrice)),
+                          if (!(_isCopilotOpen && _isCopilotExpanded))
+                            Expanded(child: _buildActivePage(currentPrice)),
                           if (_isCopilotOpen)
-                            AiCopilotDrawer(
-                              copilot: widget.copilot,
-                              symbol: widget.storage.selectedSymbol,
-                              timeframe: widget.storage.selectedTimeframe,
-                              candles: _candles,
-                              onClose: () =>
-                                  setState(() => _isCopilotOpen = false),
-                              onOpenSettings: () => showDialog(
-                                context: context,
-                                builder: (_) => BrokerSettingsDialog(
-                                  storage: widget.storage,
-                                  onSaved: () {
-                                    widget.onThemeChanged();
-                                    setState(() {});
-                                  },
-                                ),
-                              ),
-                              onExecuteAction: _executeCopilotAction,
-                              onSaveToJournal: (title, content) async {
-                                final now = DateTime.now().toUtc();
-                                await _saveJournalEntry(JournalEntry(
-                                  id: 'note_${now.millisecondsSinceEpoch}',
-                                  title: title,
-                                  content: content,
+                            if (_isCopilotExpanded)
+                              Expanded(
+                                child: AiCopilotDrawer(
+                                  copilot: widget.copilot,
                                   symbol: widget.storage.selectedSymbol,
                                   timeframe: widget.storage.selectedTimeframe,
-                                  tag: 'AI Copilot',
-                                  priceAtNote: _candles.isNotEmpty
-                                      ? _candles.last.close
-                                      : null,
-                                  createdAt: now,
-                                  updatedAt: now,
-                                ));
-                              },
-                            ),
+                                  candles: _candles,
+                                  isExpanded: true,
+                                  onToggleExpand: () => setState(
+                                      () => _isCopilotExpanded = false),
+                                  onClose: () => setState(() {
+                                    _isCopilotOpen = false;
+                                    _isCopilotExpanded = false;
+                                  }),
+                                  onOpenSettings: () => showDialog(
+                                    context: context,
+                                    builder: (_) => BrokerSettingsDialog(
+                                      storage: widget.storage,
+                                      onSaved: () {
+                                        widget.onThemeChanged();
+                                        setState(() {});
+                                      },
+                                    ),
+                                  ),
+                                  onExecuteAction: _executeCopilotAction,
+                                  onSaveToJournal: (title, content) async {
+                                    final now = DateTime.now().toUtc();
+                                    await _saveJournalEntry(JournalEntry(
+                                      id: 'note_${now.millisecondsSinceEpoch}',
+                                      title: title,
+                                      content: content,
+                                      symbol: widget.storage.selectedSymbol,
+                                      timeframe:
+                                          widget.storage.selectedTimeframe,
+                                      tag: 'AI Copilot',
+                                      priceAtNote: _candles.isNotEmpty
+                                          ? _candles.last.close
+                                          : null,
+                                      createdAt: now,
+                                      updatedAt: now,
+                                    ));
+                                  },
+                                ),
+                              )
+                            else
+                              AiCopilotDrawer(
+                                copilot: widget.copilot,
+                                symbol: widget.storage.selectedSymbol,
+                                timeframe: widget.storage.selectedTimeframe,
+                                candles: _candles,
+                                isExpanded: false,
+                                onToggleExpand: () =>
+                                    setState(() => _isCopilotExpanded = true),
+                                onClose: () =>
+                                    setState(() => _isCopilotOpen = false),
+                                onOpenSettings: () => showDialog(
+                                  context: context,
+                                  builder: (_) => BrokerSettingsDialog(
+                                    storage: widget.storage,
+                                    onSaved: () {
+                                      widget.onThemeChanged();
+                                      setState(() {});
+                                    },
+                                  ),
+                                ),
+                                onExecuteAction: _executeCopilotAction,
+                                onSaveToJournal: (title, content) async {
+                                  final now = DateTime.now().toUtc();
+                                  await _saveJournalEntry(JournalEntry(
+                                    id: 'note_${now.millisecondsSinceEpoch}',
+                                    title: title,
+                                    content: content,
+                                    symbol: widget.storage.selectedSymbol,
+                                    timeframe: widget.storage.selectedTimeframe,
+                                    tag: 'AI Copilot',
+                                    priceAtNote: _candles.isNotEmpty
+                                        ? _candles.last.close
+                                        : null,
+                                    createdAt: now,
+                                    updatedAt: now,
+                                  ));
+                                },
+                              ),
                         ],
                       ),
                     ),
