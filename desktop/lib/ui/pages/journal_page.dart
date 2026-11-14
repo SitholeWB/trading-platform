@@ -257,17 +257,135 @@ class _JournalPageState extends State<JournalPage> {
   String _filterTag = 'All';
   int _tabIndex = 0; // 0 = Journal Notes, 1 = Trade Reviews & Tag Stats
 
-  Future<void> _openEditor([JournalEntry? existing]) async {
-    final res = await JournalPage.showEntryEditorDialog(
-      context,
-      existing: existing,
-      defaultSymbol: widget.activeSymbol,
-      defaultTimeframe: widget.activeTimeframe,
-      defaultPrice: widget.currentPrice > 0 ? widget.currentPrice : null,
-    );
-    if (res != null) {
-      widget.onSaveEntry(res);
+  // Split-pane selection & inline full-space editor state
+  String? _selectedEntryId;
+  bool _isEditing = false;
+  JournalEntry? _editingOriginal;
+  int _editorMode = 1; // 0 = Write, 1 = Split, 2 = Preview
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _contentCtrl;
+  String _editSymbol = 'EURUSD';
+  Timeframe _editTimeframe = Timeframe.m15;
+  String _editTag = 'General';
+  String _editMood = 'Disciplined';
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController();
+    _contentCtrl = TextEditingController();
+    _editSymbol = widget.activeSymbol;
+    _editTimeframe = widget.activeTimeframe;
+    if (widget.entries.isNotEmpty) {
+      final sorted = List<JournalEntry>.from(widget.entries)
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      _selectedEntryId = sorted.first.id;
     }
+  }
+
+  @override
+  void didUpdateWidget(covariant JournalPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isEditing &&
+        (_selectedEntryId == null ||
+            !widget.entries.any((e) => e.id == _selectedEntryId))) {
+      if (widget.entries.isNotEmpty) {
+        final sorted = List<JournalEntry>.from(widget.entries)
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        _selectedEntryId = sorted.first.id;
+      } else {
+        _selectedEntryId = null;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _contentCtrl.dispose();
+    super.dispose();
+  }
+
+  void _startInlineEditor([JournalEntry? existing]) {
+    setState(() {
+      _tabIndex = 0;
+      _isEditing = true;
+      _editingOriginal = existing;
+      _titleCtrl.text = existing?.title ?? '';
+      _contentCtrl.text = existing?.content ?? '';
+      _editSymbol = existing?.symbol.isNotEmpty == true
+          ? existing!.symbol
+          : widget.activeSymbol;
+      _editTimeframe = existing?.timeframe ?? widget.activeTimeframe;
+      _editTag = JournalPage.tags.contains(existing?.tag)
+          ? existing!.tag
+          : 'General';
+      _editMood = JournalPage.moods.contains(existing?.mood)
+          ? existing!.mood
+          : 'Disciplined';
+      if (existing != null) {
+        _selectedEntryId = existing.id;
+      }
+    });
+  }
+
+  void _cancelInlineEditor() {
+    setState(() {
+      _isEditing = false;
+      _editingOriginal = null;
+    });
+  }
+
+  void _saveInlineEditor() {
+    final now = DateTime.now().toUtc();
+    final title = _titleCtrl.text.trim().isEmpty
+        ? '$_editSymbol ${_editTimeframe.code} Note'
+        : _titleCtrl.text.trim();
+    final content = _contentCtrl.text.trim();
+    final existing = _editingOriginal;
+
+    final entry = existing != null
+        ? existing.copyWith(
+            title: title,
+            content: content,
+            symbol: _editSymbol,
+            timeframe: _editTimeframe,
+            tag: _editTag,
+            mood: _editMood,
+            updatedAt: now,
+          )
+        : JournalEntry(
+            id: 'note_${now.millisecondsSinceEpoch}',
+            title: title,
+            content: content,
+            symbol: _editSymbol,
+            timeframe: _editTimeframe,
+            tag: _editTag,
+            mood: _editMood,
+            priceAtNote: widget.currentPrice > 0 ? widget.currentPrice : null,
+            createdAt: now,
+            updatedAt: now,
+          );
+
+    widget.onSaveEntry(entry);
+    setState(() {
+      _isEditing = false;
+      _editingOriginal = null;
+      _selectedEntryId = entry.id;
+    });
+  }
+
+  void _insertMarkdownSnippet(String snippet) {
+    final text = _contentCtrl.text;
+    final sel = _contentCtrl.selection;
+    final start = sel.isValid ? sel.start : text.length;
+    final end = sel.isValid ? sel.end : text.length;
+    final updated = text.replaceRange(start, end, snippet);
+    _contentCtrl.value = TextEditingValue(
+      text: updated,
+      selection: TextSelection.collapsed(offset: start + snippet.length),
+    );
+    setState(() {});
   }
 
   Future<void> _editPositionNote(Position p) async {
@@ -400,34 +518,9 @@ class _JournalPageState extends State<JournalPage> {
                 selected: {_tabIndex},
                 onSelectionChanged: (s) => setState(() => _tabIndex = s.first),
               ),
-              const SizedBox(width: 12),
-              if (_tabIndex == 0) ...[
-                Expanded(
-                  child: TextField(
-                    onChanged: (v) => setState(() => _search = v.trim()),
-                    decoration: const InputDecoration(
-                      hintText: 'Search notes by symbol, title, or keyword...',
-                      prefixIcon: Icon(Icons.search, size: 18),
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                DropdownButton<String>(
-                  value: _filterTag,
-                  items: ['All', ...JournalPage.tags]
-                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => _filterTag = v);
-                  },
-                ),
-              ] else
-                const Spacer(),
-              const SizedBox(width: 10),
+              const Spacer(),
               FilledButton.icon(
-                onPressed: () => _openEditor(),
+                onPressed: () => _startInlineEditor(),
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('New Note'),
               ),
@@ -445,127 +538,554 @@ class _JournalPageState extends State<JournalPage> {
   }
 
   Widget _buildNotesList(BuildContext context, List<JournalEntry> list) {
-    if (list.isEmpty) {
-      return Card(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.edit_note, size: 42, color: Color(0xFF38BDF8)),
-              const SizedBox(height: 10),
-              const Text(
-                'No journal notes yet',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Capture pre-market plans, chart setups, or lessons learned—or save AI Copilot analyses in 1 click.',
-                style: TextStyle(color: Colors.grey, fontSize: 12.5),
-              ),
-              const SizedBox(height: 14),
-              FilledButton.icon(
-                onPressed: () => _openEditor(),
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Write First Note'),
-              ),
-            ],
-          ),
-        ),
+    JournalEntry? selected;
+    if (!_isEditing && list.isNotEmpty) {
+      selected = list.firstWhere(
+        (e) => e.id == _selectedEntryId,
+        orElse: () => list.first,
       );
     }
 
-    return ListView.separated(
-      itemCount: list.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (ctx, i) {
-        final e = list[i];
-        return Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (e.symbol.isNotEmpty) ...[
-                      ActionChip(
-                        visualDensity: VisualDensity.compact,
-                        label: Text(
-                          '${e.symbol} ${e.timeframe.code}',
-                          style: const TextStyle(
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () =>
-                            widget.onOpenChart(e.symbol, e.timeframe),
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    Chip(
-                      visualDensity: VisualDensity.compact,
-                      label: Text(e.tag, style: const TextStyle(fontSize: 11)),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Left Side Menu: Search, Tag Filter, Selectable Note List
+        SizedBox(
+          width: 310,
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    onChanged: (v) => setState(() => _search = v.trim()),
+                    decoration: const InputDecoration(
+                      hintText: 'Search notes...',
+                      prefixIcon: Icon(Icons.search, size: 16),
+                      border: OutlineInputBorder(),
+                      isDense: true,
                     ),
-                    const SizedBox(width: 6),
-                    Chip(
-                      visualDensity: VisualDensity.compact,
-                      label: Text(e.mood,
-                          style: const TextStyle(
-                              fontSize: 11, color: Color(0xFF94A3B8))),
-                    ),
-                    const Spacer(),
-                    if (e.priceAtNote != null && e.symbol.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 10),
-                        child: Text(
-                          '@ ${IndicatorEngine.formatPrice(e.priceAtNote!, e.symbol)}',
-                          style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 11.5,
-                              color: Colors.grey),
-                        ),
-                      ),
-                    Text(
-                      e.updatedAt
-                          .toLocal()
-                          .toIso8601String()
-                          .substring(0, 16)
-                          .replaceFirst('T', ' '),
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                    IconButton(
-                      tooltip: 'Edit Note',
-                      icon: const Icon(Icons.edit_outlined, size: 17),
-                      onPressed: () => _openEditor(e),
-                    ),
-                    IconButton(
-                      tooltip: 'Delete Note',
-                      icon: const Icon(Icons.delete_outline,
-                          size: 17, color: Colors.redAccent),
-                      onPressed: () => widget.onDeleteEntry(e.id),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  e.title,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                if (e.content.isNotEmpty) ...[
+                  ),
                   const SizedBox(height: 8),
-                  MarkdownMessageView(
-                    data: e.content,
-                    baseFontSize: 12.5,
+                  DropdownButtonFormField<String>(
+                    initialValue: _filterTag,
+                    isDense: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Filter by Tag',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: ['All', ...JournalPage.tags]
+                        .map((t) => DropdownMenuItem(
+                              value: t,
+                              child: Text(t, style: const TextStyle(fontSize: 12)),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _filterTag = v);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${list.length} Note${list.length == 1 ? '' : 's'}',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: list.isEmpty
+                        ? Center(
+                            child: Text(
+                              widget.entries.isEmpty
+                                  ? 'No notes yet.\nClick "New Note" to start.'
+                                  : 'No matching notes.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: list.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 6),
+                            itemBuilder: (ctx, i) {
+                              final e = list[i];
+                              final isSel =
+                                  !_isEditing && selected?.id == e.id;
+                              final stamp = e.updatedAt
+                                  .toLocal()
+                                  .toIso8601String()
+                                  .substring(5, 16)
+                                  .replaceFirst('T', ' ');
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(8),
+                                onTap: () => setState(() {
+                                  _isEditing = false;
+                                  _editingOriginal = null;
+                                  _selectedEntryId = e.id;
+                                }),
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    color: isSel
+                                        ? const Color(0xFF38BDF8)
+                                            .withValues(alpha: 0.12)
+                                        : Colors.transparent,
+                                    border: Border.all(
+                                      color: isSel
+                                          ? const Color(0xFF38BDF8)
+                                          : Colors.white12,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        e.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12.5,
+                                          color: isSel
+                                              ? const Color(0xFF38BDF8)
+                                              : null,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          if (e.symbol.isNotEmpty) ...[
+                                            Text(
+                                              '${e.symbol} ${e.timeframe.code}',
+                                              style: const TextStyle(
+                                                fontSize: 10.5,
+                                                fontFamily: 'monospace',
+                                                color: Color(0xFF94A3B8),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                          ],
+                                          Expanded(
+                                            child: Text(
+                                              e.tag,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                  fontSize: 10.5,
+                                                  color: Colors.grey),
+                                            ),
+                                          ),
+                                          Text(
+                                            stamp,
+                                            style: const TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                   ),
                 ],
-              ],
+              ),
             ),
           ),
-        );
-      },
+        ),
+        const SizedBox(width: 12),
+        // Right Workspace: Full-Space Inline Editor OR Selected Note Reader
+        Expanded(
+          child: _isEditing
+              ? _buildInlineEditor(context)
+              : selected == null
+                  ? Card(
+                      margin: EdgeInsets.zero,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.edit_note,
+                                size: 46, color: Color(0xFF38BDF8)),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Trading Journal Workspace',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Select a note on the left to read it in Markdown, or create a new full-page note.',
+                              style:
+                                  TextStyle(color: Colors.grey, fontSize: 12.5),
+                            ),
+                            const SizedBox(height: 14),
+                            FilledButton.icon(
+                              onPressed: () => _startInlineEditor(),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Write First Note'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : _buildNoteReader(context, selected),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNoteReader(BuildContext context, JournalEntry e) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    e.title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _startInlineEditor(e),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('Edit'),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Delete Note',
+                  icon: const Icon(Icons.delete_outline,
+                      size: 19, color: Colors.redAccent),
+                  onPressed: () => widget.onDeleteEntry(e.id),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (e.symbol.isNotEmpty)
+                  ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                      '${e.symbol} ${e.timeframe.code}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () => widget.onOpenChart(e.symbol, e.timeframe),
+                  ),
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: Text(e.tag, style: const TextStyle(fontSize: 11)),
+                ),
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: Text(e.mood,
+                      style: const TextStyle(
+                          fontSize: 11, color: Color(0xFF94A3B8))),
+                ),
+                if (e.priceAtNote != null && e.symbol.isNotEmpty)
+                  Text(
+                    '@ ${IndicatorEngine.formatPrice(e.priceAtNote!, e.symbol)}',
+                    style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11.5,
+                        color: Colors.grey),
+                  ),
+                Text(
+                  'Updated ${e.updatedAt.toLocal().toIso8601String().substring(0, 16).replaceFirst('T', ' ')}',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
+            ),
+            const Divider(height: 22),
+            Expanded(
+              child: e.content.trim().isEmpty
+                  ? const Center(
+                      child: Text(
+                        'This note has no body yet. Click Edit to add markdown notes.',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      child: MarkdownMessageView(
+                        data: e.content,
+                        baseFontSize: 13,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInlineEditor(BuildContext context) {
+    final safeSym = SymbolCatalog.allSymbols.any((s) => s.symbol == _editSymbol)
+        ? _editSymbol
+        : 'EURUSD';
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.edit_note, color: Color(0xFF38BDF8), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  _editingOriginal == null
+                      ? 'New Journal Note'
+                      : 'Editing: ${_editingOriginal!.title}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                const Spacer(),
+                SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(value: 0, label: Text('Write')),
+                    ButtonSegment(value: 1, label: Text('Split')),
+                    ButtonSegment(value: 2, label: Text('Preview')),
+                  ],
+                  selected: {_editorMode},
+                  onSelectionChanged: (s) =>
+                      setState(() => _editorMode = s.first),
+                ),
+                const SizedBox(width: 10),
+                TextButton(
+                  onPressed: _cancelInlineEditor,
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 6),
+                FilledButton.icon(
+                  onPressed: _saveInlineEditor,
+                  icon: const Icon(Icons.save_outlined, size: 16),
+                  label: const Text('Save Note'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _titleCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Title',
+                      hintText: 'e.g. London Session EURUSD Breakout Plan',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 120,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: safeSym,
+                    decoration: const InputDecoration(
+                      labelText: 'Symbol',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: SymbolCatalog.allSymbols
+                        .map((s) => DropdownMenuItem(
+                              value: s.symbol,
+                              child: Text(s.symbol,
+                                  style: const TextStyle(fontSize: 12)),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _editSymbol = v);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 88,
+                  child: DropdownButtonFormField<Timeframe>(
+                    initialValue: _editTimeframe,
+                    decoration: const InputDecoration(
+                      labelText: 'TF',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: Timeframe.values
+                        .map((t) => DropdownMenuItem(
+                              value: t,
+                              child: Text(t.code,
+                                  style: const TextStyle(fontSize: 12)),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _editTimeframe = v);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 145,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _editTag,
+                    decoration: const InputDecoration(
+                      labelText: 'Tag',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: JournalPage.tags
+                        .map((t) => DropdownMenuItem(
+                              value: t,
+                              child:
+                                  Text(t, style: const TextStyle(fontSize: 12)),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _editTag = v);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 125,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _editMood,
+                    decoration: const InputDecoration(
+                      labelText: 'Mood',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: JournalPage.moods
+                        .map((m) => DropdownMenuItem(
+                              value: m,
+                              child:
+                                  Text(m, style: const TextStyle(fontSize: 12)),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _editMood = v);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  label: const Text('## Heading', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _insertMarkdownSnippet('\n## '),
+                ),
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  label: const Text('**Bold**', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _insertMarkdownSnippet('**bold**'),
+                ),
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  label: const Text('- Bullet', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _insertMarkdownSnippet('\n- '),
+                ),
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  label: const Text('> Callout', style: TextStyle(fontSize: 11)),
+                  onPressed: () => _insertMarkdownSnippet('\n> '),
+                ),
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  label: const Text('Pre-Market Template',
+                      style: TextStyle(fontSize: 11)),
+                  onPressed: () => _insertMarkdownSnippet(
+                    '## Pre-Market Plan\n- **Bias:** \n- **Key Levels:** \n- **Invalidation:** \n- **Risk Plan:** 1.0%\n',
+                  ),
+                ),
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  label: const Text('Trade Review Template',
+                      style: TextStyle(fontSize: 11)),
+                  onPressed: () => _insertMarkdownSnippet(
+                    '## Trade Review\n- **Setup:** \n- **What Worked:** \n- **Lesson Learned:** \n',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_editorMode == 0 || _editorMode == 1)
+                    Expanded(
+                      child: TextField(
+                        controller: _contentCtrl,
+                        expands: true,
+                        maxLines: null,
+                        minLines: null,
+                        textAlignVertical: TextAlignVertical.top,
+                        onChanged: (_) => setState(() {}),
+                        style: const TextStyle(
+                            fontFamily: 'monospace', fontSize: 13),
+                        decoration: const InputDecoration(
+                          hintText:
+                              'Write your analysis, trade plan, or lesson learned in Markdown...',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                    ),
+                  if (_editorMode == 1) const SizedBox(width: 12),
+                  if (_editorMode == 1 || _editorMode == 2)
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white12),
+                          borderRadius: BorderRadius.circular(6),
+                          color: Colors.black12,
+                        ),
+                        child: _contentCtrl.text.trim().isEmpty
+                            ? const Text(
+                                'Live Markdown preview will appear here...',
+                                style: TextStyle(
+                                    color: Colors.grey, fontSize: 12.5),
+                              )
+                            : SingleChildScrollView(
+                                child: MarkdownMessageView(
+                                  data: _contentCtrl.text,
+                                  baseFontSize: 13,
+                                ),
+                              ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
