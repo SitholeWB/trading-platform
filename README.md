@@ -1,6 +1,10 @@
-# Enterprise Modular Forex Scanning & Algorithmic Execution System (.NET 10 LTS)
+# Quantum Trading Platform — Desktop Workstation & Algorithmic Execution System
 
-A production-ready algorithmic trading platform built with **Clean Architecture**, **CQRS (Command Query Responsibility Segregation)**, and a **Hexagonal (Ports and Adapters)** architecture.
+This repository contains two complementary implementations of the trading workstation:
+
+1. **`desktop/` — Flutter Desktop Workstation (Active Standalone App)**: A self-contained Linux/Desktop app featuring dual chart engines (Native GPU Bot Chart + TradingView Live), keyless market feeds, an AI Copilot with persistent sessions, a Plain-Text AI Strategy Compiler with 0-token multi-pair scanning/backtesting, and a split-pane Markdown Trading Journal.
+   - Start here: **[Flutter Desktop Workstation Guide](docs/desktop-app-guide.md)** · **[`desktop/README.md`](desktop/README.md)**
+2. **`src/` — Enterprise Modular Execution System (.NET 10 LTS & React/TypeScript)**: A Clean Architecture / CQRS backend with OANDA v20 & MetaTrader 5 ZeroMQ adapters, `Microsoft.RulesEngine`, and a React + Lightweight Charts web terminal.
 
 ---
 
@@ -8,7 +12,8 @@ A production-ready algorithmic trading platform built with **Clean Architecture*
 
 Complete technical guides and mermaid architectural diagrams are available in the [`docs/`](docs/README.md) directory:
 
-- 🏗️ **[System Architecture](docs/architecture.md)** — Clean Architecture, CQRS mediator, ports & adapters, and database constraints.
+- 🖥️ **[Flutter Desktop Workstation Guide](docs/desktop-app-guide.md)** — Full map of the 9 desktop pages, AI Copilot, 0-token plain-text strategy pipeline, split-pane Markdown journal, and build/run instructions.
+- 🏗️ **[System Architecture](docs/architecture.md)** — Clean Architecture, CQRS mediator, ports & adapters, and database constraints (`.NET 10`).
 - 📈 **[Charting Workstation](docs/charting-workstation.md)** — Viewport zoom locking, persistent drawings CRUD, multi-chart grid layouts, on-chart trade overlay, and audio alerts.
 - 🌐 **[Market Data Feeds & Failover](docs/market-data-providers.md)** — Zero-key feeds, Yahoo Cookie/Crumb session manager, European Central Bank (Frankfurter) fallback, and Binance streams.
 - 🤖 **[Rule Engine & Autonomous Bots](docs/rule-engine-and-bots.md)** — Quantitative strategy compilation, closed-candle invariant, and near-miss radar.

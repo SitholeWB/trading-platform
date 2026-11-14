@@ -1,17 +1,46 @@
-# trading_platform
+# Quantum Trading Platform — Flutter Desktop Workstation
 
-A new Flutter project.
+Standalone Linux/Desktop algorithmic trading, multi-timeframe charting, journaling, and AI Copilot application.
 
-## Getting Started
+For a complete visual & architectural walkthrough of every page, service, and AI pipeline, see **[`../docs/desktop-app-guide.md`](../docs/desktop-app-guide.md)**.
 
-This project is a starting point for a Flutter application.
+## Quick Start
 
-A few resources to get you started if this is your first Flutter project:
+1. **Install dependencies**
+   ```bash
+   flutter pub get
+   ```
+2. **Optional: Configure AI API key via `.env.json`** (never committed to git)
+   ```json
+   {
+     "GEMINI_API_KEY": "your-key-here"
+   }
+   ```
+   *(You can also configure Gemini, OpenAI, Anthropic, Groq, OpenRouter, or local Ollama directly in the in-app Settings dialog.)*
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+3. **Run in debug mode**
+   ```bash
+   flutter run -d linux --dart-define-from-file=.env.json
+   ```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+4. **Run tests**
+   ```bash
+   flutter test --no-pub
+   ```
+
+5. **Build Linux release binary**
+   ```bash
+   flutter build linux --release --dart-define-from-file=.env.json
+   ./build/linux/x64/release/bundle/trading_platform
+   ```
+
+## Source Structure (`lib/`)
+
+- `lib/main.dart` — App entry point, theme setup, and service initialization.
+- `lib/models/trading_models.dart` — Candles, Positions, Strategies, Rules, Journal Entries, Copilot Sessions, Audit Logs.
+- `lib/services/` — `MarketDataService`, `IndicatorEngine`, `StrategyScanner`, `AiCopilotService`, `StorageService`, `SymbolCatalog`, `NotificationService`.
+- `lib/ui/app_shell.dart` — Navigation rail, top bar, status bar, Copilot drawer host, and global state orchestration.
+- `lib/ui/pages/` — `Dashboard`, `Market Scanner`, `Strategies`, `Audit Radar`, `Positions`, `Journal`, `Simulator`, `Live Chart`, `Documentation`.
+- `lib/ui/chart/` — Native GPU-accelerated candlestick chart + TradingView CEF live widget.
+- `lib/ui/dialogs/` — AI Copilot drawer, Settings, Alerts, Symbol Search, Timezone, Language, Shortcuts.
+- `lib/ui/widgets/` — Shared widgets including `MarkdownMessageView`.

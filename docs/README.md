@@ -1,8 +1,6 @@
 # Algorithmic Trading Platform & Charting Workstation Documentation
 
-Welcome to the complete technical and operational documentation for the **Enterprise Modular Trading Platform (.NET 10 LTS & React/TypeScript)**.
-
-This system is an all-in-one institutional trading workstation combining **TradingView-grade interactive multi-timeframe charting** with an **autonomous algorithmic execution and risk management engine**.
+Welcome to the complete technical and operational documentation for the **Quantum Trading Platform**, covering both the **Flutter Desktop Workstation (`desktop/`)** and the **Enterprise Modular Backend/Web System (`.NET 10 LTS & React/TypeScript`, `src/`)**.
 
 ---
 
@@ -10,7 +8,8 @@ This system is an all-in-one institutional trading workstation combining **Tradi
 
 | Guide | Description |
 | :--- | :--- |
-| **[1. System Architecture](architecture.md)** | Clean Architecture, CQRS mediator, Hexagonal ports & adapters, idempotency guarantees, and project structure. |
+| **[0. Flutter Desktop Workstation Guide](desktop-app-guide.md)** | **Start here for `desktop/`:** Complete map of all 9 pages, AI Copilot session history, 0-token plain-text strategy compiler & universe scanner, split-pane Markdown journal, and Linux build/run guide. |
+| **[1. System Architecture](architecture.md)** | Clean Architecture, CQRS mediator, Hexagonal ports & adapters, idempotency guarantees, and project structure (`src/`). |
 | **[2. Charting Workstation](charting-workstation.md)** | Interactive candlestick engine, viewport zoom locking, multi-chart grid layouts (1x2, 2x2), persistent drawings CRUD, on-chart trade overlay, and audio price alerts. |
 | **[3. Market Data & Failover](market-data-providers.md)** | Zero-key market feeds, automated Yahoo cookie/crumb session manager, European Central Bank (Frankfurter) integration, Binance public streams, and multi-tier auto-failover. |
 | **[4. Rule Engine & Bot Execution](rule-engine-and-bots.md)** | Dynamic strategy compilation, Skender indicator calculator, closed-candle invariant, near-miss radar, and trade execution. |
