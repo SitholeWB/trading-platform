@@ -1,0 +1,76 @@
+name: trading-platform
+base: core24
+version: '3.0.0'
+summary: Algorithmic Trading Platform, Live Charts & AI Copilot
+description: |
+  Trading Platform is a native desktop algorithmic trading terminal featuring
+  multi-timeframe candlestick charting, TradingView Live integration, a visual
+  Strategy Studio with nested AND/OR rules, Robotic Multi-Market Scanner,
+  Risk Console, Synthetic Stress-Test Lab, Trading Journal, and AI Quant Copilot.
+
+grade: stable
+confinement: strict
+icon: snap/gui/icon.png
+
+apps:
+  trading-platform:
+    command: bin/launch-trading-platform
+    extensions: [gnome]
+    plugs:
+      - network
+      - network-bind
+      - opengl
+      - x11
+      - wayland
+      - desktop
+      - desktop-legacy
+      - gsettings
+      - unity7
+      - home
+      - audio-playback
+      - browser-support
+
+parts:
+  trading-platform-bundle:
+    plugin: dump
+    source: desktop/build/linux/x64/release/bundle
+    organize:
+      '*': opt/trading-platform/
+    stage-packages:
+      - libasound2t64
+      - libatk1.0-0
+      - libatk-bridge2.0-0t64
+      - libatspi2.0-0t64
+      - libatomic1
+      - libcups2t64
+      - libdrm2
+      - libegl1
+      - libgbm1
+      - libgl1
+      - libnspr4
+      - libnss3
+      - libvulkan1
+      - libxcomposite1
+      - libxdamage1
+      - libxfixes3
+      - libxkbcommon0
+      - libxrandr2
+      - libxres1
+      - xclip
+    override-prime: |
+      craftctl default
+      mkdir -p "$CRAFT_PRIME/bin"
+      cat > "$CRAFT_PRIME/bin/launch-trading-platform" <<'EOF'
+      #!/usr/bin/env bash
+      set -e
+      export LD_LIBRARY_PATH="$SNAP/opt/trading-platform/lib:${LD_LIBRARY_PATH:-}"
+      export LIBGL_DRIVERS_PATH="$SNAP/usr/lib/x86_64-linux-gnu/dri:${LIBGL_DRIVERS_PATH:-}"
+      # Ensure CEF/Chromium cache and runtime files stay inside writable snap dirs
+      export XDG_CACHE_HOME="${SNAP_USER_COMMON:-$HOME}/.cache"
+      export XDG_CONFIG_HOME="${SNAP_USER_DATA:-$HOME}/.config"
+      export XDG_DATA_HOME="${SNAP_USER_DATA:-$HOME}/.local/share"
+      mkdir -p "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+      exec "$SNAP/opt/trading-platform/trading_platform" "$@"
+      EOF
+      chmod +x "$CRAFT_PRIME/bin/launch-trading-platform"
+      chmod +x "$CRAFT_PRIME/opt/trading-platform/trading_platform" || true
