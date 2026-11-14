@@ -16,6 +16,8 @@ class NativeChartWidget extends StatefulWidget {
   final DrawingTool activeTool;
   final List<DrawingItem> drawings;
   final ValueChanged<DrawingItem> onAddDrawing;
+  final ValueChanged<DrawingItem>? onUpdateDrawing;
+  final ValueChanged<String>? onDeleteDrawing;
   final VoidCallback onDrawingComplete;
   final List<Position> openPositions;
   final List<PriceAlert> activeAlerts;
@@ -35,6 +37,8 @@ class NativeChartWidget extends StatefulWidget {
     required this.activeTool,
     required this.drawings,
     required this.onAddDrawing,
+    this.onUpdateDrawing,
+    this.onDeleteDrawing,
     required this.onDrawingComplete,
     required this.openPositions,
     required this.activeAlerts,
@@ -55,6 +59,9 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
   Offset? _crosshair;
   int? _hoveredIndex;
   DrawingItem? _draftDrawing;
+  String? _selectedDrawingId;
+  int? _draggingHandleIndex;
+  (int, double)? _dragLastDataPoint;
   double _panAccum = 0;
 
   @override
@@ -62,7 +69,13 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.symbol != widget.symbol ||
         oldWidget.timeframe != widget.timeframe) {
+      _selectedDrawingId = null;
+      _draggingHandleIndex = null;
       fitContent();
+    } else if (_selectedDrawingId != null &&
+        !widget.drawings.any((d) => d.id == _selectedDrawingId)) {
+      _selectedDrawingId = null;
+      _draggingHandleIndex = null;
     } else {
       _clampViewport();
     }
@@ -85,6 +98,31 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
     _startIndex = _startIndex.clamp(0, maxStart);
   }
 
+  (double minP, double maxP) _priceBounds(List<Candle> slice) {
+    double minP = slice.map((c) => c.low).reduce(math.min);
+    double maxP = slice.map((c) => c.high).reduce(math.max);
+    for (final pos in widget.openPositions) {
+      if (pos.symbol.toUpperCase() == widget.symbol.toUpperCase()) {
+        minP = math.min(minP, pos.entryPrice);
+        maxP = math.max(maxP, pos.entryPrice);
+        if (pos.stopLossPrice != null) {
+          minP = math.min(minP, pos.stopLossPrice!);
+          maxP = math.max(maxP, pos.stopLossPrice!);
+        }
+        if (pos.takeProfitPrice != null) {
+          minP = math.min(minP, pos.takeProfitPrice!);
+          maxP = math.max(maxP, pos.takeProfitPrice!);
+        }
+      }
+    }
+    if ((maxP - minP).abs() < 1e-12) {
+      maxP += minP * 0.01 + 1e-6;
+      minP -= minP * 0.01 + 1e-6;
+    }
+    final pad = (maxP - minP) * 0.08;
+    return (minP - pad, maxP + pad);
+  }
+
   (int timeSec, double price)? _offsetToData(Offset pos, Size size) {
     if (widget.candles.isEmpty) return null;
     final chartW = math.max(10.0, size.width - TradingChartPainter.rightAxisWidth);
@@ -99,11 +137,7 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
     final slice = widget.candles.sublist(safeStart, safeEnd);
     if (slice.isEmpty) return null;
 
-    double minP = slice.map((c) => c.low).reduce(math.min);
-    double maxP = slice.map((c) => c.high).reduce(math.max);
-    final pad = (maxP - minP) * 0.08;
-    minP -= pad;
-    maxP += pad;
+    final (minP, maxP) = _priceBounds(slice);
 
     final idx = ((pos.dx / chartW) * slice.length)
         .floor()
@@ -111,6 +145,145 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
     final price =
         minP + ((chartH - pos.dy.clamp(0, chartH)) / chartH) * (maxP - minP);
     return (slice[idx].timeSeconds, price);
+  }
+
+  Offset _dataToOffset(DrawingPoint pt, Size size) {
+    final chartW = math.max(10.0, size.width - TradingChartPainter.rightAxisWidth);
+    final chartH =
+        math.max(10.0, size.height - TradingChartPainter.bottomAxisHeight);
+    final safeStart =
+        _startIndex.clamp(0, math.max(0, widget.candles.length - 1)).toInt();
+    final safeEnd = (safeStart + _visibleCount)
+        .clamp(safeStart + 1, widget.candles.length)
+        .toInt();
+    final slice = widget.candles.sublist(safeStart, safeEnd);
+    if (slice.isEmpty) return Offset.zero;
+
+    final (minP, maxP) = _priceBounds(slice);
+    final stepX = chartW / math.max(1, slice.length);
+    final barSeconds = widget.candles.length >= 2
+        ? math.max(
+            1,
+            widget.candles[1].timeSeconds - widget.candles[0].timeSeconds,
+          )
+        : 60;
+
+    double x;
+    if (pt.timeSeconds <= widget.candles.first.timeSeconds) {
+      final barsLeft =
+          (widget.candles.first.timeSeconds - pt.timeSeconds) / barSeconds;
+      x = (-safeStart - barsLeft + 0.5) * stepX;
+    } else if (pt.timeSeconds >= widget.candles.last.timeSeconds) {
+      final barsRight =
+          (pt.timeSeconds - widget.candles.last.timeSeconds) / barSeconds;
+      x = (widget.candles.length - 1 - safeStart + barsRight + 0.5) * stepX;
+    } else {
+      int lo = 0;
+      int hi = widget.candles.length - 1;
+      while (lo + 1 < hi) {
+        final mid = (lo + hi) >> 1;
+        if (widget.candles[mid].timeSeconds <= pt.timeSeconds) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+      final tLo = widget.candles[lo].timeSeconds;
+      final tHi = widget.candles[hi].timeSeconds;
+      final frac = tHi > tLo ? (pt.timeSeconds - tLo) / (tHi - tLo) : 0.0;
+      x = ((lo + frac) - safeStart + 0.5) * stepX;
+    }
+    final y = chartH - ((pt.price - minP) / (maxP - minP)) * chartH;
+    return Offset(x, y);
+  }
+
+  double _distToSegment(Offset p, Offset a, Offset b) {
+    final dx = b.dx - a.dx;
+    final dy = b.dy - a.dy;
+    final lenSq = dx * dx + dy * dy;
+    if (lenSq < 1e-6) return (p - a).distance;
+    final t = (((p.dx - a.dx) * dx + (p.dy - a.dy) * dy) / lenSq).clamp(0.0, 1.0);
+    final proj = Offset(a.dx + t * dx, a.dy + t * dy);
+    return (p - proj).distance;
+  }
+
+  ({String id, int handleIndex})? _hitTestDrawing(Offset pos, Size size) {
+    if (widget.candles.isEmpty) return null;
+    final chartW = math.max(10.0, size.width - TradingChartPainter.rightAxisWidth);
+    const handleRadius = 12.0;
+    const hitTolerance = 9.0;
+
+    if (_selectedDrawingId != null) {
+      for (final d in widget.drawings) {
+        if (d.id != _selectedDrawingId || d.points.isEmpty) continue;
+        if (d.tool == DrawingTool.hline) {
+          final y = _dataToOffset(d.points.first, size).dy;
+          if ((pos - Offset(chartW * 0.5, y)).distance <= handleRadius) {
+            return (id: d.id, handleIndex: 0);
+          }
+        } else {
+          for (int i = 0; i < d.points.length; i++) {
+            final handlePos = _dataToOffset(d.points[i], size);
+            if ((pos - handlePos).distance <= handleRadius) {
+              return (id: d.id, handleIndex: i);
+            }
+          }
+        }
+      }
+    }
+
+    for (final d in widget.drawings.reversed) {
+      if (d.points.isEmpty) continue;
+      if (d.tool == DrawingTool.hline) {
+        final y = _dataToOffset(d.points.first, size).dy;
+        if ((pos.dy - y).abs() <= hitTolerance && pos.dx <= chartW) {
+          return (id: d.id, handleIndex: -1);
+        }
+        continue;
+      }
+      if (d.tool == DrawingTool.text) {
+        final p = _dataToOffset(d.points.first, size);
+        final estW = math.max(90.0, (d.text?.length ?? 4) * 8.5 + 24);
+        final rect = Rect.fromLTWH(p.dx - 8, p.dy - 8, estW, 30);
+        if (rect.contains(pos)) {
+          return (id: d.id, handleIndex: -1);
+        }
+        continue;
+      }
+      if (d.points.length < 2) continue;
+      final p1 = _dataToOffset(d.points[0], size);
+      final p2 = _dataToOffset(d.points[1], size);
+      if (d.tool == DrawingTool.trendline) {
+        if (_distToSegment(pos, p1, p2) <= hitTolerance) {
+          return (id: d.id, handleIndex: -1);
+        }
+      } else if (d.tool == DrawingTool.ray) {
+        final dx = p2.dx - p1.dx;
+        final dy = p2.dy - p1.dy;
+        final scale = chartW / math.max(1.0, dx.abs()) * 2;
+        final far = Offset(p1.dx + dx * scale, p1.dy + dy * scale);
+        if (_distToSegment(pos, p1, far) <= hitTolerance) {
+          return (id: d.id, handleIndex: -1);
+        }
+      } else if (d.tool == DrawingTool.rectangle) {
+        final rect = Rect.fromPoints(p1, p2).inflate(hitTolerance * 0.5);
+        if (rect.contains(pos)) {
+          return (id: d.id, handleIndex: -1);
+        }
+      } else if (d.tool == DrawingTool.fibonacci) {
+        final leftX = math.min(p1.dx, p2.dx) - 8;
+        final rightX = math.max(p1.dx, p2.dx) + 90;
+        final topY = math.min(p1.dy, p2.dy) - hitTolerance;
+        final bottomY = math.max(p1.dy, p2.dy) + hitTolerance;
+        if (pos.dx >= leftX &&
+            pos.dx <= rightX &&
+            pos.dy >= topY &&
+            pos.dy <= bottomY) {
+          return (id: d.id, handleIndex: -1);
+        }
+      }
+    }
+    return null;
   }
 
   @override
@@ -128,7 +301,9 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final size = Size(constraints.maxWidth, constraints.maxHeight);
-              return Listener(
+              return Stack(
+                children: [
+                  Listener(
                 onPointerSignal: (event) {
                   if (event is PointerScrollEvent && widget.candles.isNotEmpty) {
                     setState(() {
@@ -169,6 +344,11 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                   }),
                   child: GestureDetector(
                     onTapDown: (details) async {
+                      if (widget.activeTool == DrawingTool.cursor) {
+                        final hit = _hitTestDrawing(details.localPosition, size);
+                        setState(() => _selectedDrawingId = hit?.id);
+                        return;
+                      }
                       if (widget.activeTool == DrawingTool.hline) {
                         final pt = _offsetToData(details.localPosition, size);
                         if (pt == null) return;
@@ -196,6 +376,23 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                       }
                     },
                     onPanStart: (details) {
+                      if (widget.activeTool == DrawingTool.cursor) {
+                        final hit = _hitTestDrawing(details.localPosition, size);
+                        if (hit != null && widget.onUpdateDrawing != null) {
+                          setState(() {
+                            _selectedDrawingId = hit.id;
+                            _draggingHandleIndex = hit.handleIndex;
+                            _dragLastDataPoint =
+                                _offsetToData(details.localPosition, size);
+                          });
+                        } else {
+                          setState(() {
+                            _draggingHandleIndex = null;
+                            _dragLastDataPoint = null;
+                          });
+                        }
+                        return;
+                      }
                       if (widget.activeTool != DrawingTool.cursor &&
                           widget.activeTool != DrawingTool.hline &&
                           widget.activeTool != DrawingTool.text) {
@@ -215,6 +412,40 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                       }
                     },
                     onPanUpdate: (details) {
+                      if (_selectedDrawingId != null &&
+                          _draggingHandleIndex != null &&
+                          widget.onUpdateDrawing != null) {
+                        final pt = _offsetToData(details.localPosition, size);
+                        if (pt == null) return;
+                        final idx = widget.drawings
+                            .indexWhere((d) => d.id == _selectedDrawingId);
+                        if (idx == -1) return;
+                        final current = widget.drawings[idx];
+                        if (_draggingHandleIndex! >= 0 &&
+                            _draggingHandleIndex! < current.points.length) {
+                          final updatedPts = [...current.points];
+                          updatedPts[_draggingHandleIndex!] = DrawingPoint(
+                            timeSeconds: pt.$1,
+                            price: pt.$2,
+                          );
+                          widget.onUpdateDrawing!(
+                              current.copyWith(points: updatedPts));
+                        } else if (_draggingHandleIndex == -1 &&
+                            _dragLastDataPoint != null) {
+                          final dt = pt.$1 - _dragLastDataPoint!.$1;
+                          final dp = pt.$2 - _dragLastDataPoint!.$2;
+                          final updatedPts = current.points
+                              .map((p) => DrawingPoint(
+                                    timeSeconds: p.timeSeconds + dt,
+                                    price: p.price + dp,
+                                  ))
+                              .toList();
+                          _dragLastDataPoint = pt;
+                          widget.onUpdateDrawing!(
+                              current.copyWith(points: updatedPts));
+                        }
+                        return;
+                      }
                       if (_draftDrawing != null) {
                         final pt = _offsetToData(details.localPosition, size);
                         if (pt != null) {
@@ -248,6 +479,8 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                       }
                     },
                     onPanEnd: (_) {
+                      _draggingHandleIndex = null;
+                      _dragLastDataPoint = null;
                       if (_draftDrawing != null) {
                         widget.onAddDrawing(DrawingItem(
                           id: 'drw_${DateTime.now().millisecondsSinceEpoch}',
@@ -271,6 +504,7 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                             activeAlerts: widget.activeAlerts,
                             drawings: widget.drawings,
                             draftDrawing: _draftDrawing,
+                            selectedDrawingId: _selectedDrawingId,
                             startIndex: _startIndex,
                             visibleCount: _visibleCount,
                             crosshairPos: _crosshair,
@@ -299,6 +533,19 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
                     ),
                   ),
                 ),
+              ),
+                  if (_selectedDrawingId != null &&
+                      widget.drawings
+                          .any((d) => d.id == _selectedDrawingId))
+                    Positioned(
+                      bottom: 34,
+                      left: 12,
+                      child: _buildDrawingInspector(
+                        widget.drawings
+                            .firstWhere((d) => d.id == _selectedDrawingId),
+                      ),
+                    ),
+                ],
               );
             },
           ),
@@ -396,8 +643,145 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
     );
   }
 
-  Future<String?> _promptText(BuildContext context) async {
-    final ctrl = TextEditingController();
+  Widget _buildDrawingInspector(DrawingItem d) {
+    const palette = [
+      0xFF38BDF8, // Cyan
+      0xFFF59E0B, // Amber
+      0xFF22C55E, // Green
+      0xFFEF4444, // Red
+      0xFFA855F7, // Purple
+      0xFFE2E8F0, // White
+    ];
+    return Material(
+      elevation: 6,
+      color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              d.tool.label,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white70,
+              ),
+            ),
+            const SizedBox(width: 8),
+            for (final hex in palette)
+              InkWell(
+                onTap: () => widget.onUpdateDrawing
+                    ?.call(d.copyWith(colorValue: hex)),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: Color(hex),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: d.colorValue == hex
+                          ? Colors.white
+                          : Colors.transparent,
+                      width: 1.8,
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(width: 6),
+            for (final w in [1.4, 2.2, 3.4])
+              InkWell(
+                onTap: () =>
+                    widget.onUpdateDrawing?.call(d.copyWith(strokeWidth: w)),
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: (d.strokeWidth - w).abs() < 0.2
+                        ? Colors.white.withValues(alpha: 0.18)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${w.toStringAsFixed(0)}px',
+                    style: const TextStyle(fontSize: 10, color: Colors.white),
+                  ),
+                ),
+              ),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: () => widget.onUpdateDrawing
+                  ?.call(d.copyWith(isDashed: !d.isDashed)),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: d.isDashed
+                      ? Colors.white.withValues(alpha: 0.18)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  d.isDashed ? 'Dashed' : 'Solid',
+                  style: const TextStyle(fontSize: 10, color: Colors.white),
+                ),
+              ),
+            ),
+            if (d.tool == DrawingTool.text) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.edit, size: 15, color: Colors.white70),
+                tooltip: 'Edit Text',
+                constraints: const BoxConstraints(),
+                padding: const EdgeInsets.all(4),
+                onPressed: () async {
+                  final edited =
+                      await _promptText(context, initialText: d.text ?? '');
+                  if (edited != null && edited.isNotEmpty) {
+                    widget.onUpdateDrawing?.call(d.copyWith(text: edited));
+                  }
+                },
+              ),
+            ],
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  size: 16, color: Color(0xFFEF4444)),
+              tooltip: 'Delete Drawing',
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(4),
+              onPressed: () {
+                widget.onDeleteDrawing?.call(d.id);
+                setState(() => _selectedDrawingId = null);
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 15, color: Colors.white54),
+              tooltip: 'Deselect',
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(4),
+              onPressed: () => setState(() => _selectedDrawingId = null),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _promptText(
+    BuildContext context, {
+    String initialText = '',
+  }) async {
+    final ctrl = TextEditingController(text: initialText);
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -415,7 +799,9 @@ class NativeChartWidgetState extends State<NativeChartWidget> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: Text(AppL10n.tr('common.add', 'Add')),
+            child: Text(initialText.isEmpty
+                ? AppL10n.tr('common.add', 'Add')
+                : AppL10n.tr('common.save', 'Save')),
           ),
         ],
       ),

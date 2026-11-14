@@ -764,6 +764,8 @@ class DrawingItem {
   final List<DrawingPoint> points;
   final int colorValue;
   final String? text;
+  final double strokeWidth;
+  final bool isDashed;
 
   const DrawingItem({
     required this.id,
@@ -771,9 +773,28 @@ class DrawingItem {
     required this.points,
     this.colorValue = 0xFF38BDF8,
     this.text,
+    this.strokeWidth = 1.8,
+    this.isDashed = false,
   });
 
   Color get color => Color(colorValue);
+
+  DrawingItem copyWith({
+    List<DrawingPoint>? points,
+    int? colorValue,
+    String? text,
+    double? strokeWidth,
+    bool? isDashed,
+  }) =>
+      DrawingItem(
+        id: id,
+        tool: tool,
+        points: points ?? this.points,
+        colorValue: colorValue ?? this.colorValue,
+        text: text ?? this.text,
+        strokeWidth: strokeWidth ?? this.strokeWidth,
+        isDashed: isDashed ?? this.isDashed,
+      );
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -781,6 +802,8 @@ class DrawingItem {
         'points': points.map((p) => p.toJson()).toList(),
         'colorValue': colorValue,
         'text': text,
+        'strokeWidth': strokeWidth,
+        'isDashed': isDashed,
       };
 
   factory DrawingItem.fromJson(Map<String, dynamic> json) => DrawingItem(
@@ -794,6 +817,8 @@ class DrawingItem {
             .toList(),
         colorValue: json['colorValue'] as int? ?? 0xFF38BDF8,
         text: json['text'] as String?,
+        strokeWidth: (json['strokeWidth'] as num?)?.toDouble() ?? 1.8,
+        isDashed: json['isDashed'] as bool? ?? false,
       );
 }
 

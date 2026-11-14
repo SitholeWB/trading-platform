@@ -28,6 +28,8 @@ class LiveChartPage extends StatefulWidget {
   final List<PriceAlert> alerts;
   final List<DrawingItem> drawings;
   final ValueChanged<DrawingItem> onAddDrawing;
+  final ValueChanged<DrawingItem>? onUpdateDrawing;
+  final ValueChanged<String>? onDeleteDrawing;
   final VoidCallback onClearDrawings;
   final Future<void> Function(
     String side,
@@ -65,6 +67,8 @@ class LiveChartPage extends StatefulWidget {
     required this.alerts,
     required this.drawings,
     required this.onAddDrawing,
+    this.onUpdateDrawing,
+    this.onDeleteDrawing,
     required this.onClearDrawings,
     required this.onPlaceOrder,
     required this.timezoneOffsetHours,
@@ -837,6 +841,8 @@ class _LiveChartPageState extends State<LiveChartPage> {
           activeTool: _activeTool,
           drawings: _showDrawings ? widget.drawings : const [],
           onAddDrawing: widget.onAddDrawing,
+          onUpdateDrawing: widget.onUpdateDrawing,
+          onDeleteDrawing: widget.onDeleteDrawing,
           onDrawingComplete: () =>
               setState(() => _activeTool = DrawingTool.cursor),
           openPositions: openPositions,

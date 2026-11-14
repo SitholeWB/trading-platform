@@ -1837,6 +1837,25 @@ class _AppShellState extends State<AppShell> {
             widget.storage.save();
             setState(() {});
           },
+          onUpdateDrawing: (updated) {
+            final sym = widget.storage.selectedSymbol;
+            final list = [...(widget.storage.drawingsBySymbol[sym] ?? <DrawingItem>[])];
+            final idx = list.indexWhere((d) => d.id == updated.id);
+            if (idx != -1) {
+              list[idx] = updated;
+              widget.storage.drawingsBySymbol[sym] = list;
+              widget.storage.save();
+              setState(() {});
+            }
+          },
+          onDeleteDrawing: (id) {
+            final sym = widget.storage.selectedSymbol;
+            final list = [...(widget.storage.drawingsBySymbol[sym] ?? <DrawingItem>[])];
+            list.removeWhere((d) => d.id == id);
+            widget.storage.drawingsBySymbol[sym] = list;
+            widget.storage.save();
+            setState(() {});
+          },
           onClearDrawings: () {
             widget.storage.drawingsBySymbol[widget.storage.selectedSymbol] = [];
             widget.storage.save();

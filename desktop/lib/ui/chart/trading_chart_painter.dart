@@ -12,6 +12,7 @@ class TradingChartPainter extends CustomPainter {
   final List<PriceAlert> activeAlerts;
   final List<DrawingItem> drawings;
   final DrawingItem? draftDrawing;
+  final String? selectedDrawingId;
   final int startIndex;
   final int visibleCount;
   final Offset? crosshairPos;
@@ -27,6 +28,7 @@ class TradingChartPainter extends CustomPainter {
     required this.activeAlerts,
     required this.drawings,
     this.draftDrawing,
+    this.selectedDrawingId,
     required this.startIndex,
     required this.visibleCount,
     this.crosshairPos,
@@ -424,6 +426,43 @@ class TradingChartPainter extends CustomPainter {
     }
 
     // 7. User Drawings
+    final barSeconds = displayCandles.length >= 2
+        ? math.max(
+            1,
+            displayCandles[1].timeSeconds - displayCandles[0].timeSeconds,
+          )
+        : 60;
+    double timeToX(int timeSeconds) {
+      final local = timeToLocalIdx[timeSeconds];
+      if (local != null) return indexToX(local);
+      if (displayCandles.isEmpty) return 0;
+      if (timeSeconds <= displayCandles.first.timeSeconds) {
+        final barsLeft =
+            (displayCandles.first.timeSeconds - timeSeconds) / barSeconds;
+        return (-safeStart - barsLeft + 0.5) * stepX;
+      }
+      if (timeSeconds >= displayCandles.last.timeSeconds) {
+        final barsRight =
+            (timeSeconds - displayCandles.last.timeSeconds) / barSeconds;
+        return (displayCandles.length - 1 - safeStart + barsRight + 0.5) *
+            stepX;
+      }
+      int lo = 0;
+      int hi = displayCandles.length - 1;
+      while (lo + 1 < hi) {
+        final mid = (lo + hi) >> 1;
+        if (displayCandles[mid].timeSeconds <= timeSeconds) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+      final tLo = displayCandles[lo].timeSeconds;
+      final tHi = displayCandles[hi].timeSeconds;
+      final frac = tHi > tLo ? (timeSeconds - tLo) / (tHi - tLo) : 0.0;
+      return ((lo + frac) - safeStart + 0.5) * stepX;
+    }
+
     final allDrawings = [...drawings, ?draftDrawing];
     for (final d in allDrawings) {
       _paintDrawing(
@@ -431,10 +470,10 @@ class TradingChartPainter extends CustomPainter {
         d,
         chartW,
         chartH,
-        timeToLocalIdx,
-        indexToX,
+        timeToX,
         priceToY,
         extraPrices,
+        isSelected: d.id == selectedDrawingId,
       );
     }
 
@@ -528,48 +567,62 @@ class TradingChartPainter extends CustomPainter {
     DrawingItem d,
     double chartW,
     double chartH,
-    Map<int, int> timeToLocalIdx,
-    double Function(int) indexToX,
+    double Function(int) timeToX,
     double Function(double) priceToY,
-    List<double> extraPrices,
-  ) {
+    List<double> extraPrices, {
+    bool isSelected = false,
+  }) {
     if (d.points.isEmpty) return;
     final paint = Paint()
       ..color = d.color
-      ..strokeWidth = 1.8
+      ..strokeWidth = d.strokeWidth
       ..style = PaintingStyle.stroke;
 
-    Offset? toOffset(DrawingPoint pt) {
-      final idx = timeToLocalIdx[pt.timeSeconds];
-      if (idx != null) return Offset(indexToX(idx), priceToY(pt.price));
-      // Fallback approximate X if point is outside slice
-      if (candles.isEmpty) return null;
-      final firstT = candles.first.timeSeconds;
-      final lastT = candles.last.timeSeconds;
-      if (lastT == firstT) return null;
-      final ratio = (pt.timeSeconds - firstT) / (lastT - firstT);
-      return Offset(ratio * chartW, priceToY(pt.price));
+    Offset toOffset(DrawingPoint pt) =>
+        Offset(timeToX(pt.timeSeconds), priceToY(pt.price));
+
+    void drawHandle(Offset center) {
+      canvas.drawCircle(
+        center,
+        5.5,
+        Paint()
+          ..color = isDark ? const Color(0xFF0F172A) : Colors.white
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawCircle(
+        center,
+        5.5,
+        Paint()
+          ..color = d.color
+          ..strokeWidth = 2.0
+          ..style = PaintingStyle.stroke,
+      );
     }
 
     if (d.tool == DrawingTool.hline) {
       final y = priceToY(d.points.first.price);
-      canvas.drawLine(Offset(0, y), Offset(chartW, y), paint);
+      _drawStyledLine(canvas, Offset(0, y), Offset(chartW, y), paint,
+          isDashed: d.isDashed);
+      if (isSelected) {
+        drawHandle(Offset(chartW * 0.5, y));
+      }
       return;
     }
 
     if (d.tool == DrawingTool.text) {
       final p = toOffset(d.points.first);
-      if (p != null) {
-        _drawText(
-          canvas,
-          d.text ?? 'Note',
-          p,
-          TextStyle(
-            color: d.color,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-          ),
-        );
+      _drawText(
+        canvas,
+        d.text ?? 'Note',
+        p,
+        TextStyle(
+          color: d.color,
+          fontSize: 11 + (d.strokeWidth - 1.8).clamp(0, 4),
+          fontWeight: FontWeight.bold,
+        ),
+      );
+      if (isSelected) {
+        drawHandle(p);
       }
       return;
     }
@@ -577,44 +630,105 @@ class TradingChartPainter extends CustomPainter {
     if (d.points.length < 2) return;
     final p1 = toOffset(d.points[0]);
     final p2 = toOffset(d.points[1]);
-    if (p1 == null || p2 == null) return;
 
     if (d.tool == DrawingTool.trendline) {
-      canvas.drawLine(p1, p2, paint);
+      _drawStyledLine(canvas, p1, p2, paint, isDashed: d.isDashed);
     } else if (d.tool == DrawingTool.ray) {
       final dx = p2.dx - p1.dx;
       final dy = p2.dy - p1.dy;
-      if (dx.abs() < 1e-3 && dy.abs() < 1e-3) return;
-      final scale = chartW / math.max(1.0, dx.abs()) * 2;
-      canvas.drawLine(p1, Offset(p1.dx + dx * scale, p1.dy + dy * scale), paint);
+      if (dx.abs() >= 1e-3 || dy.abs() >= 1e-3) {
+        final scale = chartW / math.max(1.0, dx.abs()) * 2;
+        _drawStyledLine(
+          canvas,
+          p1,
+          Offset(p1.dx + dx * scale, p1.dy + dy * scale),
+          paint,
+          isDashed: d.isDashed,
+        );
+      }
     } else if (d.tool == DrawingTool.rectangle) {
       final rect = Rect.fromPoints(p1, p2);
       canvas.drawRect(
         rect,
         Paint()..color = d.color.withValues(alpha: 0.14),
       );
-      canvas.drawRect(rect, paint);
+      if (d.isDashed) {
+        _drawStyledLine(canvas, rect.topLeft, rect.topRight, paint,
+            isDashed: true);
+        _drawStyledLine(canvas, rect.topRight, rect.bottomRight, paint,
+            isDashed: true);
+        _drawStyledLine(canvas, rect.bottomRight, rect.bottomLeft, paint,
+            isDashed: true);
+        _drawStyledLine(canvas, rect.bottomLeft, rect.topLeft, paint,
+            isDashed: true);
+      } else {
+        canvas.drawRect(rect, paint);
+      }
     } else if (d.tool == DrawingTool.fibonacci) {
       const levels = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
       final pr1 = d.points[0].price;
       final pr2 = d.points[1].price;
-      for (final lvl in levels) {
-        final price = pr1 + (pr2 - pr1) * lvl;
-        final y = priceToY(price);
-        canvas.drawLine(
-          Offset(math.min(p1.dx, p2.dx), y),
-          Offset(math.max(p1.dx, p2.dx) + 80, y),
-          Paint()
-            ..color = d.color.withValues(alpha: 0.7)
-            ..strokeWidth = 1.1,
-        );
-        _drawText(
-          canvas,
-          '${(lvl * 100).toStringAsFixed(1)}% (${IndicatorEngine.formatPrice(price, symbol, extraPrices: extraPrices)})',
-          Offset(math.min(p1.dx, p2.dx) + 4, y - 12),
-          TextStyle(color: d.color, fontSize: 9.5, fontFamily: 'monospace'),
-        );
+      final leftX = math.min(p1.dx, p2.dx);
+      final rightX = math.max(p1.dx, p2.dx) + 80;
+      if (rightX >= 0 && leftX <= chartW) {
+        final labelX = math.max(4.0, leftX + 4);
+        final fibPaint = Paint()
+          ..color = d.color.withValues(alpha: 0.75)
+          ..strokeWidth = math.max(1.0, d.strokeWidth * 0.7);
+        for (final lvl in levels) {
+          final price = pr1 + (pr2 - pr1) * lvl;
+          final y = priceToY(price);
+          _drawStyledLine(
+            canvas,
+            Offset(leftX, y),
+            Offset(rightX, y),
+            fibPaint,
+            isDashed: d.isDashed,
+          );
+          _drawText(
+            canvas,
+            '${(lvl * 100).toStringAsFixed(1)}% (${IndicatorEngine.formatPrice(price, symbol, extraPrices: extraPrices)})',
+            Offset(labelX, y - 12),
+            TextStyle(color: d.color, fontSize: 9.5, fontFamily: 'monospace'),
+          );
+        }
       }
+    }
+
+    if (isSelected) {
+      drawHandle(p1);
+      drawHandle(p2);
+    }
+  }
+
+  void _drawStyledLine(
+    Canvas canvas,
+    Offset p1,
+    Offset p2,
+    Paint paint, {
+    required bool isDashed,
+  }) {
+    if (!isDashed) {
+      canvas.drawLine(p1, p2, paint);
+      return;
+    }
+    final dx = p2.dx - p1.dx;
+    final dy = p2.dy - p1.dy;
+    final totalLen = math.sqrt(dx * dx + dy * dy);
+    if (totalLen < 1e-3) return;
+    final ux = dx / totalLen;
+    final uy = dy / totalLen;
+    const dash = 6.0;
+    const gap = 4.0;
+    double dist = 0.0;
+    while (dist < totalLen) {
+      final next = math.min(dist + dash, totalLen);
+      canvas.drawLine(
+        Offset(p1.dx + ux * dist, p1.dy + uy * dist),
+        Offset(p1.dx + ux * next, p1.dy + uy * next),
+        paint,
+      );
+      dist += dash + gap;
     }
   }
 
