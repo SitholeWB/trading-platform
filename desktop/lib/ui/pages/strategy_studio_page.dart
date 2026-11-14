@@ -46,6 +46,11 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
     'ICHIMOKU_BULL',
     'ADX_TREND',
     'SESSION_UTC',
+    'DONCHIAN_BREAK',
+    'ENGULFING',
+    'PIN_BAR',
+    'VOLUME_SPIKE',
+    'ATR_VOLATILITY',
   ];
 
   static const Map<String, String> _universes = {
@@ -71,6 +76,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
   int _activeTab = 0; // 0 = Visual Builder, 1 = JSON Preview, 2 = Test & Results
   String _combinator = 'AND';
   String? _statusBanner;
+  bool _statusIsWarning = false;
   int _testLookbackBars = 500;
   bool _testing = false;
   bool _scanning = false;
@@ -92,6 +98,17 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
   double _slMult = 1.5;
   double _tpMult = 3.0;
   List<StrategyRule> _rules = [];
+  StrategyRuleGroup _rootGroup = const StrategyRuleGroup();
+  List<StrategyRule> _exitRules = [];
+  String _directionMode = 'LongOnly';
+  Timeframe? _htfTimeframe;
+  String _htfIndicator = 'EMA_TREND';
+  int _htfPeriod = 200;
+  double _breakEvenR = 0.0;
+  double _trailingAtrMult = 0.0;
+  int _maxHoldBars = 0;
+  int _cooldownBarsAfterSl = 0;
+  double _spreadBps = 1.0;
 
   @override
   void initState() {
@@ -132,6 +149,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       _isCreatingNew = false;
       _selectedId = s.id;
       _statusBanner = null;
+      _statusIsWarning = false;
       _nameCtrl.text = s.name;
       _descCtrl.text = s.description;
       _symbol = SymbolCatalog.allSymbols.any((x) => x.symbol == s.symbol)
@@ -144,11 +162,22 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       _timeframe = s.timeframe;
       _isEnabled = s.isEnabled;
       _autoTrade = s.autoTrade;
-      _combinator = s.combinator;
+      _combinator = s.effectiveRuleGroup.combinator;
       _riskPercent = s.riskPercent.clamp(0.25, 5.0);
       _slMult = s.stopLossAtrMult.clamp(0.5, 4.0);
       _tpMult = s.takeProfitAtrMult.clamp(1.0, 8.0);
-      _rules = List<StrategyRule>.from(s.entryRules);
+      _rootGroup = s.effectiveRuleGroup;
+      _rules = List<StrategyRule>.from(_rootGroup.flattenRules());
+      _exitRules = List<StrategyRule>.from(s.exitRules);
+      _directionMode = s.directionMode;
+      _htfTimeframe = s.htfTimeframe;
+      _htfIndicator = s.htfIndicator;
+      _htfPeriod = s.htfPeriod;
+      _breakEvenR = s.breakEvenR;
+      _trailingAtrMult = s.trailingAtrMult;
+      _maxHoldBars = s.maxHoldBars;
+      _cooldownBarsAfterSl = s.cooldownBarsAfterSl;
+      _spreadBps = s.spreadBps;
       _testResult = null;
       _multiBtResult = null;
       _scanHits = [];
@@ -163,6 +192,7 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       _isCreatingNew = true;
       _selectedId = 'strat_${DateTime.now().millisecondsSinceEpoch}';
       _statusBanner = null;
+      _statusIsWarning = false;
       _testResult = null;
       _multiBtResult = null;
       _scanHits = [];
@@ -189,11 +219,23 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
           period: 14,
         ),
       ];
+      _rootGroup = StrategyRuleGroup(combinator: 'AND', rules: _rules);
+      _exitRules = [];
+      _directionMode = 'LongOnly';
+      _htfTimeframe = null;
+      _htfIndicator = 'EMA_TREND';
+      _htfPeriod = 200;
+      _breakEvenR = 0.0;
+      _trailingAtrMult = 0.0;
+      _maxHoldBars = 0;
+      _cooldownBarsAfterSl = 0;
+      _spreadBps = 1.0;
     });
   }
 
   StrategyDefinition _buildCurrentDraft() {
     final id = _selectedId ?? 'strat_${DateTime.now().millisecondsSinceEpoch}';
+    final syncedGroup = _rootGroup.copyWith(combinator: _combinator);
     return StrategyDefinition(
       id: id,
       name: _nameCtrl.text.trim().isEmpty
@@ -208,7 +250,18 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       riskPercent: _riskPercent,
       stopLossAtrMult: _slMult,
       takeProfitAtrMult: _tpMult,
-      entryRules: List<StrategyRule>.from(_rules),
+      entryRules: syncedGroup.flattenRules(),
+      rootRuleGroup: syncedGroup,
+      exitRules: List<StrategyRule>.from(_exitRules),
+      directionMode: _directionMode,
+      htfTimeframe: _htfTimeframe,
+      htfIndicator: _htfIndicator,
+      htfPeriod: _htfPeriod,
+      breakEvenR: _breakEvenR,
+      trailingAtrMult: _trailingAtrMult,
+      maxHoldBars: _maxHoldBars,
+      cooldownBarsAfterSl: _cooldownBarsAfterSl,
+      spreadBps: _spreadBps,
       scanUniverse: _scanUniverse,
       scanSymbols: List<String>.from(_scanSymbols),
     );
@@ -232,10 +285,16 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
     String? compileError;
 
     const presets = [
-      'Scan only major forex pairs on H1: price above 200 EMA, RSI < 35, ADX >= 20, London session',
-      'Crypto H4 momentum: Supertrend bullish with MACD bullish cross and 1.5x ATR stop',
-      'Metals & Energy M15 pullback: price above VWAP and RSI oversold bounce',
+      'Major FX H1 with H4 200 EMA trend filter: ADX >= 20 AND (RSI < 35 OR Bullish Engulfing). Both directions, 1R break-even, 1.5x ATR trailing stop',
+      'Crypto H4 breakout: Donchian(20) breakout AND Volume >= 1.5x AND (MACD cross OR Supertrend). 2R TP, 3-bar SL cooldown',
+      'Metals M15 London session (7-16 UTC): Price > VWAP AND (Pin Bar OR RSI < 32), 1.5x ATR SL',
     ];
+
+    final aiProvider = widget.copilot?.storage.aiProvider ?? 'BuiltIn';
+    final hasKey = widget.copilot?.storage.aiApiKey.trim().isNotEmpty ?? false;
+    final needsKey =
+        aiProvider != 'BuiltIn' && aiProvider != 'Ollama' && !hasKey;
+    final isLimitedBuiltIn = aiProvider == 'BuiltIn' || needsKey;
 
     final compileRes = await showDialog<StrategyCompileResult>(
       context: context,
@@ -250,13 +309,57 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
             ],
           ),
           content: SizedBox(
-            width: 540,
+            width: 560,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (isLimitedBuiltIn)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.warning_amber_rounded,
+                            size: 18, color: Color(0xFFF59E0B)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            aiProvider == 'BuiltIn'
+                                ? 'Built-in Keyword Compiler Active: It only matches simple keywords and CANNOT understand complex nested (A AND B) AND (C OR D) rules. Configure Gemini, OpenAI, Anthropic, or Ollama in Settings for full AI compilation.'
+                                : 'No API key configured for $aiProvider — falling back to the limited Built-in Keyword Compiler. Add your API key in Settings for full nested AI compilation.',
+                            style: const TextStyle(
+                                fontSize: 11.5, color: Color(0xFFFCD34D)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Using $aiProvider for full nested AND/OR, HTF filter, and trade-management compilation (~500 tokens, 1 call).',
+                      style: const TextStyle(
+                          fontSize: 11.5, color: Color(0xFF34D399)),
+                    ),
+                  ),
                 const Text(
-                  'Describe your strategy & target market in plain English. AI compiles it once (~500 tokens) into local Dart rules so scanning & backtesting use 0 tokens.',
+                  'Describe your strategy, nested AND/OR logic, risk management, and target market in plain English:',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(height: 10),
@@ -426,9 +529,10 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
       widget.onSaveStrategy(compileRes.strategy);
       _loadStrategy(compileRes.strategy);
       setState(() {
+        _statusIsWarning = compileRes.usedBuiltInFallback;
         _statusBanner =
             'Compiled "${compileRes.strategy.name}" via ${compileRes.providerUsed}'
-            '${compileRes.note != null ? ' (${compileRes.note})' : ''}';
+            '${compileRes.note != null ? ' — ${compileRes.note}' : ''}';
       });
     }
   }
@@ -730,20 +834,38 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
                   width: double.infinity,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  color: const Color(0xFF10B981).withValues(alpha: 0.14),
+                  color: (_statusIsWarning
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF10B981))
+                      .withValues(alpha: 0.14),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle_outline,
-                          size: 15, color: Color(0xFF10B981)),
-                      const SizedBox(width: 6),
-                      Text(
-                        _statusBanner!,
-                        style: const TextStyle(
-                            fontSize: 12, color: Color(0xFF10B981)),
+                      Icon(
+                        _statusIsWarning
+                            ? Icons.warning_amber_rounded
+                            : Icons.check_circle_outline,
+                        size: 15,
+                        color: _statusIsWarning
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF10B981),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _statusBanner!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _statusIsWarning
+                                ? const Color(0xFFFCD34D)
+                                : const Color(0xFF10B981),
+                          ),
+                        ),
+                      ),
                       InkWell(
-                        onTap: () => setState(() => _statusBanner = null),
+                        onTap: () => setState(() {
+                          _statusBanner = null;
+                          _statusIsWarning = false;
+                        }),
                         child: const Icon(Icons.close, size: 15),
                       ),
                     ],
@@ -902,203 +1024,557 @@ class _StrategyStudioPageState extends State<StrategyStudioPage> {
           ),
         ),
         const SizedBox(height: 14),
-        Row(
-          children: [
-            const Text(
-              'Entry Rules',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            ),
-            const SizedBox(width: 10),
-            ActionChip(
-              label: const Text('+ RSI Oversold', style: TextStyle(fontSize: 11)),
-              onPressed: () => setState(() => _rules.add(const StrategyRule(
-                    indicator: 'RSI_OS',
-                    condition: 'LessThan',
-                    threshold: 30,
-                    period: 14,
-                  ))),
-            ),
-            const SizedBox(width: 6),
-            ActionChip(
-              label: const Text('+ EMA Cross', style: TextStyle(fontSize: 11)),
-              onPressed: () => setState(() => _rules.add(const StrategyRule(
-                    indicator: 'EMA_CROSS',
-                    condition: 'CrossAbove',
-                    threshold: 0,
-                    period: 20,
-                  ))),
-            ),
-            const Spacer(),
-            FilledButton.tonalIcon(
-              onPressed: () => setState(() => _rules.add(const StrategyRule(
-                    indicator: 'MACD_CROSS',
-                    condition: 'CrossAbove',
-                    threshold: 0,
-                    period: 12,
-                  ))),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add Rule'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        if (_rules.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(
-                child: Text(
-                  'No entry rules configured. Click "+ Add Rule" to add a condition.',
-                  style: TextStyle(color: Colors.grey),
+        // Trade Management, HTF Filter & Risk Guardrails
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Trade Management, HTF Filter & Guardrails',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
-              ),
-            ),
-          )
-        else
-          ...List.generate(_rules.length, (i) {
-            final r = _rules[i];
-            final indVal = _indicators.contains(r.indicator)
-                ? r.indicator
-                : _indicators.first;
-            final condVal = _conditions.contains(r.condition)
-                ? r.condition
-                : _conditions.first;
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Row(
+                const SizedBox(height: 10),
+                Row(
                   children: [
-                    CircleAvatar(
-                      radius: 12,
-                      child: Text('${i + 1}',
-                          style: const TextStyle(fontSize: 11)),
-                    ),
-                    const SizedBox(width: 10),
                     Expanded(
-                      flex: 2,
                       child: DropdownButtonFormField<String>(
-                        initialValue: indVal,
+                        initialValue: _directionMode,
+                        isDense: true,
                         decoration: const InputDecoration(
-                          labelText: 'Indicator',
+                          labelText: 'Direction Mode',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
-                        items: _indicators
-                            .map((ind) => DropdownMenuItem(
-                                  value: ind,
-                                  child: Text(ind,
-                                      style: const TextStyle(fontSize: 12)),
-                                ))
-                            .toList(),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'LongOnly', child: Text('Long Only')),
+                          DropdownMenuItem(
+                              value: 'Both',
+                              child: Text('Both (Auto-Mirrored)')),
+                          DropdownMenuItem(
+                              value: 'ShortOnly', child: Text('Short Only')),
+                        ],
                         onChanged: (v) {
-                          if (v != null) {
-                            setState(() {
-                              _rules[i] = StrategyRule(
-                                indicator: v,
-                                condition: r.condition,
-                                threshold: r.threshold,
-                                period: r.period,
-                              );
-                            });
-                          }
+                          if (v != null) setState(() => _directionMode = v);
                         },
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      flex: 2,
                       child: DropdownButtonFormField<String>(
-                        initialValue: condVal,
+                        initialValue: _htfTimeframe?.code ?? 'NONE',
+                        isDense: true,
                         decoration: const InputDecoration(
-                          labelText: 'Condition',
+                          labelText: 'HTF Trend Filter',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
-                        items: _conditions
-                            .map((c) => DropdownMenuItem(
-                                  value: c,
-                                  child: Text(c,
-                                      style: const TextStyle(fontSize: 12)),
-                                ))
-                            .toList(),
+                        items: [
+                          const DropdownMenuItem(
+                              value: 'NONE', child: Text('None')),
+                          ...Timeframe.values.map((t) => DropdownMenuItem(
+                              value: t.code,
+                              child: Text('${t.code} Confirmation'))),
+                        ],
                         onChanged: (v) {
-                          if (v != null) {
-                            setState(() {
-                              _rules[i] = StrategyRule(
-                                indicator: r.indicator,
-                                condition: v,
-                                threshold: r.threshold,
-                                period: r.period,
-                              );
-                            });
-                          }
+                          setState(() {
+                            _htfTimeframe = (v == null || v == 'NONE')
+                                ? null
+                                : Timeframe.fromCode(v);
+                          });
                         },
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    if (_htfTimeframe != null) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _htfIndicator,
+                          isDense: true,
+                          decoration: const InputDecoration(
+                            labelText: 'HTF Indicator',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'EMA_TREND', child: Text('EMA(200)')),
+                            DropdownMenuItem(
+                                value: 'SUPERTREND', child: Text('Supertrend')),
+                            DropdownMenuItem(
+                                value: 'ICHIMOKU_BULL',
+                                child: Text('Ichimoku Cloud')),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) setState(() => _htfIndicator = v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
                     SizedBox(
-                      width: 90,
+                      width: 135,
                       child: TextFormField(
-                        key: ValueKey('${_selectedId}_thr_$i'),
-                        initialValue: r.threshold.toString(),
+                        key: ValueKey('${_selectedId}_be'),
+                        initialValue: _breakEvenR.toStringAsFixed(1),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         decoration: const InputDecoration(
-                          labelText: 'Threshold',
+                          labelText: 'Break-Even (R)',
+                          hintText: '0 = off',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
                         onChanged: (v) {
                           final val = double.tryParse(v);
-                          if (val != null) {
-                            _rules[i] = StrategyRule(
-                              indicator: r.indicator,
-                              condition: r.condition,
-                              threshold: val,
-                              period: r.period,
-                            );
+                          if (val != null && val >= 0) {
+                            _breakEvenR = val.clamp(0.0, 5.0);
                           }
                         },
                       ),
                     ),
-                    const SizedBox(width: 8),
                     SizedBox(
-                      width: 80,
+                      width: 135,
                       child: TextFormField(
-                        key: ValueKey('${_selectedId}_per_$i'),
-                        initialValue: r.period.toString(),
+                        key: ValueKey('${_selectedId}_trail'),
+                        initialValue: _trailingAtrMult.toStringAsFixed(1),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Trailing ATR',
+                          hintText: '0 = off',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) {
+                          final val = double.tryParse(v);
+                          if (val != null && val >= 0) {
+                            _trailingAtrMult = val.clamp(0.0, 6.0);
+                          }
+                        },
+                      ),
+                    ),
+                    SizedBox(
+                      width: 135,
+                      child: TextFormField(
+                        key: ValueKey('${_selectedId}_maxhold'),
+                        initialValue: _maxHoldBars.toString(),
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          labelText: 'Period',
+                          labelText: 'Max Hold Bars',
+                          hintText: '0 = off',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
                         onChanged: (v) {
                           final val = int.tryParse(v);
-                          if (val != null && val > 0) {
-                            _rules[i] = StrategyRule(
-                              indicator: r.indicator,
-                              condition: r.condition,
-                              threshold: r.threshold,
-                              period: val,
-                            );
+                          if (val != null && val >= 0) {
+                            _maxHoldBars = val.clamp(0, 500);
                           }
                         },
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    IconButton(
-                      tooltip: 'Remove Rule',
-                      icon: const Icon(Icons.close, size: 18),
-                      onPressed: () => setState(() => _rules.removeAt(i)),
+                    SizedBox(
+                      width: 135,
+                      child: TextFormField(
+                        key: ValueKey('${_selectedId}_cool'),
+                        initialValue: _cooldownBarsAfterSl.toString(),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'SL Cooldown Bars',
+                          hintText: '0 = off',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) {
+                          final val = int.tryParse(v);
+                          if (val != null && val >= 0) {
+                            _cooldownBarsAfterSl = val.clamp(0, 100);
+                          }
+                        },
+                      ),
+                    ),
+                    SizedBox(
+                      width: 135,
+                      child: TextFormField(
+                        key: ValueKey('${_selectedId}_spread'),
+                        initialValue: _spreadBps.toStringAsFixed(1),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Spread (bps)',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) {
+                          final val = double.tryParse(v);
+                          if (val != null && val >= 0) {
+                            _spreadBps = val.clamp(0.0, 25.0);
+                          }
+                        },
+                      ),
                     ),
                   ],
                 ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        // Nested AND/OR Entry Rule Group Tree
+        _buildRuleGroupCard(
+          context,
+          group: _rootGroup.copyWith(combinator: _combinator),
+          pathPrefix: 'root',
+          depth: 0,
+          onChanged: (updated) {
+            setState(() {
+              _combinator = updated.combinator;
+              _rootGroup = updated;
+              _rules = updated.flattenRules();
+            });
+          },
+        ),
+        const SizedBox(height: 14),
+        // Optional Exit Rules
+        Row(
+          children: [
+            const Text(
+              'Optional Exit Rules (Close Early)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+            ),
+            const Spacer(),
+            OutlinedButton.icon(
+              onPressed: () => setState(() => _exitRules.add(const StrategyRule(
+                    indicator: 'RSI_OB',
+                    condition: 'GreaterThan',
+                    threshold: 70,
+                    period: 14,
+                  ))),
+              icon: const Icon(Icons.add, size: 15),
+              label: const Text('Add Exit Rule', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+        if (_exitRules.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ...List.generate(
+            _exitRules.length,
+            (i) => _buildSingleRuleRow(
+              keyPrefix: '${_selectedId}_exit_$i',
+              indexLabel: 'E${i + 1}',
+              rule: _exitRules[i],
+              onChanged: (nr) => setState(() => _exitRules[i] = nr),
+              onDelete: () => setState(() => _exitRules.removeAt(i)),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRuleGroupCard(
+    BuildContext context, {
+    required StrategyRuleGroup group,
+    required String pathPrefix,
+    required int depth,
+    required ValueChanged<StrategyRuleGroup> onChanged,
+    VoidCallback? onRemoveGroup,
+  }) {
+    final isOr = group.combinator.toUpperCase() == 'OR';
+    final accent = isOr ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8);
+
+    return Container(
+      margin: EdgeInsets.only(left: depth > 0 ? 18 : 0, bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withValues(alpha: 0.45)),
+        color: accent.withValues(alpha: 0.04),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                depth == 0 ? Icons.account_tree : Icons.subdirectory_arrow_right,
+                size: 16,
+                color: accent,
               ),
+              const SizedBox(width: 6),
+              Text(
+                depth == 0
+                    ? 'Root Entry Logic (${group.totalRuleCount} rules)'
+                    : 'Nested Group',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12.5,
+                  color: accent,
+                ),
+              ),
+              const SizedBox(width: 10),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'AND', label: Text('AND')),
+                  ButtonSegment(value: 'OR', label: Text('OR')),
+                ],
+                selected: {isOr ? 'OR' : 'AND'},
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                ),
+                onSelectionChanged: (s) =>
+                    onChanged(group.copyWith(combinator: s.first)),
+              ),
+              const Spacer(),
+              OutlinedButton.icon(
+                onPressed: () => onChanged(group.copyWith(
+                  rules: [
+                    ...group.rules,
+                    const StrategyRule(
+                      indicator: 'EMA_TREND',
+                      condition: 'GreaterThan',
+                      period: 200,
+                      threshold: 0,
+                    ),
+                  ],
+                )),
+                icon: const Icon(Icons.add, size: 14),
+                label: const Text('+ Rule', style: TextStyle(fontSize: 11.5)),
+              ),
+              if (depth < 2) ...[
+                const SizedBox(width: 6),
+                OutlinedButton.icon(
+                  onPressed: () => onChanged(group.copyWith(
+                    groups: [
+                      ...group.groups,
+                      StrategyRuleGroup(
+                        combinator: isOr ? 'AND' : 'OR',
+                        rules: const [
+                          StrategyRule(
+                            indicator: 'RSI_OS',
+                            condition: 'LessThan',
+                            period: 14,
+                            threshold: 35,
+                          ),
+                        ],
+                      ),
+                    ],
+                  )),
+                  icon: const Icon(Icons.create_new_folder_outlined, size: 14),
+                  label: const Text('+ Nested Group',
+                      style: TextStyle(fontSize: 11.5)),
+                ),
+              ],
+              if (onRemoveGroup != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: 'Delete Group',
+                  icon: const Icon(Icons.delete_outline,
+                      size: 17, color: Colors.redAccent),
+                  onPressed: onRemoveGroup,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (group.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Text(
+                  'Empty group. Click "+ Rule" or "+ Nested Group".',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ),
+            ),
+          ...List.generate(group.rules.length, (i) {
+            return _buildSingleRuleRow(
+              keyPrefix: '${_selectedId}_${pathPrefix}_r$i',
+              indexLabel: '${i + 1}',
+              rule: group.rules[i],
+              onChanged: (nr) {
+                final next = List<StrategyRule>.from(group.rules);
+                next[i] = nr;
+                onChanged(group.copyWith(rules: next));
+              },
+              onDelete: () {
+                final next = List<StrategyRule>.from(group.rules)..removeAt(i);
+                onChanged(group.copyWith(rules: next));
+              },
             );
           }),
-      ],
+          ...List.generate(group.groups.length, (gIdx) {
+            return _buildRuleGroupCard(
+              context,
+              group: group.groups[gIdx],
+              pathPrefix: '${pathPrefix}_g$gIdx',
+              depth: depth + 1,
+              onChanged: (ng) {
+                final nextGroups = List<StrategyRuleGroup>.from(group.groups);
+                nextGroups[gIdx] = ng;
+                onChanged(group.copyWith(groups: nextGroups));
+              },
+              onRemoveGroup: () {
+                final nextGroups = List<StrategyRuleGroup>.from(group.groups)
+                  ..removeAt(gIdx);
+                onChanged(group.copyWith(groups: nextGroups));
+              },
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSingleRuleRow({
+    required String keyPrefix,
+    required String indexLabel,
+    required StrategyRule rule,
+    required ValueChanged<StrategyRule> onChanged,
+    required VoidCallback onDelete,
+  }) {
+    final indVal = _indicators.contains(rule.indicator)
+        ? rule.indicator
+        : _indicators.first;
+    final condVal = _conditions.contains(rule.condition)
+        ? rule.condition
+        : _conditions.first;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 11,
+              child: Text(indexLabel, style: const TextStyle(fontSize: 10)),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: DropdownButtonFormField<String>(
+                initialValue: indVal,
+                decoration: const InputDecoration(
+                  labelText: 'Indicator',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: _indicators
+                    .map((ind) => DropdownMenuItem(
+                          value: ind,
+                          child: Text(ind, style: const TextStyle(fontSize: 12)),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    onChanged(StrategyRule(
+                      indicator: v,
+                      condition: rule.condition,
+                      threshold: rule.threshold,
+                      period: rule.period,
+                    ));
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: DropdownButtonFormField<String>(
+                initialValue: condVal,
+                decoration: const InputDecoration(
+                  labelText: 'Condition',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: _conditions
+                    .map((c) => DropdownMenuItem(
+                          value: c,
+                          child: Text(c, style: const TextStyle(fontSize: 12)),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    onChanged(StrategyRule(
+                      indicator: rule.indicator,
+                      condition: v,
+                      threshold: rule.threshold,
+                      period: rule.period,
+                    ));
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 85,
+              child: TextFormField(
+                key: ValueKey('${keyPrefix}_thr'),
+                initialValue: rule.threshold.toString(),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Threshold',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (v) {
+                  final val = double.tryParse(v);
+                  if (val != null) {
+                    onChanged(StrategyRule(
+                      indicator: rule.indicator,
+                      condition: rule.condition,
+                      threshold: val,
+                      period: rule.period,
+                    ));
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 75,
+              child: TextFormField(
+                key: ValueKey('${keyPrefix}_per'),
+                initialValue: rule.period.toString(),
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Period',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (v) {
+                  final val = int.tryParse(v);
+                  if (val != null && val > 0) {
+                    onChanged(StrategyRule(
+                      indicator: rule.indicator,
+                      condition: rule.condition,
+                      threshold: rule.threshold,
+                      period: val,
+                    ));
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: 'Remove Rule',
+              icon: const Icon(Icons.close, size: 17),
+              onPressed: onDelete,
+            ),
+          ],
+        ),
+      ),
     );
   }
 

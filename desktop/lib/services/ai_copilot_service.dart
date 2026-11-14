@@ -30,11 +30,13 @@ class AiProviderSpec {
 class StrategyCompileResult {
   final StrategyDefinition strategy;
   final String providerUsed;
+  final bool usedBuiltInFallback;
   final String? note;
 
   const StrategyCompileResult({
     required this.strategy,
     required this.providerUsed,
+    this.usedBuiltInFallback = false,
     this.note,
   });
 }
@@ -247,6 +249,11 @@ class AiCopilotService {
     'ICHIMOKU_BULL',
     'ADX_TREND',
     'SESSION_UTC',
+    'DONCHIAN_BREAK',
+    'ENGULFING',
+    'PIN_BAR',
+    'VOLUME_SPIKE',
+    'ATR_VOLATILITY',
   };
 
   static const Set<String> _validConditions = {
@@ -269,7 +276,8 @@ class AiCopilotService {
     final key = storage.aiApiKey.trim();
 
     const schemaContext = '''
-You are a quantitative strategy compiler. Convert the trader's plain-English strategy description into ONE strict JSON object (no markdown prose, no explanation outside JSON).
+You are an institutional quantitative strategy compiler. Convert the trader's plain-English strategy description into ONE strict JSON object (no markdown prose, no explanation outside JSON).
+Use nested `rootRuleGroup` whenever the trader expresses combined conditions like "(A AND B) AND (C OR D)".
 Schema:
 {
   "name": "Short strategy name",
@@ -277,31 +285,63 @@ Schema:
   "timeframe": "M1|M5|M15|M30|H1|H4|D1",
   "scanUniverse": "SINGLE|MAJORS|FOREX|METALS|CRYPTO|INDICES|STOCKS|CUSTOM",
   "scanSymbols": ["EURUSD"],
-  "combinator": "AND|OR",
+  "directionMode": "LongOnly|ShortOnly|Both",
+  "htfTimeframe": "H4",
+  "htfIndicator": "EMA_TREND|SUPERTREND|ICHIMOKU_BULL",
+  "htfPeriod": 200,
   "riskPercent": 1.0,
   "stopLossAtrMult": 1.5,
   "takeProfitAtrMult": 3.0,
-  "rules": [
-    {"indicator": "EMA_TREND", "condition": "GreaterThan", "period": 200, "threshold": 0}
-  ]
+  "breakEvenR": 1.0,
+  "trailingAtrMult": 1.5,
+  "maxHoldBars": 0,
+  "cooldownBarsAfterSl": 3,
+  "spreadBps": 1.0,
+  "rootRuleGroup": {
+    "combinator": "AND",
+    "rules": [
+      {"indicator": "EMA_TREND", "condition": "GreaterThan", "period": 200, "threshold": 0}
+    ],
+    "groups": [
+      {
+        "combinator": "OR",
+        "rules": [
+          {"indicator": "RSI_OS", "condition": "LessThan", "period": 14, "threshold": 35},
+          {"indicator": "ENGULFING", "condition": "GreaterThan", "period": 1, "threshold": 0}
+        ]
+      }
+    ]
+  },
+  "exitRules": []
 }
 Supported indicators & meanings:
 - EMA_CROSS (fast EMA(period) vs slow EMA(2*period); CrossAbove/CrossBelow/GreaterThan/LessThan)
 - SMA_CROSS (fast SMA(period) vs slow SMA(2*period))
-- EMA_TREND (Price vs EMA(period), e.g. period=200, GreaterThan=bullish trend, LessThan=bearish trend)
-- RSI_OS (RSI(period) < threshold, default threshold=30; CrossAbove for bounce out of oversold)
-- RSI_OB (RSI(period) > threshold, default threshold=70; CrossBelow for drop out of overbought)
+- EMA_TREND (Price vs EMA(period), e.g. period=200, GreaterThan=bullish, LessThan=bearish)
+- RSI_OS (RSI(period) < threshold, default 30; CrossAbove for bounce out of oversold)
+- RSI_OB (RSI(period) > threshold, default 70; CrossBelow for drop out of overbought)
 - MACD_CROSS (MACD 12/26/9 vs signal; CrossAbove/CrossBelow/GreaterThan/LessThan)
 - BB_BREAK (Bollinger Bands(period, threshold=stdDev e.g. 2.0); GreaterThan=upper break, LessThan=lower break)
 - SUPERTREND (Supertrend(period=10, threshold=3.0); CrossAbove/GreaterThan=bull, CrossBelow/LessThan=bear)
 - VWAP_CROSS (Price vs VWAP; CrossAbove/GreaterThan=above, CrossBelow/LessThan=below)
 - ICHIMOKU_BULL (Ichimoku cloud; GreaterThan=bullish above cloud, LessThan=bearish below cloud)
-- ADX_TREND (ADX(period=14) >= threshold e.g. 20 or 25; trend strength filter)
+- ADX_TREND (ADX(period=14) >= threshold e.g. 20 or 25; neutral trend strength filter)
 - SESSION_UTC (UTC hour window: threshold=startHour 0..23, period=endHour 0..23, e.g. London 7..16, NY 13..21)
+- DONCHIAN_BREAK (N-bar High/Low structure breakout; period=20, GreaterThan=break above N-bar high, LessThan=break below N-bar low)
+- ENGULFING (Candlestick engulfing; GreaterThan=bullish engulfing, LessThan=bearish engulfing)
+- PIN_BAR (Rejection pin bar; threshold=wick/body ratio e.g. 2.0, GreaterThan=bullish pin, LessThan=bearish pin)
+- VOLUME_SPIKE (Volume >= threshold * SMA(period) volume, e.g. period=20, threshold=1.5; neutral filter)
+- ATR_VOLATILITY (ATR/Price % filter; GreaterThan >= threshold% e.g. 0.15, LessThan <= threshold%; neutral filter)
 Return ONLY valid JSON.''';
 
     String? errorNote;
-    if (provider != 'BuiltIn' && (!spec.requiresKey || key.isNotEmpty)) {
+    if (provider == 'BuiltIn') {
+      errorNote =
+          'Built-in keyword compiler used (no external AI provider selected). It cannot understand complex nested AND/OR logic—select Gemini, OpenAI, Anthropic, or Ollama in Settings for full AI compilation.';
+    } else if (spec.requiresKey && key.isEmpty) {
+      errorNote =
+          'No API key configured for ${spec.label}. Fell back to Built-in keyword compiler (limited nested logic). Add your API key in Settings.';
+    } else {
       try {
         final raw = await _callActiveProvider(
           prompt: 'Compile this trading strategy into JSON:\n$plainText',
@@ -318,12 +358,15 @@ Return ONLY valid JSON.''';
             return StrategyCompileResult(
               strategy: parsed,
               providerUsed: '${spec.label} ($model)',
+              usedBuiltInFallback: false,
             );
           }
-          errorNote = 'AI returned unparseable JSON; used local rule compiler.';
+          errorNote =
+              '${spec.label} returned unparseable JSON; fell back to Built-in keyword compiler.';
         }
       } catch (e) {
-        errorNote = '${spec.label} failed ($e); used local rule compiler.';
+        errorNote =
+            '${spec.label} request failed ($e); fell back to Built-in keyword compiler.';
       }
     }
 
@@ -333,8 +376,49 @@ Return ONLY valid JSON.''';
         defaultSymbol: defaultSymbol,
         defaultTimeframe: defaultTimeframe,
       ),
-      providerUsed: 'Built-in Compiler',
+      providerUsed: 'Built-in Keyword Compiler',
+      usedBuiltInFallback: true,
       note: errorNote,
+    );
+  }
+
+  List<StrategyRule> _parseRuleList(List<dynamic>? rawList) {
+    final rules = <StrategyRule>[];
+    for (final item in rawList ?? const []) {
+      if (item is! Map) continue;
+      final m = Map<String, dynamic>.from(item);
+      final ind = (m['indicator'] as String? ?? '').toUpperCase().trim();
+      if (!_validIndicators.contains(ind)) continue;
+      final cond = (m['condition'] as String? ?? 'GreaterThan').trim();
+      final safeCond = _validConditions.contains(cond) ? cond : 'GreaterThan';
+      final period = ((m['period'] as num?)?.toInt() ?? 14).clamp(1, 200);
+      final threshold = (m['threshold'] as num?)?.toDouble() ?? 0.0;
+      rules.add(StrategyRule(
+        indicator: ind,
+        condition: safeCond,
+        period: period,
+        threshold: threshold,
+      ));
+    }
+    return rules;
+  }
+
+  StrategyRuleGroup _parseRuleGroupMap(Map<String, dynamic> m) {
+    final comb = (m['combinator'] as String? ?? 'AND').toUpperCase() == 'OR'
+        ? 'OR'
+        : 'AND';
+    final rules = _parseRuleList(m['rules'] as List<dynamic>?);
+    final childGroups = <StrategyRuleGroup>[];
+    for (final g in m['groups'] as List<dynamic>? ?? const []) {
+      if (g is Map) {
+        final parsed = _parseRuleGroupMap(Map<String, dynamic>.from(g));
+        if (!parsed.isEmpty) childGroups.add(parsed);
+      }
+    }
+    return StrategyRuleGroup(
+      combinator: comb,
+      rules: rules,
+      groups: childGroups,
     );
   }
 
@@ -358,25 +442,22 @@ Return ONLY valid JSON.''';
     }
     try {
       final map = jsonDecode(cleaned) as Map<String, dynamic>;
-      final rawRules = map['rules'] as List<dynamic>? ?? const [];
-      final rules = <StrategyRule>[];
-      for (final item in rawRules) {
-        if (item is! Map) continue;
-        final m = Map<String, dynamic>.from(item);
-        final ind = (m['indicator'] as String? ?? '').toUpperCase().trim();
-        if (!_validIndicators.contains(ind)) continue;
-        final cond = (m['condition'] as String? ?? 'GreaterThan').trim();
-        final safeCond = _validConditions.contains(cond) ? cond : 'GreaterThan';
-        final period = ((m['period'] as num?)?.toInt() ?? 14).clamp(1, 200);
-        final threshold = (m['threshold'] as num?)?.toDouble() ?? 0.0;
-        rules.add(StrategyRule(
-          indicator: ind,
-          condition: safeCond,
-          period: period,
-          threshold: threshold,
-        ));
+      StrategyRuleGroup? rootGroup;
+      if (map['rootRuleGroup'] is Map) {
+        final parsed = _parseRuleGroupMap(
+            Map<String, dynamic>.from(map['rootRuleGroup'] as Map));
+        if (!parsed.isEmpty) rootGroup = parsed;
       }
-      if (rules.isEmpty) return null;
+      final flatRules = _parseRuleList(map['rules'] as List<dynamic>?);
+      if (rootGroup == null && flatRules.isEmpty) return null;
+      rootGroup ??= StrategyRuleGroup(
+        combinator: (map['combinator'] as String? ?? 'AND').toUpperCase() == 'OR'
+            ? 'OR'
+            : 'AND',
+        rules: flatRules,
+      );
+      final exitRules = _parseRuleList(map['exitRules'] as List<dynamic>?);
+
       final universe =
           (map['scanUniverse'] as String? ?? 'SINGLE').toUpperCase().trim();
       final symbols = (map['scanSymbols'] as List<dynamic>? ?? const [])
@@ -390,6 +471,17 @@ Return ONLY valid JSON.''';
       );
       final tfCode =
           (map['timeframe'] as String? ?? defaultTimeframe.code).toUpperCase();
+      final htfRaw = (map['htfTimeframe'] as String? ?? '').toUpperCase().trim();
+      final dirRaw = (map['directionMode'] as String? ?? 'LongOnly').trim();
+      final safeDir = (dirRaw == 'Both' ||
+              dirRaw == 'ShortOnly' ||
+              dirRaw == 'LongOnly')
+          ? dirRaw
+          : 'LongOnly';
+      final htfInd = (map['htfIndicator'] as String? ?? 'EMA_TREND')
+          .toUpperCase()
+          .trim();
+
       return StrategyDefinition(
         id: 'strat_${DateTime.now().millisecondsSinceEpoch}',
         name: (map['name'] as String?)?.trim().isNotEmpty == true
@@ -399,9 +491,7 @@ Return ONLY valid JSON.''';
         timeframe: Timeframe.fromCode(tfCode),
         isEnabled: true,
         autoTrade: false,
-        combinator: (map['combinator'] as String? ?? 'AND').toUpperCase() == 'OR'
-            ? 'OR'
-            : 'AND',
+        combinator: rootGroup.combinator,
         riskPercent: ((map['riskPercent'] as num?)?.toDouble() ?? 1.0)
             .clamp(0.25, 5.0),
         stopLossAtrMult:
@@ -410,7 +500,24 @@ Return ONLY valid JSON.''';
         takeProfitAtrMult:
             ((map['takeProfitAtrMult'] as num?)?.toDouble() ?? 3.0)
                 .clamp(1.0, 8.0),
-        entryRules: rules,
+        entryRules: rootGroup.flattenRules(),
+        rootRuleGroup: rootGroup,
+        exitRules: exitRules,
+        directionMode: safeDir,
+        htfTimeframe: htfRaw.isNotEmpty ? Timeframe.fromCode(htfRaw) : null,
+        htfIndicator: _validIndicators.contains(htfInd) ? htfInd : 'EMA_TREND',
+        htfPeriod: ((map['htfPeriod'] as num?)?.toInt() ?? 200).clamp(5, 200),
+        breakEvenR:
+            ((map['breakEvenR'] as num?)?.toDouble() ?? 0.0).clamp(0.0, 5.0),
+        trailingAtrMult:
+            ((map['trailingAtrMult'] as num?)?.toDouble() ?? 0.0)
+                .clamp(0.0, 6.0),
+        maxHoldBars:
+            ((map['maxHoldBars'] as num?)?.toInt() ?? 0).clamp(0, 500),
+        cooldownBarsAfterSl:
+            ((map['cooldownBarsAfterSl'] as num?)?.toInt() ?? 0).clamp(0, 100),
+        spreadBps:
+            ((map['spreadBps'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 25.0),
         description: (map['description'] as String?)?.trim().isNotEmpty == true
             ? (map['description'] as String).trim()
             : plainText.trim(),
@@ -537,6 +644,42 @@ Return ONLY valid JSON.''';
         threshold: 13,
       ));
     }
+    if (lower.contains('donchian') || lower.contains('breakout')) {
+      rules.add(StrategyRule(
+        indicator: 'DONCHIAN_BREAK',
+        condition: lower.contains('short') || lower.contains('sell')
+            ? 'LessThan'
+            : 'GreaterThan',
+        period: 20,
+      ));
+    }
+    if (lower.contains('engulf')) {
+      rules.add(StrategyRule(
+        indicator: 'ENGULFING',
+        condition: lower.contains('bear') || lower.contains('sell')
+            ? 'LessThan'
+            : 'GreaterThan',
+        period: 1,
+      ));
+    }
+    if (lower.contains('pin bar') || lower.contains('pinbar')) {
+      rules.add(StrategyRule(
+        indicator: 'PIN_BAR',
+        condition: lower.contains('bear') || lower.contains('sell')
+            ? 'LessThan'
+            : 'GreaterThan',
+        period: 1,
+        threshold: 2.0,
+      ));
+    }
+    if (lower.contains('volume')) {
+      rules.add(const StrategyRule(
+        indicator: 'VOLUME_SPIKE',
+        condition: 'GreaterThan',
+        period: 20,
+        threshold: 1.5,
+      ));
+    }
     if (rules.isEmpty) {
       rules.addAll(const [
         StrategyRule(indicator: 'EMA_CROSS', condition: 'CrossAbove', period: 20),
@@ -545,6 +688,15 @@ Return ONLY valid JSON.''';
     }
     final resolved =
         SymbolCatalog.resolveUniverse(universe, fallbackSymbol: defaultSymbol);
+    final dirMode = lower.contains('both') || lower.contains('bidirectional')
+        ? 'Both'
+        : (lower.contains('short only') ? 'ShortOnly' : 'LongOnly');
+    final htfTf = lower.contains('h4 trend') || lower.contains('h4 filter')
+        ? Timeframe.h4
+        : (lower.contains('d1 trend') || lower.contains('daily trend')
+            ? Timeframe.d1
+            : null);
+    final comb = lower.contains(' or ') ? 'OR' : 'AND';
     return StrategyDefinition(
       id: 'strat_${DateTime.now().millisecondsSinceEpoch}',
       name: 'Plain-Text Strategy (${tf.code})',
@@ -552,8 +704,15 @@ Return ONLY valid JSON.''';
       timeframe: tf,
       isEnabled: true,
       autoTrade: false,
-      combinator: lower.contains(' or ') ? 'OR' : 'AND',
+      combinator: comb,
       entryRules: rules,
+      rootRuleGroup: StrategyRuleGroup(combinator: comb, rules: rules),
+      directionMode: dirMode,
+      htfTimeframe: htfTf,
+      breakEvenR: lower.contains('break even') || lower.contains('breakeven')
+          ? 1.0
+          : 0.0,
+      trailingAtrMult: lower.contains('trail') ? 1.5 : 0.0,
       description: plainText.trim(),
       scanUniverse: universe,
     );

@@ -395,6 +395,60 @@ class StrategyRule {
       );
 }
 
+class StrategyRuleGroup {
+  final String combinator; // 'AND' or 'OR'
+  final List<StrategyRule> rules;
+  final List<StrategyRuleGroup> groups;
+
+  const StrategyRuleGroup({
+    this.combinator = 'AND',
+    this.rules = const [],
+    this.groups = const [],
+  });
+
+  bool get isEmpty => rules.isEmpty && groups.every((g) => g.isEmpty);
+
+  int get totalRuleCount =>
+      rules.length + groups.fold<int>(0, (sum, g) => sum + g.totalRuleCount);
+
+  List<StrategyRule> flattenRules() => [
+        ...rules,
+        for (final g in groups) ...g.flattenRules(),
+      ];
+
+  StrategyRuleGroup copyWith({
+    String? combinator,
+    List<StrategyRule>? rules,
+    List<StrategyRuleGroup>? groups,
+  }) =>
+      StrategyRuleGroup(
+        combinator: combinator ?? this.combinator,
+        rules: rules ?? this.rules,
+        groups: groups ?? this.groups,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'combinator': combinator,
+        'rules': rules.map((r) => r.toJson()).toList(),
+        if (groups.isNotEmpty)
+          'groups': groups.map((g) => g.toJson()).toList(),
+      };
+
+  factory StrategyRuleGroup.fromJson(Map<String, dynamic> json) =>
+      StrategyRuleGroup(
+        combinator:
+            (json['combinator'] as String? ?? 'AND').toUpperCase() == 'OR'
+                ? 'OR'
+                : 'AND',
+        rules: (json['rules'] as List<dynamic>? ?? [])
+            .map((e) => StrategyRule.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        groups: (json['groups'] as List<dynamic>? ?? [])
+            .map((e) => StrategyRuleGroup.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
 class StrategyDefinition {
   final String id;
   final String name;
@@ -407,6 +461,17 @@ class StrategyDefinition {
   final double stopLossAtrMult;
   final double takeProfitAtrMult;
   final List<StrategyRule> entryRules;
+  final StrategyRuleGroup? rootRuleGroup;
+  final List<StrategyRule> exitRules;
+  final String directionMode; // 'Both', 'LongOnly', 'ShortOnly'
+  final Timeframe? htfTimeframe;
+  final String htfIndicator; // 'EMA_TREND', 'SUPERTREND', 'ICHIMOKU_BULL'
+  final int htfPeriod;
+  final double breakEvenR; // e.g. 1.0 moves SL to entry at +1R (0 = off)
+  final double trailingAtrMult; // e.g. 1.5 trails SL by 1.5*ATR (0 = off)
+  final int maxHoldBars; // 0 = unlimited
+  final int cooldownBarsAfterSl; // 0 = no cooldown
+  final double spreadBps; // execution spread friction in bps (0 = none)
   final String description;
   final String scanUniverse; // SINGLE, MAJORS, FOREX, CRYPTO, METALS, INDICES, STOCKS, CUSTOM
   final List<String> scanSymbols;
@@ -423,10 +488,25 @@ class StrategyDefinition {
     this.stopLossAtrMult = 1.5,
     this.takeProfitAtrMult = 3.0,
     this.entryRules = const [],
+    this.rootRuleGroup,
+    this.exitRules = const [],
+    this.directionMode = 'LongOnly',
+    this.htfTimeframe,
+    this.htfIndicator = 'EMA_TREND',
+    this.htfPeriod = 200,
+    this.breakEvenR = 0.0,
+    this.trailingAtrMult = 0.0,
+    this.maxHoldBars = 0,
+    this.cooldownBarsAfterSl = 0,
+    this.spreadBps = 1.0,
     this.description = '',
     this.scanUniverse = 'SINGLE',
     this.scanSymbols = const [],
   });
+
+  StrategyRuleGroup get effectiveRuleGroup =>
+      rootRuleGroup ??
+      StrategyRuleGroup(combinator: combinator, rules: entryRules);
 
   StrategyDefinition copyWith({
     String? name,
@@ -439,6 +519,19 @@ class StrategyDefinition {
     double? stopLossAtrMult,
     double? takeProfitAtrMult,
     List<StrategyRule>? entryRules,
+    StrategyRuleGroup? rootRuleGroup,
+    bool clearRootRuleGroup = false,
+    List<StrategyRule>? exitRules,
+    String? directionMode,
+    Timeframe? htfTimeframe,
+    bool clearHtfTimeframe = false,
+    String? htfIndicator,
+    int? htfPeriod,
+    double? breakEvenR,
+    double? trailingAtrMult,
+    int? maxHoldBars,
+    int? cooldownBarsAfterSl,
+    double? spreadBps,
     String? description,
     String? scanUniverse,
     List<String>? scanSymbols,
@@ -455,6 +548,19 @@ class StrategyDefinition {
         stopLossAtrMult: stopLossAtrMult ?? this.stopLossAtrMult,
         takeProfitAtrMult: takeProfitAtrMult ?? this.takeProfitAtrMult,
         entryRules: entryRules ?? this.entryRules,
+        rootRuleGroup:
+            clearRootRuleGroup ? null : (rootRuleGroup ?? this.rootRuleGroup),
+        exitRules: exitRules ?? this.exitRules,
+        directionMode: directionMode ?? this.directionMode,
+        htfTimeframe:
+            clearHtfTimeframe ? null : (htfTimeframe ?? this.htfTimeframe),
+        htfIndicator: htfIndicator ?? this.htfIndicator,
+        htfPeriod: htfPeriod ?? this.htfPeriod,
+        breakEvenR: breakEvenR ?? this.breakEvenR,
+        trailingAtrMult: trailingAtrMult ?? this.trailingAtrMult,
+        maxHoldBars: maxHoldBars ?? this.maxHoldBars,
+        cooldownBarsAfterSl: cooldownBarsAfterSl ?? this.cooldownBarsAfterSl,
+        spreadBps: spreadBps ?? this.spreadBps,
         description: description ?? this.description,
         scanUniverse: scanUniverse ?? this.scanUniverse,
         scanSymbols: scanSymbols ?? this.scanSymbols,
@@ -472,33 +578,66 @@ class StrategyDefinition {
         'stopLossAtrMult': stopLossAtrMult,
         'takeProfitAtrMult': takeProfitAtrMult,
         'entryRules': entryRules.map((e) => e.toJson()).toList(),
+        if (rootRuleGroup != null) 'rootRuleGroup': rootRuleGroup!.toJson(),
+        if (exitRules.isNotEmpty)
+          'exitRules': exitRules.map((e) => e.toJson()).toList(),
+        'directionMode': directionMode,
+        if (htfTimeframe != null) 'htfTimeframe': htfTimeframe!.code,
+        'htfIndicator': htfIndicator,
+        'htfPeriod': htfPeriod,
+        'breakEvenR': breakEvenR,
+        'trailingAtrMult': trailingAtrMult,
+        'maxHoldBars': maxHoldBars,
+        'cooldownBarsAfterSl': cooldownBarsAfterSl,
+        'spreadBps': spreadBps,
         'description': description,
         'scanUniverse': scanUniverse,
         'scanSymbols': scanSymbols,
       };
 
-  factory StrategyDefinition.fromJson(Map<String, dynamic> json) =>
-      StrategyDefinition(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        symbol: json['symbol'] as String,
-        timeframe: Timeframe.fromCode(json['timeframe'] as String? ?? 'M5'),
-        isEnabled: json['isEnabled'] as bool? ?? true,
-        autoTrade: json['autoTrade'] as bool? ?? true,
-        combinator: json['combinator'] as String? ?? 'AND',
-        riskPercent: (json['riskPercent'] as num?)?.toDouble() ?? 1.0,
-        stopLossAtrMult: (json['stopLossAtrMult'] as num?)?.toDouble() ?? 1.5,
-        takeProfitAtrMult:
-            (json['takeProfitAtrMult'] as num?)?.toDouble() ?? 3.0,
-        entryRules: (json['entryRules'] as List<dynamic>? ?? [])
-            .map((e) => StrategyRule.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        description: json['description'] as String? ?? '',
-        scanUniverse: json['scanUniverse'] as String? ?? 'SINGLE',
-        scanSymbols: (json['scanSymbols'] as List<dynamic>? ?? [])
-            .map((e) => e.toString())
-            .toList(),
-      );
+  factory StrategyDefinition.fromJson(Map<String, dynamic> json) {
+    final flatRules = (json['entryRules'] as List<dynamic>? ?? [])
+        .map((e) => StrategyRule.fromJson(e as Map<String, dynamic>))
+        .toList();
+    final rawGroup = json['rootRuleGroup'] as Map<String, dynamic>?;
+    final group = rawGroup != null ? StrategyRuleGroup.fromJson(rawGroup) : null;
+    final htfCode = json['htfTimeframe'] as String?;
+    return StrategyDefinition(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      symbol: json['symbol'] as String,
+      timeframe: Timeframe.fromCode(json['timeframe'] as String? ?? 'M5'),
+      isEnabled: json['isEnabled'] as bool? ?? true,
+      autoTrade: json['autoTrade'] as bool? ?? true,
+      combinator: json['combinator'] as String? ?? 'AND',
+      riskPercent: (json['riskPercent'] as num?)?.toDouble() ?? 1.0,
+      stopLossAtrMult: (json['stopLossAtrMult'] as num?)?.toDouble() ?? 1.5,
+      takeProfitAtrMult:
+          (json['takeProfitAtrMult'] as num?)?.toDouble() ?? 3.0,
+      entryRules: flatRules.isNotEmpty
+          ? flatRules
+          : (group?.flattenRules() ?? const []),
+      rootRuleGroup: group,
+      exitRules: (json['exitRules'] as List<dynamic>? ?? [])
+          .map((e) => StrategyRule.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      directionMode: json['directionMode'] as String? ?? 'LongOnly',
+      htfTimeframe:
+          htfCode != null && htfCode.isNotEmpty ? Timeframe.fromCode(htfCode) : null,
+      htfIndicator: json['htfIndicator'] as String? ?? 'EMA_TREND',
+      htfPeriod: (json['htfPeriod'] as num?)?.toInt() ?? 200,
+      breakEvenR: (json['breakEvenR'] as num?)?.toDouble() ?? 0.0,
+      trailingAtrMult: (json['trailingAtrMult'] as num?)?.toDouble() ?? 0.0,
+      maxHoldBars: (json['maxHoldBars'] as num?)?.toInt() ?? 0,
+      cooldownBarsAfterSl: (json['cooldownBarsAfterSl'] as num?)?.toInt() ?? 0,
+      spreadBps: (json['spreadBps'] as num?)?.toDouble() ?? 1.0,
+      description: json['description'] as String? ?? '',
+      scanUniverse: json['scanUniverse'] as String? ?? 'SINGLE',
+      scanSymbols: (json['scanSymbols'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
+    );
+  }
 }
 
 class SignalAuditLog {

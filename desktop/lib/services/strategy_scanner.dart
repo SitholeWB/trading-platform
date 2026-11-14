@@ -118,6 +118,22 @@ class _RuleBarEval {
   const _RuleBarEval(this.matched, this.direction, this.label);
 }
 
+class _GroupEvalResult {
+  final bool matched;
+  final double score; // 0..100
+  final String direction; // 'Buy', 'Sell', 'Neutral'
+  final List<String> labels;
+  final List<String> matchedLabels;
+
+  const _GroupEvalResult({
+    required this.matched,
+    required this.score,
+    required this.direction,
+    required this.labels,
+    required this.matchedLabels,
+  });
+}
+
 class _IndicatorBundle {
   final List<Candle> candles;
   final String symbol;
@@ -481,6 +497,95 @@ class StrategyScanner {
           'UTC ${startHr.toString().padLeft(2, '0')}-${endHr.toString().padLeft(2, '0')}h ${ok ? '✓' : '·'}',
         );
 
+      case 'DONCHIAN_BREAK':
+        final lookback = p.clamp(2, 200);
+        final fromIdx = math.max(0, idx - lookback);
+        if (idx <= fromIdx) {
+          return const _RuleBarEval(false, 'Neutral', 'Donchian warming up');
+        }
+        double hi = bundle.candles[fromIdx].high;
+        double lo = bundle.candles[fromIdx].low;
+        for (int k = fromIdx + 1; k < idx; k++) {
+          if (bundle.candles[k].high > hi) hi = bundle.candles[k].high;
+          if (bundle.candles[k].low < lo) lo = bundle.candles[k].low;
+        }
+        final isSellCond =
+            rule.condition == 'CrossBelow' || rule.condition == 'LessThan';
+        final ok = isSellCond ? c.close < lo : c.close > hi;
+        return _RuleBarEval(
+          ok,
+          isSellCond ? 'Sell' : 'Buy',
+          'Donchian($lookback) ${isSellCond ? 'Low' : 'High'} ${ok ? '✓' : '·'}',
+        );
+
+      case 'ENGULFING':
+        final prevBody = (prev.close - prev.open).abs();
+        final curBody = (c.close - c.open).abs();
+        final isSellCond =
+            rule.condition == 'CrossBelow' || rule.condition == 'LessThan';
+        final bullEngulf = prev.close < prev.open &&
+            c.close > c.open &&
+            c.open <= prev.close &&
+            c.close >= prev.open &&
+            curBody > prevBody;
+        final bearEngulf = prev.close > prev.open &&
+            c.close < c.open &&
+            c.open >= prev.close &&
+            c.close <= prev.open &&
+            curBody > prevBody;
+        final ok = isSellCond ? bearEngulf : bullEngulf;
+        return _RuleBarEval(
+          ok,
+          isSellCond ? 'Sell' : 'Buy',
+          '${isSellCond ? 'Bear' : 'Bull'} Engulf ${ok ? '✓' : '·'}',
+        );
+
+      case 'PIN_BAR':
+        final body = (c.close - c.open).abs();
+        final safeBody = body > 0 ? body : (c.high - c.low) * 0.1;
+        final upperWick = c.high - math.max(c.open, c.close);
+        final lowerWick = math.min(c.open, c.close) - c.low;
+        final ratio = rule.threshold > 0 ? rule.threshold : 2.0;
+        final isSellCond =
+            rule.condition == 'CrossBelow' || rule.condition == 'LessThan';
+        final ok = isSellCond
+            ? (upperWick >= safeBody * ratio && lowerWick <= upperWick * 0.4)
+            : (lowerWick >= safeBody * ratio && upperWick <= lowerWick * 0.4);
+        return _RuleBarEval(
+          ok,
+          isSellCond ? 'Sell' : 'Buy',
+          '${isSellCond ? 'Bear' : 'Bull'} PinBar ${ok ? '✓' : '·'}',
+        );
+
+      case 'VOLUME_SPIKE':
+        final lookback = p.clamp(2, 100);
+        final fromIdx = math.max(0, idx - lookback);
+        double sumVol = 0;
+        int cnt = 0;
+        for (int k = fromIdx; k < idx; k++) {
+          sumVol += bundle.candles[k].volume;
+          cnt++;
+        }
+        final avgVol = cnt > 0 ? sumVol / cnt : c.volume;
+        final mult = rule.threshold > 0 ? rule.threshold : 1.5;
+        final ok = avgVol > 0 && c.volume >= avgVol * mult;
+        return _RuleBarEval(
+          ok,
+          'Neutral',
+          'Vol≥${mult.toStringAsFixed(1)}x ${ok ? '✓' : '·'}',
+        );
+
+      case 'ATR_VOLATILITY':
+        final atr = bundle.atrMap[t] ?? 0.0;
+        final atrPct = c.close > 0 ? (atr / c.close) * 100.0 : 0.0;
+        final thr = rule.threshold > 0 ? rule.threshold : 0.10;
+        final ok = rule.condition == 'LessThan' ? atrPct <= thr : atrPct >= thr;
+        return _RuleBarEval(
+          ok,
+          'Neutral',
+          'ATR%=${atrPct.toStringAsFixed(2)}% ${ok ? '✓' : '·'}',
+        );
+
       case 'BB_BREAK':
       default:
         final std = rule.threshold > 0 ? rule.threshold : 2.0;
@@ -500,13 +605,211 @@ class StrategyScanner {
     }
   }
 
+  static StrategyRule _mirrorRule(StrategyRule rule) {
+    String flippedCond = switch (rule.condition) {
+      'CrossAbove' => 'CrossBelow',
+      'CrossBelow' => 'CrossAbove',
+      'GreaterThan' => 'LessThan',
+      'LessThan' => 'GreaterThan',
+      _ => rule.condition,
+    };
+    String flippedInd = rule.indicator;
+    double flippedThr = rule.threshold;
+    if (rule.indicator == 'RSI_OS') {
+      flippedInd = 'RSI_OB';
+      flippedThr = rule.threshold > 0 ? (100.0 - rule.threshold) : 70.0;
+    } else if (rule.indicator == 'RSI_OB') {
+      flippedInd = 'RSI_OS';
+      flippedThr = rule.threshold > 0 ? (100.0 - rule.threshold) : 30.0;
+    } else if (rule.indicator == 'ADX_TREND' ||
+        rule.indicator == 'SESSION_UTC' ||
+        rule.indicator == 'VOLUME_SPIKE' ||
+        rule.indicator == 'ATR_VOLATILITY') {
+      // Neutral regime/session/volume filters are NOT inverted when mirroring
+      return rule;
+    }
+    return StrategyRule(
+      indicator: flippedInd,
+      condition: flippedCond,
+      threshold: flippedThr,
+      period: rule.period,
+    );
+  }
+
+  static _GroupEvalResult _evalGroupAt(
+    StrategyRuleGroup group,
+    _IndicatorBundle bundle,
+    int idx, {
+    bool mirrored = false,
+  }) {
+    final items = <_GroupEvalResult>[];
+
+    for (final rawRule in group.rules) {
+      final r = mirrored ? _mirrorRule(rawRule) : rawRule;
+      final ev = _evalRuleAt(r, bundle, idx);
+      items.add(_GroupEvalResult(
+        matched: ev.matched,
+        score: ev.matched ? 100.0 : 0.0,
+        direction: ev.direction,
+        labels: [ev.label],
+        matchedLabels: ev.matched ? [ev.label] : const [],
+      ));
+    }
+
+    for (final child in group.groups) {
+      if (child.isEmpty) continue;
+      items.add(_evalGroupAt(child, bundle, idx, mirrored: mirrored));
+    }
+
+    if (items.isEmpty) {
+      return const _GroupEvalResult(
+        matched: false,
+        score: 0,
+        direction: 'Neutral',
+        labels: [],
+        matchedLabels: [],
+      );
+    }
+
+    final isOr = group.combinator.toUpperCase() == 'OR';
+    final matchedItems = items.where((e) => e.matched).toList();
+    final bool matched =
+        isOr ? matchedItems.isNotEmpty : matchedItems.length == items.length;
+    final double score = isOr
+        ? items.map((e) => e.score).reduce(math.max)
+        : items.fold<double>(0.0, (s, e) => s + e.score) / items.length;
+
+    final buyVotes = matchedItems.where((e) => e.direction == 'Buy').length;
+    final sellVotes = matchedItems.where((e) => e.direction == 'Sell').length;
+    final String dir = buyVotes > sellVotes
+        ? 'Buy'
+        : sellVotes > buyVotes
+            ? 'Sell'
+            : items
+                .firstWhere(
+                  (e) => e.direction != 'Neutral',
+                  orElse: () => items.first,
+                )
+                .direction;
+
+    return _GroupEvalResult(
+      matched: matched,
+      score: score,
+      direction: matched ? dir : 'Neutral',
+      labels: [for (final it in items) ...it.labels],
+      matchedLabels: [for (final it in matchedItems) ...it.matchedLabels],
+    );
+  }
+
+  static List<Candle> _aggregateHigherTimeframe(
+    List<Candle> baseCandles,
+    Timeframe htfTf,
+  ) {
+    if (baseCandles.isEmpty) return const [];
+    final bucketSec = htfTf.seconds;
+    final out = <Candle>[];
+    int? curBucket;
+    DateTime ts = baseCandles.first.timestamp;
+    double o = 0, h = 0, l = 0, c = 0, v = 0;
+
+    for (final bar in baseCandles) {
+      final b = (bar.timeSeconds ~/ bucketSec) * bucketSec;
+      if (curBucket == null || b != curBucket) {
+        if (curBucket != null) {
+          out.add(Candle(
+            timestamp: ts,
+            open: o,
+            high: h,
+            low: l,
+            close: c,
+            volume: v,
+            isComplete: true,
+          ));
+        }
+        curBucket = b;
+        ts = DateTime.fromMillisecondsSinceEpoch(b * 1000, isUtc: true);
+        o = bar.open;
+        h = bar.high;
+        l = bar.low;
+        c = bar.close;
+        v = bar.volume;
+      } else {
+        if (bar.high > h) h = bar.high;
+        if (bar.low < l) l = bar.low;
+        c = bar.close;
+        v += bar.volume;
+      }
+    }
+    if (curBucket != null) {
+      out.add(Candle(
+        timestamp: ts,
+        open: o,
+        high: h,
+        low: l,
+        close: c,
+        volume: v,
+        isComplete: baseCandles.last.isComplete,
+      ));
+    }
+    return out;
+  }
+
+  static Map<int, String> _buildHtfBiasMap(
+    StrategyDefinition strat,
+    List<Candle> baseCandles,
+  ) {
+    final htfTf = strat.htfTimeframe;
+    if (htfTf == null || htfTf.seconds <= strat.timeframe.seconds) {
+      return const {};
+    }
+    final htfCandles = _aggregateHigherTimeframe(baseCandles, htfTf);
+    if (htfCandles.length < 10) return const {};
+    final htfBundle = _IndicatorBundle(htfCandles, strat.symbol);
+    final rule = StrategyRule(
+      indicator: strat.htfIndicator,
+      condition: 'GreaterThan',
+      period: strat.htfPeriod,
+      threshold: 3.0,
+    );
+    final bullTimes = <int, String>{};
+    for (int j = 0; j < htfCandles.length; j++) {
+      final evBull = _evalRuleAt(rule, htfBundle, j);
+      final evBear = _evalRuleAt(_mirrorRule(rule), htfBundle, j);
+      final bias = evBull.matched
+          ? 'Buy'
+          : evBear.matched
+              ? 'Sell'
+              : 'Neutral';
+      bullTimes[htfCandles[j].timeSeconds] = bias;
+    }
+
+    final sortedKeys = bullTimes.keys.toList()..sort();
+    final out = <int, String>{};
+    int hPtr = 0;
+    for (final c in baseCandles) {
+      while (hPtr + 1 < sortedKeys.length &&
+          sortedKeys[hPtr + 1] <= c.timeSeconds) {
+        hPtr++;
+      }
+      if (sortedKeys.isNotEmpty && sortedKeys[hPtr] <= c.timeSeconds) {
+        out[c.timeSeconds] = bullTimes[sortedKeys[hPtr]] ?? 'Neutral';
+      }
+    }
+    return out;
+  }
+
   static StrategyBacktestResult backtestStrategy(
     StrategyDefinition strat,
     List<Candle> candles, {
     int lookbackBars = 100,
     bool requireAllRules = true,
   }) {
-    if (candles.length < 30 || strat.entryRules.isEmpty) {
+    final rootGroup = strat.effectiveRuleGroup.copyWith(
+      combinator: strat.rootRuleGroup != null
+          ? strat.rootRuleGroup!.combinator
+          : (requireAllRules ? 'AND' : 'OR'),
+    );
+    if (candles.length < 30 || rootGroup.isEmpty) {
       return const StrategyBacktestResult(
         barsTested: 0,
         totalSignals: 0,
@@ -524,6 +827,7 @@ class StrategyScanner {
     }
 
     final bundle = _IndicatorBundle(candles, strat.symbol);
+    final htfBias = _buildHtfBiasMap(strat, candles);
     final startIdx = math.max(25, candles.length - lookbackBars);
     final trades = <StrategyTestTrade>[];
 
@@ -532,6 +836,9 @@ class StrategyScanner {
     double entryPrice = 0;
     double slPrice = 0;
     double tpPrice = 0;
+    double initialRiskDist = 0;
+    int entryBarIdx = 0;
+    int cooldownUntilIdx = -1;
     DateTime entryTime = candles[startIdx].timestamp;
     List<String> entryMatched = [];
 
@@ -550,52 +857,112 @@ class StrategyScanner {
 
     for (int i = startIdx; i < candles.length; i++) {
       final c = candles[i];
-      final evals =
-          strat.entryRules.map((r) => _evalRuleAt(r, bundle, i)).toList();
-      final matched = evals.where((e) => e.matched).toList();
-      final score = (matched.length / evals.length) * 100.0;
-      final buyVotes = matched.where((e) => e.direction == 'Buy').length;
-      final sellVotes = matched.where((e) => e.direction == 'Sell').length;
-      final dir = buyVotes > sellVotes
-          ? 'Buy'
-          : sellVotes > buyVotes
-              ? 'Sell'
-              : evals
-                  .firstWhere(
-                    (e) => e.direction != 'Neutral',
-                    orElse: () => evals.first,
-                  )
-                  .direction;
+      final primaryEval = _evalGroupAt(rootGroup, bundle, i, mirrored: false);
+      _GroupEvalResult activeEval = primaryEval;
 
-      latestBreakdown = evals.map((e) => e.label).toList();
-      latestScore = score;
-      latestDir = matched.isEmpty ? 'Neutral' : dir;
+      if (strat.directionMode == 'Both' && !primaryEval.matched) {
+        final mirroredEval =
+            _evalGroupAt(rootGroup, bundle, i, mirrored: true);
+        if (mirroredEval.matched || mirroredEval.score > primaryEval.score) {
+          activeEval = mirroredEval;
+        }
+      }
 
-      final triggered = requireAllRules
-          ? matched.length == evals.length
-          : matched.isNotEmpty;
+      String dir = activeEval.direction;
+      bool triggered = activeEval.matched && dir != 'Neutral';
+
+      if (strat.directionMode == 'LongOnly' && dir == 'Sell') {
+        triggered = false;
+      } else if (strat.directionMode == 'ShortOnly' && dir == 'Buy') {
+        triggered = false;
+      }
+
+      final htfDir = htfBias[c.timeSeconds];
+      if (triggered && htfDir != null && htfDir != 'Neutral' && htfDir != dir) {
+        triggered = false;
+      }
+
+      latestBreakdown = [
+        ...activeEval.labels,
+        if (htfDir != null && strat.htfTimeframe != null)
+          'HTF ${strat.htfTimeframe!.code}: $htfDir',
+      ];
+      latestScore = activeEval.score;
+      latestDir = triggered ? dir : 'Neutral';
       if (triggered) signals++;
 
       if (inPos) {
+        final atrNow = bundle.atrMap[c.timeSeconds] ?? (c.close * 0.002);
+        final safeAtrNow = atrNow > 0 ? atrNow : (c.close * 0.002);
+
+        // Break-Even stop management
+        if (strat.breakEvenR > 0 && initialRiskDist > 0) {
+          if (isBuy &&
+              c.high >= entryPrice + initialRiskDist * strat.breakEvenR &&
+              slPrice < entryPrice) {
+            slPrice = entryPrice;
+          } else if (!isBuy &&
+              c.low <= entryPrice - initialRiskDist * strat.breakEvenR &&
+              slPrice > entryPrice) {
+            slPrice = entryPrice;
+          }
+        }
+
+        // ATR Trailing Stop management
+        if (strat.trailingAtrMult > 0) {
+          final trailDist = safeAtrNow * strat.trailingAtrMult;
+          if (isBuy) {
+            final candidate = c.close - trailDist;
+            if (candidate > slPrice) slPrice = candidate;
+          } else {
+            final candidate = c.close + trailDist;
+            if (candidate < slPrice) slPrice = candidate;
+          }
+        }
+
+        // Optional custom exit rules
+        bool exitRuleHit = false;
+        if (strat.exitRules.isNotEmpty) {
+          for (final er in strat.exitRules) {
+            final ev = isBuy
+                ? _evalRuleAt(er, bundle, i)
+                : _evalRuleAt(_mirrorRule(er), bundle, i);
+            if (ev.matched) {
+              exitRuleHit = true;
+              break;
+            }
+          }
+        }
+
         String? exitReason;
         double exitPrice = c.close;
         if (isBuy) {
           if (c.low <= slPrice) {
             exitPrice = slPrice;
-            exitReason = 'SL Hit';
+            exitReason = slPrice == entryPrice ? 'Break-Even' : 'SL Hit';
           } else if (c.high >= tpPrice) {
             exitPrice = tpPrice;
             exitReason = 'TP Hit';
+          } else if (exitRuleHit) {
+            exitReason = 'Exit Rule';
+          } else if (strat.maxHoldBars > 0 &&
+              (i - entryBarIdx) >= strat.maxHoldBars) {
+            exitReason = 'Time Stop';
           } else if (triggered && dir == 'Sell') {
             exitReason = 'Opposite Signal';
           }
         } else {
           if (c.high >= slPrice) {
             exitPrice = slPrice;
-            exitReason = 'SL Hit';
+            exitReason = slPrice == entryPrice ? 'Break-Even' : 'SL Hit';
           } else if (c.low <= tpPrice) {
             exitPrice = tpPrice;
             exitReason = 'TP Hit';
+          } else if (exitRuleHit) {
+            exitReason = 'Exit Rule';
+          } else if (strat.maxHoldBars > 0 &&
+              (i - entryBarIdx) >= strat.maxHoldBars) {
+            exitReason = 'Time Stop';
           } else if (triggered && dir == 'Buy') {
             exitReason = 'Opposite Signal';
           }
@@ -606,7 +973,9 @@ class StrategyScanner {
           final rawPct = isBuy
               ? ((exitPrice - entryPrice) / entryPrice) * 100.0
               : ((entryPrice - exitPrice) / entryPrice) * 100.0;
-          final leveragedPct = rawPct * (strat.riskPercent / 1.0);
+          final spreadCostPct = (strat.spreadBps / 100.0);
+          final netRawPct = rawPct - spreadCostPct;
+          final leveragedPct = netRawPct * (strat.riskPercent / 1.0);
           final pnlDollar = equity * (leveragedPct / 100.0);
           equity += pnlDollar;
           if (equity > peak) peak = equity;
@@ -617,6 +986,9 @@ class StrategyScanner {
             grossWin += pnlDollar;
           } else {
             grossLoss += pnlDollar.abs();
+          }
+          if (exitReason == 'SL Hit' && strat.cooldownBarsAfterSl > 0) {
+            cooldownUntilIdx = i + strat.cooldownBarsAfterSl;
           }
           trades.add(StrategyTestTrade(
             entryTime: entryTime,
@@ -632,17 +1004,22 @@ class StrategyScanner {
         }
       }
 
-      if (!inPos && triggered && i < candles.length - 1) {
+      if (!inPos &&
+          triggered &&
+          i >= cooldownUntilIdx &&
+          i < candles.length - 1) {
         final atr = bundle.atrMap[c.timeSeconds] ?? (c.close * 0.002);
         final safeAtr = atr > 0 ? atr : (c.close * 0.002);
         inPos = true;
         isBuy = dir != 'Sell';
         entryPrice = c.close;
+        entryBarIdx = i;
         entryTime = c.timestamp;
-        entryMatched = matched.map((e) => e.label).toList();
+        entryMatched = activeEval.matchedLabels;
+        initialRiskDist = safeAtr * strat.stopLossAtrMult;
         slPrice = isBuy
-            ? entryPrice - safeAtr * strat.stopLossAtrMult
-            : entryPrice + safeAtr * strat.stopLossAtrMult;
+            ? entryPrice - initialRiskDist
+            : entryPrice + initialRiskDist;
         tpPrice = isBuy
             ? entryPrice + safeAtr * strat.takeProfitAtrMult
             : entryPrice - safeAtr * strat.takeProfitAtrMult;
