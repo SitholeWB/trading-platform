@@ -25,6 +25,9 @@ class AiCopilotDrawer extends StatefulWidget {
   final VoidCallback? onToggleExpand;
   final Future<void> Function(CopilotAction action)? onExecuteAction;
   final Future<void> Function(String title, String content)? onSaveToJournal;
+  final String? pendingHelpPrompt;
+  final String? pendingHelpContext;
+  final int pendingHelpSeq;
 
   const AiCopilotDrawer({
     super.key,
@@ -44,6 +47,9 @@ class AiCopilotDrawer extends StatefulWidget {
     this.onToggleExpand,
     this.onExecuteAction,
     this.onSaveToJournal,
+    this.pendingHelpPrompt,
+    this.pendingHelpContext,
+    this.pendingHelpSeq = 0,
   });
 
   @override
@@ -55,6 +61,40 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
   final _scrollCtrl = ScrollController();
   bool _loading = false;
   double _width = 440;
+  int _lastHelpSeq = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.pendingHelpSeq > 0 && widget.pendingHelpPrompt != null) {
+      _lastHelpSeq = widget.pendingHelpSeq;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _send(
+            widget.pendingHelpPrompt,
+            widget.pendingHelpContext,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant AiCopilotDrawer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pendingHelpSeq > _lastHelpSeq &&
+        widget.pendingHelpPrompt != null) {
+      _lastHelpSeq = widget.pendingHelpSeq;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _send(
+            widget.pendingHelpPrompt,
+            widget.pendingHelpContext,
+          );
+        }
+      });
+    }
+  }
 
   CopilotSession? get _activeSession {
     if (widget.sessions.isEmpty) return null;
@@ -73,7 +113,7 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
     super.dispose();
   }
 
-  Future<void> _send([String? preset]) async {
+  Future<void> _send([String? preset, String? extraContext]) async {
     final session = _activeSession;
     if (session == null) return;
     final text = (preset ?? _ctrl.text).trim();
@@ -104,6 +144,7 @@ class _AiCopilotDrawerState extends State<AiCopilotDrawer> {
       timeframe: widget.timeframe,
       candles: widget.candles,
       history: historySnapshot,
+      extraContext: extraContext,
     );
 
     if (!mounted) return;

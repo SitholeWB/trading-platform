@@ -138,8 +138,12 @@ class AiCopilotService {
     required Timeframe timeframe,
     required List<Candle> candles,
     List<ChatMessage> history = const [],
+    String? extraContext,
   }) async {
-    final diag = _buildTraderContext(symbol, timeframe, candles);
+    final baseDiag = _buildTraderContext(symbol, timeframe, candles);
+    final diag = (extraContext != null && extraContext.trim().isNotEmpty)
+        ? '$baseDiag\n\nSECTION DOCUMENTATION:\n${extraContext.trim()}'
+        : baseDiag;
     final provider = storage.aiProvider;
     final spec = specFor(provider);
     final model = storage.aiModel.trim().isNotEmpty
@@ -177,7 +181,14 @@ class AiCopilotService {
       );
     }
 
-    final fallback = _builtInQuantReply(prompt, symbol, timeframe, candles, diag);
+    final fallback = _builtInQuantReply(
+      prompt,
+      symbol,
+      timeframe,
+      candles,
+      diag,
+      extraContext: extraContext,
+    );
     final finalText = errorNote != null ? '> _${errorNote}_\n\n$fallback' : fallback;
     return CopilotReply(
       content: finalText,
@@ -1473,8 +1484,12 @@ Annotated Trades:
     String symbol,
     Timeframe tf,
     List<Candle> candles,
-    String diag,
-  ) {
+    String diag, {
+    String? extraContext,
+  }) {
+    if (extraContext != null && extraContext.trim().isNotEmpty) {
+      return '${extraContext.trim()}\n\n---\n> _Built-in Quant mode: showing the local section manual. Configure Gemini, OpenAI, Anthropic, or local Ollama in Settings for interactive Q&A._';
+    }
     final spec = SymbolCatalog.find(symbol);
     final hit = StrategyScanner.analyzeCandles(spec, tf, candles);
     final atr = hit.atr > 0 ? hit.atr : hit.price * 0.002;

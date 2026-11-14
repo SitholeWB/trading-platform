@@ -6,6 +6,7 @@ import '../services/ai_copilot_service.dart';
 import '../services/indicator_engine.dart';
 import '../services/market_data_service.dart';
 import '../services/notification_service.dart';
+import '../services/section_docs.dart';
 import '../services/storage_service.dart';
 import '../services/strategy_scanner.dart';
 import '../services/symbol_catalog.dart';
@@ -75,6 +76,9 @@ class _AppShellState extends State<AppShell> {
   String _timezoneIana = 'Etc/UTC';
   String _languageCode = 'en';
   Timer? _tickTimer;
+  String? _pendingHelpPrompt;
+  String? _pendingHelpContext;
+  int _pendingHelpSeq = 0;
 
   void _openTimezoneDialog() {
     showDialog<void>(
@@ -867,6 +871,16 @@ class _AppShellState extends State<AppShell> {
     titleCtrl.dispose();
   }
 
+  void _askAiAboutSection(SectionDoc doc) {
+    setState(() {
+      _isCopilotOpen = true;
+      _pendingHelpPrompt =
+          'Explain how the "${doc.title}" section works and how to use it step by step.';
+      _pendingHelpContext = doc.markdown;
+      _pendingHelpSeq++;
+    });
+  }
+
   Widget _buildCopilotDrawer() {
     return AiCopilotDrawer(
       copilot: widget.copilot,
@@ -898,6 +912,9 @@ class _AppShellState extends State<AppShell> {
       ),
       onExecuteAction: _executeCopilotAction,
       onSaveToJournal: _saveToJournalWithDialog,
+      pendingHelpPrompt: _pendingHelpPrompt,
+      pendingHelpContext: _pendingHelpContext,
+      pendingHelpSeq: _pendingHelpSeq,
     );
   }
 
@@ -1264,6 +1281,19 @@ class _AppShellState extends State<AppShell> {
             tooltip: 'Keyboard Shortcuts (Ctrl+/)',
             icon: const Icon(Icons.keyboard_outlined, size: 17),
             onPressed: _openShortcutsDialog,
+          ),
+          const SizedBox(width: 4),
+          ActionChip(
+            avatar: const Icon(Icons.help_outline,
+                size: 14, color: Color(0xFF38BDF8)),
+            label: Text(
+              'Ask AI: ${_activePage.title}',
+              style: const TextStyle(fontSize: 11),
+            ),
+            tooltip: 'Ask AI how this section works (uses section docs)',
+            visualDensity: VisualDensity.compact,
+            onPressed: () =>
+                _askAiAboutSection(SectionDocs.forSectionId(_activePage.name)),
           ),
 
           if (openCount > 0 || widget.storage.risk.isKillSwitchEngaged) ...[
@@ -1652,7 +1682,9 @@ class _AppShellState extends State<AppShell> {
           onManualSync: () => _refreshMarketData(force: true),
           onLoadOlderHistory: () => _refreshMarketData(force: true),
         ),
-      AppPage.docs => const DocumentationPage(),
+      AppPage.docs => DocumentationPage(
+          onAskAiAboutSection: _askAiAboutSection,
+        ),
     };
   }
 }
