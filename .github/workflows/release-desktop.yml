@@ -153,7 +153,23 @@ jobs:
         working-directory: desktop
         run: |
           flutter pub get
-          flutter build macos --release --dart-define-from-file=.env.json
+          (cd macos && pod install)
+          grep -rn "Embedded" "macos/Pods/Target Support Files/" || true
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          for p in Path("macos/Pods/Target Support Files").rglob("*.xcconfig"):
+              txt = p.read_text()
+              new = re.sub(r'-framework\s+Chromium\s+Embedded\s+Framework(?!")', '-framework "Chromium Embedded Framework"', txt)
+              if new != txt:
+                  print(f"Patched {p}")
+                  p.write_text(new)
+          PY
+          if ! flutter build macos --release --dart-define-from-file=.env.json; then
+            echo "--- Retrying xcodebuild to capture exact linker command ---"
+            xcodebuild -workspace macos/Runner.xcworkspace -scheme Runner -configuration Release -derivedDataPath build/macos build | tail -n 80
+            exit 1
+          fi
 
       - name: Package .dmg & .zip
         working-directory: desktop
