@@ -38,17 +38,18 @@ post_install do |installer|
     flutter_additional_macos_build_settings(target)
   end
 
-  # Ensure framework names with spaces (Chromium Embedded Framework) are quoted
-  # in generated xcconfig files so clang does not split them into separate args.
+  # Fix CocoaPods splitting "Chromium Embedded Framework" into:
+  #   Embedded Framework -framework "Chromium"
+  # in generated Pods-Runner.*.xcconfig OTHER_LDFLAGS.
   installer.aggregate_targets.each do |aggregate|
     aggregate.xcconfigs.each_value do |config|
       ldflags = config.attributes['OTHER_LDFLAGS']
       next unless ldflags.is_a?(String)
 
-      config.attributes['OTHER_LDFLAGS'] = ldflags.gsub(
-        /-framework Chromium Embedded Framework(?!")/,
-        '-framework "Chromium Embedded Framework"'
-      )
+      fixed = ldflags
+        .gsub(/Embedded\s+Framework\s+-framework\s+"?Chromium"?/, '-framework "Chromium Embedded Framework"')
+        .gsub(/-framework\s+Chromium\s+Embedded\s+Framework(?!")/, '-framework "Chromium Embedded Framework"')
+      config.attributes['OTHER_LDFLAGS'] = fixed
     end
   end
 
