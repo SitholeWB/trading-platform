@@ -1,0 +1,63 @@
+platform :osx, '12.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'ephemeral', 'Flutter-Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure \"flutter pub get\" is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Flutter-Generated.xcconfig, then run \"flutter pub get\""
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_macos_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_macos_build_settings(target)
+  end
+
+  # Ensure framework names with spaces (Chromium Embedded Framework) are quoted
+  # in generated xcconfig files so clang does not split them into separate args.
+  installer.aggregate_targets.each do |aggregate|
+    aggregate.xcconfigs.each_value do |config|
+      ldflags = config.attributes['OTHER_LDFLAGS']
+      next unless ldflags.is_a?(String)
+
+      config.attributes['OTHER_LDFLAGS'] = ldflags.gsub(
+        /-framework Chromium Embedded Framework(?!")/,
+        '-framework "Chromium Embedded Framework"'
+      )
+    end
+  end
+
+  # webview_cef: embed the CEF helper sub-process apps so CEF runs
+  # multi-process on macOS.
+  cef_helpers = File.expand_path(
+    'Flutter/ephemeral/.symlinks/plugins/webview_cef/macos/embed_cef_helpers.rb', __dir__)
+  if File.exist?(cef_helpers)
+    require cef_helpers
+    WebviewCEF.install_helper_phase(installer)
+  end
+end
