@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release Tag (e.g. v1.2.1)'
+        description: 'Release Tag (e.g. v3.1.1)'
         required: false
         default: ''
 
@@ -18,96 +18,177 @@ concurrency:
 permissions:
   contents: write
 
-env:
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
-  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-  DOTNET_NOLOGO: 'true'
-
 jobs:
-  build-desktop-terminal:
-    name: Build Desktop (${{ matrix.target_name }})
-    runs-on: ${{ matrix.os }}
-    env:
-      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target_name: Linux (Snap, DEB, AppImage)
-            target_flag: all-linux
-            artifact_name: desktop-linux
-          - os: windows-latest
-            target_name: Windows (Setup .exe & Portable)
-            target_flag: win
-            artifact_name: desktop-windows
-          - os: macos-latest
-            target_name: macOS (.dmg & .zip)
-            target_flag: mac
-            artifact_name: desktop-macos
-
+  build-linux:
+    name: Build Desktop (Linux .deb)
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js 22
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: 'npm'
-          cache-dependency-path: 'src/Presentation/TradingPlatform.Web/package-lock.json'
-
-      - name: Setup .NET SDK 10
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Install Frontend Dependencies
-        shell: bash
-        run: npm ci
-        working-directory: src/Presentation/TradingPlatform.Web
-
-      - name: Package Desktop Distribution (${{ matrix.target_flag }})
-        shell: bash
+      - name: Install Linux Dependencies
         run: |
-          chmod +x ./scripts/package-electron.sh
-          ./scripts/package-electron.sh ${{ matrix.target_flag }}
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev python3-pil
 
-      - name: Archive Build Artifacts
-        uses: actions/upload-artifact@v7
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          name: ${{ matrix.artifact_name }}
-          path: |
-            src/Presentation/TradingPlatform.Electron/dist/release/*.snap
-            src/Presentation/TradingPlatform.Electron/dist/release/*.deb
-            src/Presentation/TradingPlatform.Electron/dist/release/*.AppImage
-            src/Presentation/TradingPlatform.Electron/dist/release/*.exe
-            src/Presentation/TradingPlatform.Electron/dist/release/*.dmg
-            src/Presentation/TradingPlatform.Electron/dist/release/*.zip
+          channel: 'stable'
+          cache: true
+
+      - name: Resolve Version & Env
+        id: meta
+        working-directory: desktop
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ ! -f .env.json ]; then echo '{}' > .env.json; fi
+
+      - name: Build Flutter Linux & Package .deb
+        working-directory: desktop
+        run: |
+          flutter pub get
+          flutter build linux --release --dart-define-from-file=.env.json
+          chmod +x packaging/package-linux-deb.sh
+          ./packaging/package-linux-deb.sh "${{ steps.meta.outputs.version }}"
+
+      - name: Archive Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: desktop/build/*.deb
           retention-days: 14
 
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v3
+      - name: Upload Linux Asset to GitHub Release
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
-          files: |
-            src/Presentation/TradingPlatform.Electron/dist/release/*.snap
-            src/Presentation/TradingPlatform.Electron/dist/release/*.deb
-            src/Presentation/TradingPlatform.Electron/dist/release/*.AppImage
-            src/Presentation/TradingPlatform.Electron/dist/release/*.exe
-            src/Presentation/TradingPlatform.Electron/dist/release/*.dmg
-            src/Presentation/TradingPlatform.Electron/dist/release/*.zip
+          files: desktop/build/*.deb
           generate_release_notes: true
           draft: false
           prerelease: false
 
-      - name: Publish to Snap Store (Ubuntu only)
-        if: matrix.os == 'ubuntu-latest' && env.SNAPCRAFT_STORE_CREDENTIALS != ''
-        uses: canonical/action-publish@v1
+  build-windows:
+    name: Build Desktop (Windows .msi)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          store_token: ${{ env.SNAPCRAFT_STORE_CREDENTIALS }}
-          snap: src/Presentation/TradingPlatform.Electron/dist/release/trading-platform_*.snap
-          channel: stable
+          channel: 'stable'
+          cache: true
+
+      - name: Resolve Version & Env
+        id: meta
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $ver = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([^\+\s]+)').Matches[0].Groups[1].Value
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          if (-not (Test-Path .env.json)) { '{}' | Out-File -FilePath .env.json -Encoding utf8 }
+
+      - name: Build Flutter Windows
+        working-directory: desktop
+        run: |
+          flutter pub get
+          flutter build windows --release --dart-define-from-file=.env.json
+
+      - name: Install WiX Toolset & Build .msi
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          $ver = "${{ steps.meta.outputs.version }}"
+          wix build packaging/windows-installer.wxs `
+            -arch x64 `
+            -d Version=$ver `
+            -d SourceDir="build\windows\x64\runner\Release" `
+            -d IconPath="windows\runner\resources\app_icon.ico" `
+            -o "build\trading-platform_${ver}_x64.msi"
+
+      - name: Archive Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: desktop/build/*.msi
+          retention-days: 14
+
+      - name: Upload Windows Asset to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          files: desktop/build/*.msi
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+  build-macos:
+    name: Build Desktop (macOS .dmg & .zip)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Resolve Version & Env
+        id: meta
+        working-directory: desktop
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ ! -f .env.json ]; then echo '{}' > .env.json; fi
+
+      - name: Build Flutter macOS
+        working-directory: desktop
+        run: |
+          flutter pub get
+          flutter build macos --release --dart-define-from-file=.env.json
+
+      - name: Package .dmg & .zip
+        working-directory: desktop
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          APP_PATH="build/macos/Build/Products/Release/Trading Platform.app"
+          STAGE_DIR="build/dmg-stage"
+          rm -rf "$STAGE_DIR"
+          mkdir -p "$STAGE_DIR"
+          cp -R "$APP_PATH" "$STAGE_DIR/"
+          ln -s /Applications "$STAGE_DIR/Applications"
+          hdiutil create -volname "Trading Platform" \
+            -srcfolder "$STAGE_DIR" \
+            -ov -format UDZO \
+            "build/trading-platform_${VERSION}_macos.dmg"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" \
+            "build/trading-platform_${VERSION}_macos.zip"
+
+      - name: Archive macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos
+          path: |
+            desktop/build/*.dmg
+            desktop/build/*.zip
+          retention-days: 14
+
+      - name: Upload macOS Assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          files: |
+            desktop/build/*.dmg
+            desktop/build/*.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
