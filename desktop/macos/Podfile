@@ -38,21 +38,6 @@ post_install do |installer|
     flutter_additional_macos_build_settings(target)
   end
 
-  # Fix CocoaPods splitting "Chromium Embedded Framework" into:
-  #   Embedded Framework -framework "Chromium"
-  # in generated Pods-Runner.*.xcconfig OTHER_LDFLAGS.
-  installer.aggregate_targets.each do |aggregate|
-    aggregate.xcconfigs.each_value do |config|
-      ldflags = config.attributes['OTHER_LDFLAGS']
-      next unless ldflags.is_a?(String)
-
-      fixed = ldflags
-        .gsub(/Embedded\s+Framework\s+-framework\s+"?Chromium"?/, '-framework "Chromium Embedded Framework"')
-        .gsub(/-framework\s+Chromium\s+Embedded\s+Framework(?!")/, '-framework "Chromium Embedded Framework"')
-      config.attributes['OTHER_LDFLAGS'] = fixed
-    end
-  end
-
   # webview_cef: embed the CEF helper sub-process apps so CEF runs
   # multi-process on macOS.
   cef_helpers = File.expand_path(
@@ -60,5 +45,21 @@ post_install do |installer|
   if File.exist?(cef_helpers)
     require cef_helpers
     WebviewCEF.install_helper_phase(installer)
+  end
+end
+
+post_integrate do |_installer|
+  # Fix CocoaPods splitting "Chromium Embedded Framework" into:
+  #   Embedded Framework -framework "Chromium"
+  # in generated Pods-Runner.*.xcconfig OTHER_LDFLAGS after xcconfigs are written.
+  Dir.glob(File.join(__dir__, 'Pods/Target Support Files/Pods-Runner/Pods-Runner.*.xcconfig')).each do |path|
+    content = File.read(path)
+    fixed = content
+      .gsub(/Embedded\s+Framework\s+-framework\s+"?Chromium"?/, '-framework "Chromium Embedded Framework"')
+      .gsub(/-framework\s+Chromium\s+Embedded\s+Framework(?!")/, '-framework "Chromium Embedded Framework"')
+    if fixed != content
+      File.write(path, fixed)
+      puts "Patched Chromium Embedded Framework flag in #{File.basename(path)}"
+    end
   end
 end
