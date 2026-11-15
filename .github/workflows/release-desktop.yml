@@ -104,12 +104,20 @@ jobs:
         run: |
           dotnet tool install --global wix --version 5.0.2
           $ver = "${{ steps.meta.outputs.version }}"
+          $srcDir = (Resolve-Path "build\windows\x64\runner\Release").Path
+          $iconPath = (Resolve-Path "windows\runner\resources\app_icon.ico").Path
+          $outMsi = "build\trading-platform_${ver}_x64.msi"
           wix build packaging/windows-installer.wxs `
             -arch x64 `
             -d Version=$ver `
-            -d SourceDir="build\windows\x64\runner\Release" `
-            -d IconPath="windows\runner\resources\app_icon.ico" `
-            -o "build\trading-platform_${ver}_x64.msi"
+            -d SourceDir="$srcDir" `
+            -d IconPath="$iconPath" `
+            -o "$outMsi"
+          $sizeMB = [math]::Round((Get-Item $outMsi).Length / 1MB, 2)
+          Write-Host "Built $outMsi ($sizeMB MB)"
+          if ($sizeMB -lt 10) {
+            throw "MSI is unexpectedly small ($sizeMB MB); aborting."
+          }
 
       - name: Archive Windows Artifact
         uses: actions/upload-artifact@v4
