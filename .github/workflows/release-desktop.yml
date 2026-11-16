@@ -29,7 +29,7 @@ jobs:
       - name: Install Linux Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev python3-pil
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev python3-pil rpm zstd curl file
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -45,27 +45,42 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           if [ ! -f .env.json ]; then echo '{}' > .env.json; fi
 
-      - name: Build Flutter Linux & Package .deb
+      - name: Build Flutter Linux & Package All Distros
         working-directory: desktop
         run: |
+          VER="${{ steps.meta.outputs.version }}"
           flutter pub get
           flutter build linux --release --dart-define-from-file=.env.json
-          chmod +x packaging/package-linux-deb.sh
-          ./packaging/package-linux-deb.sh "${{ steps.meta.outputs.version }}"
+          chmod +x packaging/package-linux-*.sh packaging/linux-stage-helpers.sh
+          ./packaging/package-linux-deb.sh "$VER"
+          ./packaging/package-linux-rpm.sh "$VER"
+          ./packaging/package-linux-appimage.sh "$VER"
+          ./packaging/package-linux-arch.sh "$VER"
+          ./packaging/package-linux-tarball.sh "$VER"
 
-      - name: Archive Linux Artifact
+      - name: Archive Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: desktop-linux
-          path: desktop/build/*.deb
+          path: |
+            desktop/build/*.deb
+            desktop/build/*.rpm
+            desktop/build/Trading_Platform-*.AppImage
+            desktop/build/*.pkg.tar.zst
+            desktop/build/*.tar.gz
           retention-days: 14
 
-      - name: Upload Linux Asset to GitHub Release
+      - name: Upload Linux Assets to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
-          files: desktop/build/*.deb
+          files: |
+            desktop/build/*.deb
+            desktop/build/*.rpm
+            desktop/build/Trading_Platform-*.AppImage
+            desktop/build/*.pkg.tar.zst
+            desktop/build/*.tar.gz
           generate_release_notes: true
           draft: false
           prerelease: false
